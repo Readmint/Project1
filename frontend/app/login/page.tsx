@@ -1,0 +1,177 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import Image from "next/image";
+
+export default function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
+  const [errors, setErrors] = useState({
+    email: "",
+    password: "",
+  });
+
+  const validateForm = () => {
+    const newErrors: any = {};
+
+    if (!email) {
+      newErrors.email = "Email is required";
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
+      newErrors.email = "Enter a valid email";
+    }
+
+    if (!password) {
+      newErrors.password = "Password is required";
+    } else if (password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = (e: any) => {
+    e.preventDefault();
+    if (validateForm()) {
+      console.log("Form valid — submit login");
+    }
+  };
+
+  return (
+    <div className="bubble-bg min-h-[calc(100vh-4rem)] bg-gradient-to-br from-indigo-50 to-white dark:from-slate-900 dark:to-slate-800 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-6">
+      <div className="w-full max-w-md">
+
+        {/* Back Button */}
+        <Link href="/">
+          <Button
+            variant="ghost"
+            className="mb-2 text-slate-600 dark:text-slate-300 flex items-center gap-2 hover:text-slate-900 dark:hover:text-white"
+          >
+            <ArrowLeft size={18} />
+            Back to Home
+          </Button>
+        </Link>
+
+        {/* Card */}
+        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-lg shadow-2xl border border-slate-200/50 dark:border-slate-700/50 p-5 sm:p-6">
+
+          {/* Logo */}
+          <div className="mb-4 flex flex-col items-center">
+            <Image
+              src="/icons/icon.png"
+              alt="E-Magazine Logo"
+              width={48}
+              height={48}
+              className="mb-1.5"
+            />
+            <h4 className="text-xl sm:text-2xl text-center text-slate-900 dark:text-white mb-0.5">
+              Welcome Back
+            </h4>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 text-center">
+              Sign in to your E-Magazine account
+            </p>
+          </div>
+
+          {/* FORM */}
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            
+            {/* EMAIL FIELD */}
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-200 mb-1">
+                Email
+              </label>
+              <Input
+                type="email"
+                placeholder="you@example.com"
+                className={`w-full h-9 text-sm bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border ${
+                  errors.email
+                    ? "border-red-500"
+                    : "border-slate-300 dark:border-slate-600"
+                } text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500`}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              {errors.email && (
+                <p className="text-red-500 text-xs mt-1">{errors.email}</p>
+              )}
+            </div>
+
+            {/* PASSWORD FIELD */}
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-200 mb-1">
+                Password
+              </label>
+
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  className={`w-full h-9 text-sm pr-10 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border ${
+                    errors.password
+                      ? "border-red-500"
+                      : "border-slate-300 dark:border-slate-600"
+                  } text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500`}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+
+                {/* SHOW / HIDE BUTTON */}
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 dark:text-slate-300 hover:text-indigo-600"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+
+              {errors.password && (
+                <p className="text-red-500 text-xs mt-1">{errors.password}</p>
+              )}
+            </div>
+
+            <div className="flex justify-between items-center pt-0.5">
+              <label className="flex items-center text-xs sm:text-sm text-slate-900 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  className="mr-2 w-4 h-4 text-indigo-600 border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900"
+                />
+                Remember me
+              </label>
+
+              <Link
+                href="/forgot-password"
+                className="text-xs sm:text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
+                Forgot Password?
+              </Link>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full h-9 text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-lg hover:shadow-xl transition-shadow"
+            >
+              Sign In
+            </Button>
+          </form>
+
+          <p className="text-center text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-3">
+            Don't have an account?{" "}
+            <Link
+              href="/signup"
+              className="text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-700 dark:hover:text-indigo-300"
+            >
+              Sign up
+            </Link>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
