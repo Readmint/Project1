@@ -24,7 +24,6 @@ export default function Signup() {
     }
 
     setError("");
-
     console.log("Form submitted!");
   };
 
@@ -89,7 +88,7 @@ export default function Signup() {
               />
             </div>
 
-            {/* Dropdown */}
+            {/* Role Dropdown */}
             <div>
               <label className="block text-xs font-medium text-slate-900 dark:text-slate-200 mb-1">
                 I want to join as
@@ -177,11 +176,88 @@ export default function Signup() {
               </span>
             </div>
 
-            {/* Button */}
+            {/* Submit Button */}
             <Button className="w-full h-9 text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-lg hover:shadow-xl transition-shadow mt-3">
               Create Account
             </Button>
           </form>
+
+          {/* Divider */}
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-slate-300 dark:border-slate-700"></span>
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-white/80 dark:bg-slate-800/80 px-2 text-slate-500 dark:text-slate-400">
+                OR CONTINUE WITH
+              </span>
+            </div>
+          </div>
+
+          {/* OAuth Buttons */}
+          <div className="space-y-2.5 mt-2">
+
+            {/* Google */}
+            <button
+              type="button"
+              className="w-full h-10 flex items-center justify-center gap-2 
+              bg-white/40 dark:bg-slate-900/40
+              backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
+              rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
+              hover:bg-white/60 dark:hover:bg-slate-900/60"
+            >
+              <Image src="/icons/google.png" width={18} height={18} alt="Google" />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                Sign up with Google
+              </span>
+            </button>
+
+            {/* Facebook */}
+            <button
+              type="button"
+              className="w-full h-10 flex items-center justify-center gap-2 
+              bg-white/40 dark:bg-slate-900/40
+              backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
+              rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
+              hover:bg-white/60 dark:hover:bg-slate-900/60"
+            >
+              <Image src="/icons/facebook.png" width={18} height={18} alt="Facebook" />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                Sign up with Facebook
+              </span>
+            </button>
+
+            {/* Apple */}
+            <button
+              type="button"
+              className="w-full h-10 flex items-center justify-center gap-2 
+              bg-white/40 dark:bg-slate-900/40
+              backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
+              rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
+              hover:bg-white/60 dark:hover:bg-slate-900/60"
+            >
+              <Image src="/icons/apple.png" width={18} height={18} alt="Apple" />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                Sign up with Apple
+              </span>
+            </button>
+
+            {/* Microsoft */}
+            <button
+              type="button"
+              className="w-full h-10 flex items-center justify-center gap-2 
+              bg-white/40 dark:bg-slate-900/40
+              backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
+              rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
+              hover:bg-white/60 dark:hover:bg-slate-900/60"
+            >
+              <Image src="/icons/microsoft.png" width={18} height={18} alt="Microsoft" />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                Sign up with Microsoft
+              </span>
+            </button>
+
+          </div>
 
           <p className="text-center text-xs text-slate-600 dark:text-slate-400 mt-3">
             Already have an account?{" "}

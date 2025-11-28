@@ -9,7 +9,7 @@ export default function Footer() {
         {/* Column 1 */}
         <div>
           <Image 
-            src="/logo.png" 
+            src="/icons/icon.png" 
             alt="E-Magazine Logo" 
             width={48} 
             height={48}

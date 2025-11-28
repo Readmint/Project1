@@ -3,51 +3,12 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
-
-const authors = [
-  {
-    name: "Dr. Sarah Chen",
-    field: "Technology & AI",
-    rating: "4.9",
-    reviews: "1240",
-    articles: "45",
-    photo: "/images/authors/sarah.jpg",
-  },
-  {
-    name: "Michael Rivera",
-    field: "Global Politics",
-    rating: "4.8",
-    reviews: "980",
-    articles: "38",
-    photo: "/images/authors/michael.jpg",
-  },
-  {
-    name: "Emily West",
-    field: "Health & Wellness",
-    rating: "4.7",
-    reviews: "870",
-    articles: "52",
-    photo: "/images/authors/emily.jpg",
-  },
-  {
-    name: "Dr. Alex Kumar",
-    field: "Climate Science",
-    rating: "4.9",
-    reviews: "1540",
-    articles: "67",
-    photo: "/images/authors/alex.jpg",
-  },
-  {
-    name: "Nina Patel",
-    field: "Art & Culture",
-    rating: "4.8",
-    reviews: "1020",
-    articles: "41",
-    photo: "/images/authors/nina.jpg",
-  },
-];
+import { useRouter } from "next/navigation";
+import { authors } from "@/src/data/authors";
 
 export default function AuthorSection() {
+  const router = useRouter();
+
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
 
@@ -73,9 +34,7 @@ export default function AuthorSection() {
   }, [paused]);
 
   return (
-    <section
-      className="w-full py-20 bg-gray-50 dark:bg-slate-800"
-    >
+    <section className="w-full py-20 bg-gray-50 dark:bg-slate-800">
       {/* Text header */}
       <div className="text-center mb-10">
         <h2 className="text-3xl font-bold">Featured Authors</h2>
@@ -99,14 +58,14 @@ export default function AuthorSection() {
           animate={{ x: -index * 360 }}
           transition={{ type: "spring", stiffness: 120, damping: 20 }}
         >
-          {authors.map((author, i) => (
+          {authors.map((author) => (
             <div
-              key={i}
+              key={author.id}
               className="min-w-[340px] bg-white dark:bg-slate-800 shadow-lg rounded-2xl p-6"
             >
               <div className="w-full h-40 relative mb-4 rounded-xl overflow-hidden">
                 <Image
-                  src={author.photo}
+                  src={author.image}          // FIXED: use unified dataset key
                   fill
                   alt={author.name}
                   className="object-cover"
@@ -114,19 +73,27 @@ export default function AuthorSection() {
               </div>
 
               <h3 className="text-xl font-semibold">{author.name}</h3>
-              <p className="text-gray-600 dark:text-gray-400">{author.field}</p>
+              <p className="text-gray-600 dark:text-gray-400">
+                {author.category}
+              </p>
 
               <div className="flex items-center gap-2 mt-3">
                 <span className="text-yellow-500 text-lg">★</span>
                 <span className="font-semibold">{author.rating}</span>
-                <span className="text-gray-500">({author.reviews} reviews)</span>
+                <span className="text-gray-500">
+                  ({author.reviews} reviews)
+                </span>
               </div>
 
               <p className="text-sm mt-2 text-gray-600 dark:text-gray-400">
                 Articles Published: <b>{author.articles}</b>
               </p>
 
-              <button className="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl transition">
+              {/* View Profile */}
+              <button
+                onClick={() => router.push(`/authors?id=${author.id}`)}
+                className="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl transition"
+              >
                 View Profile
               </button>
             </div>

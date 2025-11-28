@@ -161,7 +161,70 @@ export default function Login() {
             </Button>
           </form>
 
-          <p className="text-center text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-3">
+          {/* 🔥 Social Login Buttons */}
+          <div className="mt-5 space-y-3">
+
+            {/* Google */}
+                        <button
+                          type="button"
+                          className="w-full h-10 flex items-center justify-center gap-2 
+                          bg-white/40 dark:bg-slate-900/40
+                          backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
+                          rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
+                          hover:bg-white/60 dark:hover:bg-slate-900/60"
+                        >
+                          <Image src="/icons/google.png" width={18} height={18} alt="Google" />
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                            Continue with Google
+                          </span>
+                        </button>
+            
+                        {/* Facebook */}
+                        <button
+                          type="button"
+                          className="w-full h-10 flex items-center justify-center gap-2 
+                          bg-white/40 dark:bg-slate-900/40
+                          backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
+                          rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
+                          hover:bg-white/60 dark:hover:bg-slate-900/60"
+                        >
+                          <Image src="/icons/facebook.png" width={18} height={18} alt="Facebook" />
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                            Continue with Facebook
+                          </span>
+                        </button>
+            
+                        {/* Apple */}
+                        <button
+                          type="button"
+                          className="w-full h-10 flex items-center justify-center gap-2 
+                          bg-white/40 dark:bg-slate-900/40
+                          backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
+                          rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
+                          hover:bg-white/60 dark:hover:bg-slate-900/60"
+                        >
+                          <Image src="/icons/apple.png" width={18} height={18} alt="Apple" />
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                            Continue with Apple
+                          </span>
+                        </button>
+            
+                        {/* Microsoft */}
+                        <button
+                          type="button"
+                          className="w-full h-10 flex items-center justify-center gap-2 
+                          bg-white/40 dark:bg-slate-900/40
+                          backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
+                          rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
+                          hover:bg-white/60 dark:hover:bg-slate-900/60"
+                        >
+                          <Image src="/icons/microsoft.png" width={18} height={18} alt="Microsoft" />
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                            Continue with Microsoft
+                          </span>
+                        </button>
+
+          <p className="text-center text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-4">
             Don't have an account?{" "}
             <Link
               href="/signup"
@@ -172,6 +235,7 @@ export default function Login() {
           </p>
         </div>
       </div>
+    </div>
     </div>
   );
 }
