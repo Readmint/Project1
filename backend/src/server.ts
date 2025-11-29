@@ -67,7 +67,7 @@ app.get('/api/health-check', (req, res) => {
 
 
 // 404 Handler
-app.use('*', (req, res) => {
+app.all('/', (req, res) => {
   res.status(404).json({
     status: 'error',
     message: `Route ${req.originalUrl} not found`

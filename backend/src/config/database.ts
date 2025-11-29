@@ -2,12 +2,14 @@ import admin from 'firebase-admin';
 import mysql from 'mysql2/promise';
 import { logger } from '../utils/logger';
 
-let db: any = null;
+let mysqlDb: any = null;
+let firestoreDb: any = null;
 
 export const connectDatabase = async (): Promise<void> => {
   try {
+    // Connect to Firebase Firestore (for authentication)
     if (process.env.FIREBASE_PROJECT_ID) {
-      // Firebase Configuration
+      console.log('🔄 Initializing Firebase Firestore...');
       const serviceAccount = {
         projectId: process.env.FIREBASE_PROJECT_ID,
         privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
@@ -18,10 +20,18 @@ export const connectDatabase = async (): Promise<void> => {
         credential: admin.credential.cert(serviceAccount),
       });
 
-      db = admin.firestore();
+      firestoreDb = admin.firestore();
       logger.info('Connected to Firebase Firestore');
-    } else if (process.env.DB_HOST) {
-      // MySQL Configuration
+      console.log('✅ Connected to Firebase Firestore');
+    }
+
+    // Connect to MySQL (for app data)
+    if (process.env.DB_HOST) {
+      console.log('🔄 Connecting to MySQL...');
+      console.log('📊 Database:', process.env.DB_NAME);
+      console.log('🏠 Host:', process.env.DB_HOST);
+      console.log('👤 User:', process.env.DB_USER);
+
       const connection = await mysql.createConnection({
         host: process.env.DB_HOST,
         user: process.env.DB_USER,
@@ -30,21 +40,33 @@ export const connectDatabase = async (): Promise<void> => {
         port: parseInt(process.env.DB_PORT || '3306'),
       });
 
-      db = connection;
+      mysqlDb = connection;
       logger.info('Connected to MySQL database');
+      console.log('✅ Connected to MySQL database');
+      
+      // Test connection
+      const [dbResult]: any = await mysqlDb.execute('SELECT DATABASE() as db_name');
+      console.log('📋 Current database:', dbResult[0].db_name);
       
       // Initialize tables
       await initializeTables();
-    } else {
+    }
+
+    // Check if at least one database is connected
+    if (!firestoreDb && !mysqlDb) {
       throw new Error('No database configuration found');
     }
+
   } catch (error) {
+    console.error('❌ Database connection failed:', error);
     logger.error('Database connection failed:', error);
     process.exit(1);
   }
 };
 
 const initializeTables = async (): Promise<void> => {
+  console.log('🔄 Starting MySQL table initialization...');
+
   const createUsersTable = `
     CREATE TABLE IF NOT EXISTS users (
       id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -103,19 +125,108 @@ const initializeTables = async (): Promise<void> => {
   `;
 
   try {
-    await db.execute(createUsersTable);
-    await db.execute(createCategoriesTable);
-    await db.execute(createContentTable);
-    await db.execute(createSubscriptionPlansTable);
-    logger.info('Database tables initialized successfully');
+    console.log('🔄 Creating users table...');
+    await mysqlDb.execute(createUsersTable);
+    console.log('✅ Users table created');
+
+    console.log('🔄 Creating categories table...');
+    await mysqlDb.execute(createCategoriesTable);
+    console.log('✅ Categories table created');
+
+    console.log('🔄 Creating content table...');
+    await mysqlDb.execute(createContentTable);
+    console.log('✅ Content table created');
+
+    console.log('🔄 Creating subscription_plans table...');
+    await mysqlDb.execute(createSubscriptionPlansTable);
+    console.log('✅ Subscription plans table created');
+
+    logger.info('MySQL database tables initialized successfully');
+    console.log('🎉 All MySQL tables initialized successfully!');
+
+    // Verify tables were created
+    await verifyTableCreation();
   } catch (error) {
-    logger.error('Error initializing tables:', error);
+    console.error('❌ Error initializing MySQL tables:', error);
+    logger.error('Error initializing MySQL tables:', error);
   }
 };
 
-export const getDatabase = (): any => {
-  if (!db) {
-    throw new Error('Database not initialized');
+const verifyTableCreation = async (): Promise<void> => {
+  try {
+    console.log('🔍 Verifying MySQL table creation...');
+    const [tables]: any = await mysqlDb.execute(`
+      SELECT TABLE_NAME 
+      FROM information_schema.tables 
+      WHERE table_schema = ?
+    `, [process.env.DB_NAME]);
+
+    const tableNames = tables.map((t: any) => t.TABLE_NAME);
+    console.log('📋 MySQL tables found:', tableNames);
+
+    const expectedTables = ['users', 'categories', 'content', 'subscription_plans'];
+    const createdTables = expectedTables.filter(table => tableNames.includes(table));
+    
+    if (createdTables.length === expectedTables.length) {
+      console.log('✅ All MySQL tables created successfully');
+    } else {
+      console.log('⚠️  Some MySQL tables might be missing');
+    }
+  } catch (error) {
+    console.error('❌ Error verifying MySQL tables:', error);
   }
-  return db;
+};
+
+// Export both databases
+export const getMySQLDatabase = (): any => {
+  if (!mysqlDb) {
+    throw new Error('MySQL database not initialized');
+  }
+  return mysqlDb;
+};
+
+export const getFirestoreDatabase = (): any => {
+  if (!firestoreDb) {
+    throw new Error('Firestore database not initialized');
+  }
+  return firestoreDb;
+};
+
+// Main getDatabase function - defaults to MySQL for your existing code
+export const getDatabase = (): any => {
+  // Return MySQL by default (for your existing auth controller)
+  if (mysqlDb) {
+    return mysqlDb;
+  }
+  throw new Error('No database initialized');
+};
+
+// Add a function to check both database statuses
+export const checkDatabaseStatus = async (): Promise<any> => {
+  const status: any = {};
+
+  try {
+    if (mysqlDb) {
+      const [result]: any = await mysqlDb.execute('SELECT 1 as test');
+      status.mysql = { connected: true, test: result[0].test };
+    } else {
+      status.mysql = { connected: false };
+    }
+  } catch (error) {
+    status.mysql = { connected: false, error: error instanceof Error ? error.message : String(error) };
+  }
+
+  try {
+    if (firestoreDb) {
+      // Simple Firestore test
+      await firestoreDb.collection('test').limit(1).get();
+      status.firestore = { connected: true };
+    } else {
+      status.firestore = { connected: false };
+    }
+  } catch (error) {
+    status.firestore = { connected: false, error: error instanceof Error ? error.message : String(error) };
+  }
+
+  return status;
 };

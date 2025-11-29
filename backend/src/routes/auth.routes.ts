@@ -1,6 +1,6 @@
 import express from 'express';
 import { body } from 'express-validator';
-import { register, login, getCurrentUser } from '../controllers/auth.controller';
+import { register, login, getCurrentUser, oauth } from '../controllers/auth.controller';
 import { authenticate } from '../middleware/auth';
 
 const router = express.Router();
@@ -17,9 +17,19 @@ const loginValidation = [
   body('password').notEmpty()
 ];
 
+// OAuth validation - fixed to match frontend payload
+const oauthValidation = [
+  body('idToken').notEmpty().withMessage('ID token is required'),
+  body('provider').optional().isIn(['google', 'facebook', 'github']).withMessage('Invalid provider')
+];
+
 // Routes
 router.post('/register', registerValidation, register);
 router.post('/login', loginValidation, login);
+
+// OAuth route: accepts { idToken, provider } from frontend (Firebase ID token)
+router.post('/oauth', oauthValidation, oauth);
+
 router.get('/me', authenticate, getCurrentUser);
 
 export default router;

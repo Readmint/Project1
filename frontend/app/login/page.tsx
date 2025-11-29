@@ -6,11 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
+import { postJSON, postOAuth } from "@/lib/api";
+import { signInWithGoogle, signInWithMicrosoft } from "@/lib/firebaseClient";
+import { useRouter } from "next/navigation";
 
 export default function Login() {
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<string | null>(null);
 
   const [errors, setErrors] = useState({
     email: "",
@@ -36,17 +43,67 @@ export default function Login() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: any) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
-    if (validateForm()) {
-      console.log("Form valid — submit login");
+    if (!validateForm()) return;
+
+    setIsLoading(true);
+    try {
+      const res = await postJSON("/auth/login", { email, password });
+      const token = res.data.token;
+      // store app JWT
+      localStorage.setItem("token", token);
+      // optionally store user
+      localStorage.setItem("user", JSON.stringify(res.data.user));
+      router.push("/");
+    } catch (err: any) {
+      const message = err?.data?.message || "Login failed";
+      setErrors((prev) => ({ ...prev, password: message }));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Firebase OAuth flows -> send Firebase ID token to backend /auth/oauth
+  const handleGoogle = async () => {
+    setOauthLoading('google');
+    try {
+      const result = await signInWithGoogle();
+      const idToken = await result.user.getIdToken();
+      const res = await postOAuth(idToken, 'google');
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("user", JSON.stringify(res.data.user));
+      router.push("/");
+    } catch (err: any) {
+      console.error("Google OAuth failed", err);
+      const message = err?.data?.message || "Google sign-in failed";
+      setErrors((prev) => ({ ...prev, email: message }));
+    } finally {
+      setOauthLoading(null);
+    }
+  };
+
+  const handleMicrosoft = async () => {
+    setOauthLoading('microsoft');
+    try {
+      const result = await signInWithMicrosoft();
+      const idToken = await result.user.getIdToken();
+      const res = await postOAuth(idToken, 'microsoft');
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("user", JSON.stringify(res.data.user));
+      router.push("/");
+    } catch (err: any) {
+      console.error("Microsoft OAuth failed", err);
+      const message = err?.data?.message || "Microsoft sign-in failed";
+      setErrors((prev) => ({ ...prev, email: message }));
+    } finally {
+      setOauthLoading(null);
     }
   };
 
   return (
     <div className="bubble-bg min-h-[calc(100vh-4rem)] bg-gradient-to-br from-indigo-50 to-white dark:from-slate-900 dark:to-slate-800 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-6">
       <div className="w-full max-w-md">
-
         {/* Back Button */}
         <Link href="/">
           <Button
@@ -60,19 +117,10 @@ export default function Login() {
 
         {/* Card */}
         <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-lg shadow-2xl border border-slate-200/50 dark:border-slate-700/50 p-5 sm:p-6">
-
           {/* Logo */}
           <div className="mb-4 flex flex-col items-center">
-            <Image
-              src="/icons/icon.png"
-              alt="E-Magazine Logo"
-              width={48}
-              height={48}
-              className="mb-1.5"
-            />
-            <h4 className="text-xl sm:text-2xl text-center text-slate-900 dark:text-white mb-0.5">
-              Welcome Back
-            </h4>
+            <Image src="/icons/icon.png" alt="E-Magazine Logo" width={48} height={48} className="mb-1.5" />
+            <h4 className="text-xl sm:text-2xl text-center text-slate-900 dark:text-white mb-0.5">Welcome Back</h4>
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 text-center">
               Sign in to your E-Magazine account
             </p>
@@ -80,45 +128,40 @@ export default function Login() {
 
           {/* FORM */}
           <form className="space-y-4" onSubmit={handleSubmit}>
-            
             {/* EMAIL FIELD */}
             <div>
-              <label className="block text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-200 mb-1">
-                Email
-              </label>
+              <label className="block text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-200 mb-1">Email</label>
               <Input
                 type="email"
                 placeholder="you@example.com"
                 className={`w-full h-9 text-sm bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border ${
-                  errors.email
-                    ? "border-red-500"
-                    : "border-slate-300 dark:border-slate-600"
+                  errors.email ? "border-red-500" : "border-slate-300 dark:border-slate-600"
                 } text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500`}
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setErrors((prev) => ({ ...prev, email: "" }));
+                }}
               />
-              {errors.email && (
-                <p className="text-red-500 text-xs mt-1">{errors.email}</p>
-              )}
+              {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
             </div>
 
             {/* PASSWORD FIELD */}
             <div>
-              <label className="block text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-200 mb-1">
-                Password
-              </label>
+              <label className="block text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-200 mb-1">Password</label>
 
               <div className="relative">
                 <Input
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   className={`w-full h-9 text-sm pr-10 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border ${
-                    errors.password
-                      ? "border-red-500"
-                      : "border-slate-300 dark:border-slate-600"
+                    errors.password ? "border-red-500" : "border-slate-300 dark:border-slate-600"
                   } text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500`}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setErrors((prev) => ({ ...prev, password: "" }));
+                  }}
                 />
 
                 {/* SHOW / HIDE BUTTON */}
@@ -131,111 +174,110 @@ export default function Login() {
                 </button>
               </div>
 
-              {errors.password && (
-                <p className="text-red-500 text-xs mt-1">{errors.password}</p>
-              )}
+              {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
             </div>
 
             <div className="flex justify-between items-center pt-0.5">
               <label className="flex items-center text-xs sm:text-sm text-slate-900 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  className="mr-2 w-4 h-4 text-indigo-600 border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900"
-                />
+                <input type="checkbox" className="mr-2 w-4 h-4 text-indigo-600 border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900" />
                 Remember me
               </label>
 
-              <Link
-                href="/forgot-password"
-                className="text-xs sm:text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
-              >
+              <Link href="/forgot-password" className="text-xs sm:text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
                 Forgot Password?
               </Link>
             </div>
 
-            <Button
-              type="submit"
-              className="w-full h-9 text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-lg hover:shadow-xl transition-shadow"
+            <Button 
+              type="submit" 
+              disabled={isLoading}
+              className="w-full h-9 text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-lg hover:shadow-xl transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Sign In
+              {isLoading ? "Signing In..." : "Sign In"}
             </Button>
           </form>
 
           {/* 🔥 Social Login Buttons */}
           <div className="mt-5 space-y-3">
-
             {/* Google */}
-                        <button
-                          type="button"
-                          className="w-full h-10 flex items-center justify-center gap-2 
+            <button
+              type="button"
+              onClick={handleGoogle}
+              disabled={oauthLoading !== null}
+              className="w-full h-10 flex items-center justify-center gap-2 
                           bg-white/40 dark:bg-slate-900/40
                           backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
                           rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
-                          hover:bg-white/60 dark:hover:bg-slate-900/60"
-                        >
-                          <Image src="/icons/google.png" width={18} height={18} alt="Google" />
-                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                            Continue with Google
-                          </span>
-                        </button>
-            
-                        {/* Facebook */}
-                        <button
-                          type="button"
-                          className="w-full h-10 flex items-center justify-center gap-2 
-                          bg-white/40 dark:bg-slate-900/40
-                          backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
-                          rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
-                          hover:bg-white/60 dark:hover:bg-slate-900/60"
-                        >
-                          <Image src="/icons/facebook.png" width={18} height={18} alt="Facebook" />
-                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                            Continue with Facebook
-                          </span>
-                        </button>
-            
-                        {/* Apple */}
-                        <button
-                          type="button"
-                          className="w-full h-10 flex items-center justify-center gap-2 
-                          bg-white/40 dark:bg-slate-900/40
-                          backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
-                          rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
-                          hover:bg-white/60 dark:hover:bg-slate-900/60"
-                        >
-                          <Image src="/icons/apple.png" width={18} height={18} alt="Apple" />
-                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                            Continue with Apple
-                          </span>
-                        </button>
-            
-                        {/* Microsoft */}
-                        <button
-                          type="button"
-                          className="w-full h-10 flex items-center justify-center gap-2 
-                          bg-white/40 dark:bg-slate-900/40
-                          backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
-                          rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
-                          hover:bg-white/60 dark:hover:bg-slate-900/60"
-                        >
-                          <Image src="/icons/microsoft.png" width={18} height={18} alt="Microsoft" />
-                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                            Continue with Microsoft
-                          </span>
-                        </button>
-
-          <p className="text-center text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-4">
-            Don't have an account?{" "}
-            <Link
-              href="/signup"
-              className="text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-700 dark:hover:text-indigo-300"
+                          hover:bg-white/60 dark:hover:bg-slate-900/60
+                          disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Sign up
-            </Link>
-          </p>
+              <Image src="/icons/google.png" width={18} height={18} alt="Google" />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                {oauthLoading === 'google' ? "Connecting..." : "Continue with Google"}
+              </span>
+            </button>
+
+            {/* Facebook */}
+            <button
+              type="button"
+              disabled={oauthLoading !== null}
+              className="w-full h-10 flex items-center justify-center gap-2 
+                          bg-white/40 dark:bg-slate-900/40
+                          backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
+                          rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
+                          hover:bg-white/60 dark:hover:bg-slate-900/60
+                          disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Image src="/icons/facebook.png" width={18} height={18} alt="Facebook" />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                {oauthLoading === 'facebook' ? "Connecting..." : "Continue with Facebook"}
+              </span>
+            </button>
+
+            {/* Apple */}
+            <button
+              type="button"
+              disabled={oauthLoading !== null}
+              className="w-full h-10 flex items-center justify-center gap-2 
+                          bg-white/40 dark:bg-slate-900/40
+                          backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
+                          rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
+                          hover:bg-white/60 dark:hover:bg-slate-900/60
+                          disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Image src="/icons/apple.png" width={18} height={18} alt="Apple" />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                {oauthLoading === 'apple' ? "Connecting..." : "Continue with Apple"}
+              </span>
+            </button>
+
+            {/* Microsoft */}
+            <button
+              type="button"
+              onClick={handleMicrosoft}
+              disabled={oauthLoading !== null}
+              className="w-full h-10 flex items-center justify-center gap-2 
+                          bg-white/40 dark:bg-slate-900/40
+                          backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
+                          rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
+                          hover:bg-white/60 dark:hover:bg-slate-900/60
+                          disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Image src="/icons/microsoft.png" width={18} height={18} alt="Microsoft" />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                {oauthLoading === 'microsoft' ? "Connecting..." : "Continue with Microsoft"}
+              </span>
+            </button>
+
+            <p className="text-center text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-4">
+              Don't have an account?{" "}
+              <Link href="/signup" className="text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-700 dark:hover:text-indigo-300">
+                Sign up
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
-    </div>
     </div>
   );
 }
