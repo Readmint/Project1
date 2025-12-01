@@ -1,6 +1,6 @@
 import express from 'express';
 import { body } from 'express-validator';
-import { register, login, getCurrentUser, oauth } from '../controllers/auth.controller';
+import { register, login, getCurrentUser, oauth,sendVerificationEmail,verifyEmail,resendVerification } from '../controllers/auth.controller';
 import { authenticate } from '../middleware/auth';
 
 const router = express.Router();
@@ -26,6 +26,10 @@ const oauthValidation = [
 // Routes
 router.post('/register', registerValidation, register);
 router.post('/login', loginValidation, login);
+// Add these routes
+router.post('/send-verification', sendVerificationEmail);
+router.post('/verify-email', verifyEmail);
+router.post('/resend-verification', resendVerification);
 
 // OAuth route: accepts { idToken, provider } from frontend (Firebase ID token)
 router.post('/oauth', oauthValidation, oauth);

@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
-import { postJSON, postOAuth } from "@/lib/api";
-import { signInWithGoogle, signInWithMicrosoft } from "@/lib/firebaseClient";
+import { postJSON } from "@/lib/api";
+import { signInWithGoogle } from "@/lib/firebaseClient";
 import { useRouter } from "next/navigation";
 
 export default function Login() {
@@ -64,37 +64,51 @@ export default function Login() {
     }
   };
 
-  // Firebase OAuth flows -> send Firebase ID token to backend /auth/oauth
+  // Simple Firebase OAuth - No backend endpoint needed
   const handleGoogle = async () => {
     setOauthLoading('google');
     try {
+      // Firebase handles everything on frontend
       const result = await signInWithGoogle();
-      const idToken = await result.user.getIdToken();
-      const res = await postOAuth(idToken, 'google');
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("user", JSON.stringify(res.data.user));
+      const user = result.user;
+      
+      console.log('Google sign-in successful:', user.email);
+      
+      // Get user data from Firebase
+      const userData = {
+        uid: user.uid,
+        email: user.email,
+        name: user.displayName,
+        photoURL: user.photoURL,
+        emailVerified: user.emailVerified
+      };
+      
+      // Store user data in localStorage
+      localStorage.setItem("user", JSON.stringify(userData));
+      
+      // Optional: Sync with backend to get app token and role
+      try {
+        const idToken = await user.getIdToken();
+        const res = await postJSON("/auth/sync-user", { 
+          idToken,
+          email: user.email,
+          name: user.displayName,
+          photoURL: user.photoURL
+        });
+        
+        // Store app token if backend returns one
+        if (res.data?.token) {
+          localStorage.setItem("token", res.data.token);
+          localStorage.setItem("user", JSON.stringify(res.data.user));
+        }
+      } catch (syncError) {
+        console.log('Backend sync optional - using Firebase auth only');
+      }
+      
       router.push("/");
     } catch (err: any) {
-      console.error("Google OAuth failed", err);
-      const message = err?.data?.message || "Google sign-in failed";
-      setErrors((prev) => ({ ...prev, email: message }));
-    } finally {
-      setOauthLoading(null);
-    }
-  };
-
-  const handleMicrosoft = async () => {
-    setOauthLoading('microsoft');
-    try {
-      const result = await signInWithMicrosoft();
-      const idToken = await result.user.getIdToken();
-      const res = await postOAuth(idToken, 'microsoft');
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("user", JSON.stringify(res.data.user));
-      router.push("/");
-    } catch (err: any) {
-      console.error("Microsoft OAuth failed", err);
-      const message = err?.data?.message || "Microsoft sign-in failed";
+      console.error("Google sign-in failed", err);
+      const message = err.message || "Google sign-in failed";
       setErrors((prev) => ({ ...prev, email: message }));
     } finally {
       setOauthLoading(null);
@@ -230,7 +244,7 @@ export default function Login() {
             >
               <Image src="/icons/facebook.png" width={18} height={18} alt="Facebook" />
               <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                {oauthLoading === 'facebook' ? "Connecting..." : "Continue with Facebook"}
+                Continue with Facebook
               </span>
             </button>
 
@@ -247,25 +261,7 @@ export default function Login() {
             >
               <Image src="/icons/apple.png" width={18} height={18} alt="Apple" />
               <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                {oauthLoading === 'apple' ? "Connecting..." : "Continue with Apple"}
-              </span>
-            </button>
-
-            {/* Microsoft */}
-            <button
-              type="button"
-              onClick={handleMicrosoft}
-              disabled={oauthLoading !== null}
-              className="w-full h-10 flex items-center justify-center gap-2 
-                          bg-white/40 dark:bg-slate-900/40
-                          backdrop-blur-xl border border-slate-300/40 dark:border-slate-700/40
-                          rounded-lg shadow-md hover:shadow-xl transition-all duration-300 
-                          hover:bg-white/60 dark:hover:bg-slate-900/60
-                          disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Image src="/icons/microsoft.png" width={18} height={18} alt="Microsoft" />
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                {oauthLoading === 'microsoft' ? "Connecting..." : "Continue with Microsoft"}
+                Continue with Apple
               </span>
             </button>
 
