@@ -111,3 +111,7 @@
 {"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-01 21:10:45"}
 {"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-01 21:10:45"}
 {"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-01 21:10:45"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-01 21:22:56"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-01 21:22:56"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-01 21:22:56"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-01 21:22:56"}
