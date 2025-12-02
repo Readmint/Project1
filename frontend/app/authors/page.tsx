@@ -8,8 +8,6 @@ import { Search } from "lucide-react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { useSearchParams, useRouter } from "next/navigation";
-import Footer from "@/src/components/layout/Footer";
-
 import { authors } from "@/src/data/authors";
 
 interface Author {
@@ -216,7 +214,6 @@ export default function AuthorsPage() {
         </div>
       )}
 
-      <Footer />
     </div>
   );
 }

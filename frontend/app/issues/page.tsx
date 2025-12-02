@@ -4,7 +4,6 @@ import { useState } from "react";
 import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import Footer from "@/src/components/layout/Footer";
 
 const categories = [
   "All",
@@ -192,7 +191,6 @@ export default function IssuesPage() {
 
       </div>
 
-      <Footer />
     </>
   );
 }

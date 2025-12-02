@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import Footer from "@/src/components/layout/Footer";
 import { useEffect, useState } from "react";
 
 // ------------------------------------
@@ -244,7 +243,6 @@ export default function AboutUsPage() {
         </Button>
       </section>
 
-      <Footer />
     </div>
   );
 }

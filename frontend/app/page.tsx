@@ -1,9 +1,8 @@
-import HeroCarousel from "@/src/components/home/HeroCarousel";
+import HeroCarousel from "@/components/home/HeroCarousel";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import AuthorSection from "@/src/components/home/AuthorSection";
-import Footer from "@/src/components/layout/Footer";
+import AuthorSection from "@/components/home/AuthorSection";
 
 export default function HomePage() {
   const featuredArticles = [
@@ -227,7 +226,6 @@ export default function HomePage() {
   </div>
 </section>
 
-<Footer />
     </div>
   );
 }
