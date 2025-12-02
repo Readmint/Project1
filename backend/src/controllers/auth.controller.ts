@@ -6,6 +6,7 @@ import { getDatabase } from '../config/database';
 import { logger } from '../utils/logger';
 import admin from 'firebase-admin';
 import nodemailer from 'nodemailer';
+import crypto from 'crypto';
 
 // Allow TypeScript to use require in mixed module setups
 declare const require: any;
@@ -39,6 +40,11 @@ const generateOTP = (): string => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
+// Generate reset token
+const generateResetToken = (): string => {
+  return crypto.randomBytes(32).toString('hex');
+};
+
 // Email transporter setup
 const createTransporter = () => {
   return nodemailer.createTransport({
@@ -52,7 +58,213 @@ const createTransporter = () => {
 
 // Store OTPs temporarily (in production, use Redis)
 const otpStore = new Map();
+const resetTokenStore = new Map();
 
+// Forgot password functions
+export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ status: 'error', message: 'Validation failed', errors: errors.array() });
+      return;
+    }
+
+    const { email } = req.body;
+    const db: any = getDatabase();
+
+    // Check if user exists
+    const [users]: any = await db.execute('SELECT id, email, name, is_email_verified FROM users WHERE email = ?', [email]);
+    
+    // For security, don't reveal if user exists or not
+    if (users.length === 0) {
+      res.status(200).json({ 
+        status: 'success', 
+        message: 'If an account exists with this email, you will receive an OTP shortly' 
+      });
+      return;
+    }
+
+    const user = users[0];
+    
+    // Check if email is verified
+    if (!user.is_email_verified) {
+      res.status(400).json({ 
+        status: 'error', 
+        message: 'Please verify your email first before resetting password' 
+      });
+      return;
+    }
+
+    // Generate OTP
+    const otp = generateOTP();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    // Store OTP
+    otpStore.set(email, { 
+      otp, 
+      expiresAt,
+      userId: user.id 
+    });
+
+    // Send OTP email
+    const transporter = createTransporter();
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Password Reset OTP - E-Magazine',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #4F46E5;">Password Reset Request</h2>
+          <p>You requested to reset your password for your E-Magazine account.</p>
+          <p>Your OTP for password reset is:</p>
+          <div style="background: #f8fafc; padding: 20px; text-align: center; margin: 20px 0;">
+            <h1 style="color: #4F46E5; margin: 0; font-size: 32px; letter-spacing: 5px;">${otp}</h1>
+          </div>
+          <p>This OTP will expire in 10 minutes.</p>
+          <p>If you didn't request this, please ignore this email.</p>
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+          <p style="color: #6b7280; font-size: 14px;">E-Magazine Team</p>
+        </div>
+      `,
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'OTP sent to your email',
+      data: { email }
+    });
+  } catch (error: any) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to process request' });
+  }
+};
+
+export const verifyResetOTP = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ status: 'error', message: 'Validation failed', errors: errors.array() });
+      return;
+    }
+
+    const { email, otp } = req.body;
+
+    // Get stored OTP
+    const storedData = otpStore.get(email);
+
+    if (!storedData) {
+      res.status(400).json({ status: 'error', message: 'OTP not found or expired' });
+      return;
+    }
+
+    if (Date.now() > storedData.expiresAt) {
+      otpStore.delete(email);
+      res.status(400).json({ status: 'error', message: 'OTP has expired' });
+      return;
+    }
+
+    if (storedData.otp !== otp) {
+      res.status(400).json({ status: 'error', message: 'Invalid OTP' });
+      return;
+    }
+
+    // OTP is valid - generate reset token
+    const resetToken = generateResetToken();
+    const resetTokenExpiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
+
+    // Store reset token
+    resetTokenStore.set(resetToken, {
+      email,
+      userId: storedData.userId,
+      expiresAt: resetTokenExpiresAt
+    });
+
+    // Clear OTP
+    otpStore.delete(email);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'OTP verified successfully',
+      data: {
+        resetToken,
+        email
+      }
+    });
+  } catch (error: any) {
+    console.error('Verify reset OTP error:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to verify OTP' });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ status: 'error', message: 'Validation failed', errors: errors.array() });
+      return;
+    }
+
+    const { email, resetToken, newPassword } = req.body;
+    const db: any = getDatabase();
+
+    // Verify reset token
+    const tokenData = resetTokenStore.get(resetToken);
+
+    if (!tokenData) {
+      res.status(400).json({ status: 'error', message: 'Invalid or expired reset token' });
+      return;
+    }
+
+    if (Date.now() > tokenData.expiresAt) {
+      resetTokenStore.delete(resetToken);
+      res.status(400).json({ status: 'error', message: 'Reset token has expired' });
+      return;
+    }
+
+    if (tokenData.email !== email) {
+      res.status(400).json({ status: 'error', message: 'Invalid reset token for this email' });
+      return;
+    }
+
+    // Update password in database
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    
+    await db.execute(
+      'UPDATE users SET password = ? WHERE id = ?',
+      [hashedPassword, tokenData.userId]
+    );
+
+    // Clear reset token
+    resetTokenStore.delete(resetToken);
+
+    // Send confirmation email
+    const transporter = createTransporter();
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Password Reset Successful - E-Magazine',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #4F46E5;">Password Reset Successful</h2>
+          <p>Your password has been successfully reset for your E-Magazine account.</p>
+          <p>If you did not make this change, please contact our support team immediately.</p>
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+          <p style="color: #6b7280; font-size: 14px;">E-Magazine Team</p>
+        </div>
+      `,
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Password reset successfully'
+    });
+  } catch (error: any) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to reset password' });
+  }
+};
+
+// Existing functions
 export const sendVerificationEmail = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;
@@ -446,7 +658,6 @@ export const getCurrentUser = async (req: Request, res: Response): Promise<void>
   }
 };
 
-// Add this function to resend verification email
 export const resendVerification = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;

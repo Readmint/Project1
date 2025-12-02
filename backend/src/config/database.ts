@@ -124,6 +124,81 @@ const initializeTables = async (): Promise<void> => {
     )
   `;
 
+  // NEW: Payment Orders Table for PayU
+  const createPaymentOrdersTable = `
+    CREATE TABLE IF NOT EXISTS payment_orders (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      txnid VARCHAR(255) NOT NULL UNIQUE,
+      plan_id VARCHAR(255) NOT NULL,
+      user_id VARCHAR(255) NOT NULL,
+      amount DECIMAL(10,2) NOT NULL,
+      currency VARCHAR(10) DEFAULT 'INR',
+      email VARCHAR(255),
+      phone VARCHAR(20),
+      firstname VARCHAR(100),
+      productinfo VARCHAR(255) DEFAULT 'Magazine Subscription',
+      status ENUM('pending', 'completed', 'failed', 'cancelled') DEFAULT 'pending',
+      hash VARCHAR(255),
+      payment_date DATETIME,
+      error_message TEXT,
+      udf1 VARCHAR(255),
+      udf2 VARCHAR(255),
+      udf3 VARCHAR(255),
+      udf4 VARCHAR(255),
+      udf5 VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_user_id (user_id),
+      INDEX idx_status (status),
+      INDEX idx_txnid (txnid),
+      INDEX idx_created_at (created_at)
+    )
+  `;
+
+  // NEW: User Subscriptions Table
+  const createUserSubscriptionsTable = `
+    CREATE TABLE IF NOT EXISTS user_subscriptions (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      user_id VARCHAR(255) NOT NULL,
+      plan_id VARCHAR(255) NOT NULL,
+      status ENUM('active', 'expired', 'cancelled') DEFAULT 'active',
+      payment_txn_id VARCHAR(255),
+      amount DECIMAL(10,2),
+      start_date TIMESTAMP NOT NULL,
+      end_date TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_user_id (user_id),
+      INDEX idx_status (status),
+      INDEX idx_end_date (end_date),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (plan_id) REFERENCES subscription_plans(id) ON DELETE CASCADE
+    )
+  `;
+
+  // NEW: Payment Transactions Log Table
+  const createPaymentTransactionsTable = `
+    CREATE TABLE IF NOT EXISTS payment_transactions (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      txnid VARCHAR(255) NOT NULL,
+      payment_id VARCHAR(255),
+      payment_mode VARCHAR(50),
+      bank_ref_num VARCHAR(255),
+      bankcode VARCHAR(50),
+      card_type VARCHAR(50),
+      card_name VARCHAR(100),
+      card_num VARCHAR(50),
+      card_last4 VARCHAR(4),
+      card_network VARCHAR(50),
+      mihpayid VARCHAR(255),
+      request_json JSON,
+      response_json JSON,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_txnid (txnid),
+      INDEX idx_payment_id (payment_id)
+    )
+  `;
+
   try {
     console.log('🔄 Creating users table...');
     await mysqlDb.execute(createUsersTable);
@@ -141,6 +216,21 @@ const initializeTables = async (): Promise<void> => {
     await mysqlDb.execute(createSubscriptionPlansTable);
     console.log('✅ Subscription plans table created');
 
+    console.log('🔄 Creating payment_orders table...');
+    await mysqlDb.execute(createPaymentOrdersTable);
+    console.log('✅ Payment orders table created');
+
+    console.log('🔄 Creating user_subscriptions table...');
+    await mysqlDb.execute(createUserSubscriptionsTable);
+    console.log('✅ User subscriptions table created');
+
+    console.log('🔄 Creating payment_transactions table...');
+    await mysqlDb.execute(createPaymentTransactionsTable);
+    console.log('✅ Payment transactions table created');
+
+    // Insert default subscription plans if table is empty
+    await seedDefaultPlans();
+
     logger.info('MySQL database tables initialized successfully');
     console.log('🎉 All MySQL tables initialized successfully!');
 
@@ -149,6 +239,86 @@ const initializeTables = async (): Promise<void> => {
   } catch (error) {
     console.error('❌ Error initializing MySQL tables:', error);
     logger.error('Error initializing MySQL tables:', error);
+  }
+};
+
+// NEW: Seed default subscription plans
+const seedDefaultPlans = async (): Promise<void> => {
+  try {
+    console.log('🌱 Checking for default subscription plans...');
+    
+    // Check if plans already exist
+    const [existingPlans]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM subscription_plans');
+    
+    if (existingPlans[0].count === 0) {
+      console.log('🌱 Seeding default subscription plans...');
+      
+      const defaultPlans = [
+        {
+          name: 'Free Plan',
+          description: 'Basic access with limited features',
+          price_monthly: 0,
+          price_yearly: 0,
+          features: JSON.stringify([
+            'Limited reading access',
+            'Basic content',
+            'Ad-supported',
+            'Community access'
+          ]),
+          duration: 'monthly'
+        },
+        {
+          name: 'Standard Plan',
+          description: 'Full access to most magazines',
+          price_monthly: 9.99,
+          price_yearly: 99.99,
+          features: JSON.stringify([
+            'Most magazines unlocked',
+            'Ad-free reading',
+            'Offline access',
+            'Unlimited bookmarks',
+            'Download for offline reading',
+            'Email support'
+          ]),
+          duration: 'monthly'
+        },
+        {
+          name: 'Premium Plan',
+          description: 'Complete unlimited access',
+          price_monthly: 19.99,
+          price_yearly: 199.99,
+          features: JSON.stringify([
+            'All magazines unlocked',
+            'Ad-free experience',
+            'Exclusive content',
+            'Early access',
+            'Priority support',
+            'Certificate of achievements',
+            'Monthly webinars'
+          ]),
+          duration: 'monthly'
+        }
+      ];
+
+      for (const plan of defaultPlans) {
+        await mysqlDb.execute(
+          `INSERT INTO subscription_plans (id, name, description, price_monthly, price_yearly, features, duration, created_at)
+           VALUES (UUID(), ?, ?, ?, ?, ?, ?, NOW())`,
+          [plan.name, plan.description, plan.price_monthly, plan.price_yearly, plan.features, plan.duration]
+        );
+      }
+      
+      console.log('✅ Default subscription plans seeded');
+      
+      // Verify seeding
+      const [plansCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM subscription_plans');
+      console.log(`📊 Total subscription plans: ${plansCount[0].count}`);
+    } else {
+      console.log(`📊 Subscription plans already exist (${existingPlans[0].count} plans found)`);
+    }
+  } catch (error) {
+    console.error('❌ Error seeding default plans:', error);
+    logger.error('Error seeding default plans:', error);
   }
 };
 
@@ -164,13 +334,32 @@ const verifyTableCreation = async (): Promise<void> => {
     const tableNames = tables.map((t: any) => t.TABLE_NAME);
     console.log('📋 MySQL tables found:', tableNames);
 
-    const expectedTables = ['users', 'categories', 'content', 'subscription_plans'];
+    // Updated expected tables list
+    const expectedTables = [
+      'users', 
+      'categories', 
+      'content', 
+      'subscription_plans',
+      'payment_orders',
+      'user_subscriptions',
+      'payment_transactions'
+    ];
+    
     const createdTables = expectedTables.filter(table => tableNames.includes(table));
+    
+    console.log('📊 Table creation status:');
+    expectedTables.forEach(table => {
+      if (tableNames.includes(table)) {
+        console.log(`   ✅ ${table}`);
+      } else {
+        console.log(`   ❌ ${table} (missing)`);
+      }
+    });
     
     if (createdTables.length === expectedTables.length) {
       console.log('✅ All MySQL tables created successfully');
     } else {
-      console.log('⚠️  Some MySQL tables might be missing');
+      console.log(`⚠️  ${expectedTables.length - createdTables.length} MySQL tables might be missing`);
     }
   } catch (error) {
     console.error('❌ Error verifying MySQL tables:', error);
@@ -209,6 +398,19 @@ export const checkDatabaseStatus = async (): Promise<any> => {
     if (mysqlDb) {
       const [result]: any = await mysqlDb.execute('SELECT 1 as test');
       status.mysql = { connected: true, test: result[0].test };
+      
+      // Check table counts
+      const [usersCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM users');
+      const [plansCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM subscription_plans');
+      const [ordersCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM payment_orders');
+      const [subscriptionsCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM user_subscriptions');
+      
+      status.mysql.table_counts = {
+        users: usersCount[0].count,
+        subscription_plans: plansCount[0].count,
+        payment_orders: ordersCount[0].count,
+        user_subscriptions: subscriptionsCount[0].count
+      };
     } else {
       status.mysql = { connected: false };
     }
@@ -229,4 +431,56 @@ export const checkDatabaseStatus = async (): Promise<any> => {
   }
 
   return status;
+};
+
+// NEW: Function to get database schema info
+export const getDatabaseSchema = async (): Promise<any> => {
+  if (!mysqlDb) {
+    throw new Error('MySQL database not initialized');
+  }
+
+  try {
+    const [tables]: any = await mysqlDb.execute(`
+      SELECT 
+        TABLE_NAME,
+        TABLE_ROWS,
+        DATA_LENGTH,
+        INDEX_LENGTH,
+        CREATE_TIME,
+        UPDATE_TIME
+      FROM information_schema.tables 
+      WHERE table_schema = ?
+      ORDER BY TABLE_NAME
+    `, [process.env.DB_NAME]);
+
+    const schemaInfo = [];
+    
+    for (const table of tables) {
+      const [columns]: any = await mysqlDb.execute(`
+        SELECT 
+          COLUMN_NAME,
+          DATA_TYPE,
+          IS_NULLABLE,
+          COLUMN_DEFAULT,
+          COLUMN_KEY,
+          EXTRA
+        FROM information_schema.columns 
+        WHERE table_schema = ? AND table_name = ?
+        ORDER BY ORDINAL_POSITION
+      `, [process.env.DB_NAME, table.TABLE_NAME]);
+
+      schemaInfo.push({
+        table_name: table.TABLE_NAME,
+        table_rows: table.TABLE_ROWS,
+        data_length: table.DATA_LENGTH,
+        index_length: table.INDEX_LENGTH,
+        columns: columns
+      });
+    }
+
+    return schemaInfo;
+  } catch (error) {
+    console.error('Error getting database schema:', error);
+    throw error;
+  }
 };

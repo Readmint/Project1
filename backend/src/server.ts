@@ -31,12 +31,6 @@ app.use(cors({
 }));
 
 // Rate Limiting
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.API_RATE_LIMIT_WINDOW_MS || '900000'),
-  max: parseInt(process.env.API_RATE_LIMIT_MAX_REQUESTS || '100'),
-  message: 'Too many requests from this IP, please try again later.'
-});
-app.use(limiter);
 
 // Body Parsing Middleware
 app.use(express.json({ limit: '10mb' }));
@@ -52,7 +46,7 @@ setupSwagger(app);
 app.use('/api/auth', authRoutes);
 app.use('/api/featured', featuredRoutes);
 app.use('/api/content', contentRoutes);
-app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
 
 // Health Check
 app.get('/api/health-check', (req, res) => {
