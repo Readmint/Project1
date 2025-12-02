@@ -8,6 +8,7 @@ import AuthorSection from "@/components/home/AuthorSection";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
+import Footer from "@/components/layout/Footer";
 
 interface FeaturedArticle {
   id: number;
