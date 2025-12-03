@@ -51,11 +51,20 @@ export default function Login() {
     try {
       const res = await postJSON("/auth/login", { email, password });
       const token = res.data.token;
+      const user = res.data.user;
+      
       // store app JWT
       localStorage.setItem("token", token);
-      // optionally store user
-      localStorage.setItem("user", JSON.stringify(res.data.user));
-      router.push("/");
+      // store user data
+      localStorage.setItem("user", JSON.stringify(user));
+      
+      // Redirect based on user role
+      if (user.role === 'author') {
+        router.push("/author-dashboard");
+      } else {
+        // For other roles (reader, reviewer, editor, content_manager, admin)
+        router.push("/");
+      }
     } catch (err: any) {
       const message = err?.data?.message || "Login failed";
       setErrors((prev) => ({ ...prev, password: message }));
@@ -99,12 +108,23 @@ export default function Login() {
         // Store app token if backend returns one
         if (res.data?.token) {
           localStorage.setItem("token", res.data.token);
-          localStorage.setItem("user", JSON.stringify(res.data.user));
+          const userData = res.data.user;
+          localStorage.setItem("user", JSON.stringify(userData));
+          
+          // Redirect based on user role after sync
+          if (userData.role === 'author') {
+            router.push("/author-dashboard");
+          } else {
+            router.push("/");
+          }
+          return; // Exit early since we already redirected
         }
       } catch (syncError) {
         console.log('Backend sync optional - using Firebase auth only');
+        // Continue with Firebase-only flow
       }
       
+      // If no backend sync or sync failed, redirect to home
       router.push("/");
     } catch (err: any) {
       console.error("Google sign-in failed", err);

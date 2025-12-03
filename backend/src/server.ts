@@ -12,6 +12,8 @@ import authRoutes from './routes/auth.routes';
 import featuredRoutes from './routes/featured.routes';
 import contentRoutes from './routes/content.routes';
 import subscriptionRoutes from './routes/subscription.routes';
+import authorRoutes from './routes/author.routes';
+import articleRoutes from './routes/article.routes';
 import { setupSwagger } from './config/swagger';
 
 // Load environment variables
@@ -47,6 +49,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/featured', featuredRoutes);
 app.use('/api/content', contentRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/author', authorRoutes);
+app.use('/api/article', articleRoutes);
 
 // Health Check
 app.get('/api/health-check', (req, res) => {

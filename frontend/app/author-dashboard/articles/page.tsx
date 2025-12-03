@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 
@@ -22,6 +22,7 @@ import {
   Eye,
   Edit2,
   Trash2,
+  RefreshCw,
 } from "lucide-react";
 
 type Status = "Published" | "In Review" | "Revise" | "Draft" | "Rejected";
@@ -33,68 +34,138 @@ type Article = {
   status: Status;
   views?: number;
   likes?: number;
-  publishedAt?: string; // ISO date or display string
-  slug?: string;
+  publishedAt?: string | null;
+  slug?: string | null;
+  attachment_url?: string | null;
+  summary?: string;
 };
 
-const initialArticles: Article[] = [
-  {
-    id: "1",
-    title: "The Future of Artificial Intelligence in Healthcare",
-    category: "Technology",
-    status: "Published",
-    views: 12450,
-    likes: 324,
-    publishedAt: "2025-11-15",
-    slug: "future-of-ai-healthcare",
-  },
-  {
-    id: "2",
-    title: "Sustainable Business Practices for Modern Enterprises",
-    category: "Business",
-    status: "In Review",
-  },
-  {
-    id: "3",
-    title: "Machine Learning: A Comprehensive Guide",
-    category: "Technology",
-    status: "Published",
-    views: 8920,
-    likes: 217,
-    publishedAt: "2025-10-28",
-    slug: "ml-comprehensive-guide",
-  },
-  {
-    id: "4",
-    title: "The Psychology of Consumer Behavior",
-    category: "Business",
-    status: "Draft",
-  },
-  {
-    id: "5",
-    title: "Climate Change and Its Global Impact",
-    category: "Science",
-    status: "Revise",
-  },
-  {
-    id: "6",
-    title: "Digital Marketing Trends for 2026",
-    category: "Business",
-    status: "Published",
-    views: 15680,
-    likes: 428,
-    publishedAt: "2025-11-10",
-    slug: "digital-marketing-trends-2026",
-  },
-];
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
 
 export default function MyArticlesPage() {
   const router = useRouter();
 
-  const [articles, setArticles] = useState<Article[]>(initialArticles);
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Status | "All">("All");
   const [categoryFilter, setCategoryFilter] = useState<string | "All">("All");
+
+  const getToken = () => localStorage.getItem("token") || "";
+
+  // status mapping between backend and UI
+  const mapBackendToUIStatus = (s: string | null): Status => {
+    if (!s) return "Draft";
+    const st = s.toLowerCase().trim();
+    
+    if (st === "published" || st === "approved") return "Published";
+    if (st === "under_review" || st === "submitted") return "In Review";
+    if (st === "changes_requested" || st === "revise") return "Revise";
+    if (st === "draft") return "Draft";
+    if (st === "rejected") return "Rejected";
+    
+    console.warn("Unknown status:", s);
+    return "Draft";
+  };
+
+  // ---- load articles ----
+  const fetchArticles = async () => {
+    setLoading(true);
+    try {
+      const token = getToken();
+      if (!token) {
+        console.error("No authentication token found");
+        router.push("/login");
+        return;
+      }
+
+      console.log("Fetching articles from:", `${API_BASE}/article/author/my-articles`);
+      
+      // fetch all articles for this author with limit parameter
+      const res = await fetch(`${API_BASE}/article/author/my-articles?limit=100`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      console.log("Response status:", res.status);
+      
+      const body = await res.json();
+      console.log("Response body:", body);
+      
+      if (!res.ok) {
+        throw new Error(body.message || body.error || `Failed to fetch articles: ${res.status}`);
+      }
+
+      // The data is in body.data.articles
+      const rows = body.data?.articles || [];
+      console.log("Articles data:", rows);
+
+      // map DB rows to UI Article
+      const mapped: Article[] = rows.map((r: any) => {
+        // Safely extract category
+        let category = "General";
+        try {
+          // First try metadata.category
+          if (r.metadata && typeof r.metadata === 'object' && r.metadata.category) {
+            category = r.metadata.category;
+          } 
+          // Then try r.category (which might be set from backend)
+          else if (r.category && typeof r.category === 'string') {
+            category = r.category;
+          }
+          // Then try parsing metadata string
+          else if (r.metadata && typeof r.metadata === 'string') {
+            const metadata = JSON.parse(r.metadata);
+            if (metadata.category) {
+              category = metadata.category;
+            }
+          }
+        } catch (err) {
+          console.warn("Failed to parse category for article:", r.id, err);
+        }
+
+        // Safely extract summary
+        let summaryText = '';
+        try {
+          if (r.summary && typeof r.summary === 'string') {
+            summaryText = r.summary;
+          } else if (r.metadata && typeof r.metadata === 'object' && r.metadata.summary) {
+            summaryText = r.metadata.summary;
+          }
+        } catch (err) {
+          console.warn("Failed to parse summary for article:", r.id);
+        }
+
+        return {
+          id: r.id || '',
+          title: r.title || 'Untitled',
+          category: category,
+          status: mapBackendToUIStatus(r.status),
+          views: r.views || 0,
+          likes: r.likes || 0,
+          publishedAt: r.published_at || r.created_at || null,
+          slug: r.slug || null,
+          attachment_url: r.attachment_url || null,
+          summary: summaryText
+        };
+      });
+
+      console.log("Mapped articles:", mapped);
+      setArticles(mapped);
+    } catch (err: any) {
+      console.error("Fetch articles error:", err.message, err);
+      alert(`Failed to load articles: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchArticles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ---- Derived values ----
   const stats = useMemo(() => {
@@ -102,12 +173,15 @@ export default function MyArticlesPage() {
     const published = articles.filter((a) => a.status === "Published").length;
     const inReview = articles.filter((a) => a.status === "In Review").length;
     const drafts = articles.filter((a) => a.status === "Draft").length;
-    return { total, published, inReview, drafts };
+    const revise = articles.filter((a) => a.status === "Revise").length;
+    const rejected = articles.filter((a) => a.status === "Rejected").length;
+    
+    return { total, published, inReview, drafts, revise, rejected };
   }, [articles]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
-    articles.forEach((a) => set.add(a.category));
+    articles.forEach((a) => set.add(a.category || "General"));
     return Array.from(set);
   }, [articles]);
 
@@ -170,7 +244,6 @@ export default function MyArticlesPage() {
   };
 
   const handleViewArticle = (article: Article) => {
-    // Change this to your real public article URL
     if (article.slug) {
       router.push(`/articles/${article.slug}`);
     } else {
@@ -179,16 +252,48 @@ export default function MyArticlesPage() {
   };
 
   const handleEditArticle = (article: Article) => {
-    // The submit page can read `articleId` from the query and pre-fill the form.
     router.push(`/author-dashboard/submit?articleId=${article.id}`);
   };
 
-  const handleDeleteDraft = (article: Article) => {
-    const ok = window.confirm(
-      `Delete draft "${article.title}"? This action cannot be undone.`
-    );
+  const handleDeleteDraft = async (article: Article) => {
+    const ok = window.confirm(`Delete draft "${article.title}"? This action cannot be undone.`);
     if (!ok) return;
-    setArticles((prev) => prev.filter((a) => a.id !== article.id));
+    try {
+      const res = await fetch(`${API_BASE}/article/author/articles/${article.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.message || "Failed to delete");
+      // remove locally
+      setArticles(prev => prev.filter(a => a.id !== article.id));
+    } catch (err) {
+      console.error("Delete draft error:", err);
+      alert("Failed to delete draft");
+    }
+  };
+
+  // Optional: allow author to submit a draft from list
+  const submitDraft = async (article: Article) => {
+    const ok = window.confirm(`Submit "${article.title}" for review?`);
+    if (!ok) return;
+    try {
+      const res = await fetch(`${API_BASE}/article/author/articles/${article.id}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ status: "submitted", note: "Submitted by author" }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.message || "Failed to submit");
+      // refresh list
+      await fetchArticles();
+    } catch (err) {
+      console.error("Submit draft error:", err);
+      alert("Failed to submit draft");
+    }
   };
 
   // ---- Small UI helpers ----
@@ -229,7 +334,7 @@ export default function MyArticlesPage() {
     }
   };
 
-  const formatDate = (iso?: string) => {
+  const formatDate = (iso?: string | null) => {
     if (!iso) return "-";
     const d = new Date(iso);
     return d.toLocaleDateString(undefined, {
@@ -258,20 +363,29 @@ export default function MyArticlesPage() {
           </p>
         </div>
 
-        <Button
-          onClick={handleWriteNewArticle}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2 rounded-full px-4"
-        >
-          <Plus className="h-4 w-4" /> Write New Article
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={fetchArticles}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Refreshing...' : 'Refresh'}
+          </Button>
+          <Button
+            onClick={handleWriteNewArticle}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2 rounded-full px-4"
+          >
+            <Plus className="h-4 w-4" /> Write New Article
+          </Button>
+        </div>
       </div>
 
       {/* Status summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="rounded-2xl border-slate-200 dark:border-slate-700">
             <CardContent className="p-4 flex items-center justify-between">
               <div>
@@ -285,11 +399,7 @@ export default function MyArticlesPage() {
           </Card>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-        >
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
           <Card className="rounded-2xl border-slate-200 dark:border-slate-700">
             <CardContent className="p-4 flex items-center justify-between">
               <div>
@@ -303,11 +413,7 @@ export default function MyArticlesPage() {
           </Card>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <Card className="rounded-2xl border-slate-200 dark:border-slate-700">
             <CardContent className="p-4 flex items-center justify-between">
               <div>
@@ -321,11 +427,7 @@ export default function MyArticlesPage() {
           </Card>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-        >
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <Card className="rounded-2xl border-slate-200 dark:border-slate-700">
             <CardContent className="p-4 flex items-center justify-between">
               <div>
@@ -369,7 +471,7 @@ export default function MyArticlesPage() {
               <option value="All">All Status</option>
               <option value="Published">Published</option>
               <option value="In Review">Under Review</option>
-              <option value="Revise">Revise</option>
+              <option value="Revise">Revision Required</option>
               <option value="Draft">Drafts</option>
               <option value="Rejected">Rejected</option>
             </select>
@@ -432,6 +534,11 @@ export default function MyArticlesPage() {
                     <div className="font-medium text-slate-900 dark:text-slate-100 line-clamp-2">
                       {article.title}
                     </div>
+                    {article.summary && (
+                      <div className="text-xs text-slate-500 mt-1 line-clamp-1">
+                        {article.summary}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
                     {article.category}
@@ -485,15 +592,26 @@ export default function MyArticlesPage() {
                       )}
 
                       {article.status === "Revise" && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 flex items-center gap-1"
-                          onClick={() => handleEditArticle(article)}
-                        >
-                          <Edit2 className="h-3 w-3" />
-                          Edit
-                        </Button>
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 flex items-center gap-1"
+                            onClick={() => handleEditArticle(article)}
+                          >
+                            <Edit2 className="h-3 w-3" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 flex items-center gap-1"
+                            onClick={() => handleViewArticle(article)}
+                          >
+                            <Eye className="h-3 w-3" />
+                            Preview
+                          </Button>
+                        </>
                       )}
 
                       {article.status === "Draft" && (
@@ -515,6 +633,15 @@ export default function MyArticlesPage() {
                           >
                             <Trash2 className="h-3 w-3" />
                             Delete
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 flex items-center gap-1"
+                            onClick={() => submitDraft(article)}
+                          >
+                            <FileClock className="h-3 w-3" />
+                            Submit
                           </Button>
                         </>
                       )}
@@ -541,7 +668,7 @@ export default function MyArticlesPage() {
                     colSpan={7}
                     className="px-4 py-6 text-center text-sm text-slate-500"
                   >
-                    No articles found. Try adjusting filters or search terms.
+                    {loading ? "Loading articles..." : "No articles found. Try adjusting filters or search terms."}
                   </td>
                 </tr>
               )}
@@ -564,6 +691,29 @@ export default function MyArticlesPage() {
           </div>
         </div>
       </Card>
+
+      {/* Empty state with retry button */}
+      {!loading && articles.length === 0 && (
+        <div className="text-center py-12">
+          <p className="text-slate-500 mb-4">No articles found. Try creating a new article!</p>
+          <div className="flex gap-3 justify-center">
+            <Button 
+              onClick={handleWriteNewArticle}
+              className="bg-indigo-600 hover:bg-indigo-700"
+            >
+              <Plus className="h-4 w-4 mr-2" /> Write Your First Article
+            </Button>
+            <Button 
+              onClick={fetchArticles} 
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Retry Loading
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

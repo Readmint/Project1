@@ -18,11 +18,14 @@ export const connectDatabase = async (): Promise<void> => {
 
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
+        storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`
       });
 
       firestoreDb = admin.firestore();
       logger.info('Connected to Firebase Firestore');
       console.log('✅ Connected to Firebase Firestore');
+      console.log('📦 Storage bucket:', process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`);
+      
     }
 
     // Connect to MySQL (for app data)
@@ -80,14 +83,64 @@ const initializeTables = async (): Promise<void> => {
     )
   `;
 
+   const createAuthorsTable = `
+  CREATE TABLE IF NOT EXISTS authors (
+    id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    user_id VARCHAR(36) NOT NULL UNIQUE,
+    display_name VARCHAR(255),
+    profile_photo_url VARCHAR(500),
+    location VARCHAR(255),
+    bio TEXT,
+    legal_name VARCHAR(255),
+    qualifications TEXT,
+    specialty VARCHAR(255),
+    tags JSON,
+    social_links JSON,
+    payout_details JSON,
+    is_verified BOOLEAN DEFAULT FALSE,
+    joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user_id (user_id),
+    INDEX idx_display_name (display_name),
+    INDEX idx_specialty (specialty),
+    INDEX idx_is_verified (is_verified),
+    INDEX idx_joined_date (joined_date)
+  )
+`;
+
+const createAuthorStatsTable = `
+  CREATE TABLE IF NOT EXISTS author_stats (
+    id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    author_id VARCHAR(36) NOT NULL UNIQUE,
+    articles_published INT DEFAULT 0,
+    total_views INT DEFAULT 0,
+    certificates_earned INT DEFAULT 0,
+    total_earnings DECIMAL(10,2) DEFAULT 0.00,
+    monthly_earnings DECIMAL(10,2) DEFAULT 0.00,
+    author_rank INT DEFAULT 0,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (author_id) REFERENCES authors(id) ON DELETE CASCADE,
+    INDEX idx_author_id (author_id),
+    INDEX idx_rank (author_rank),
+    INDEX idx_total_earnings (total_earnings DESC),
+    INDEX idx_articles_published (articles_published DESC),
+    INDEX idx_last_updated (last_updated DESC)
+  )
+`;
+
   const createCategoriesTable = `
     CREATE TABLE IF NOT EXISTS categories (
-      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      category_id VARCHAR(36) PRIMARY KEY  DEFAULT (UUID()),
       name VARCHAR(255) NOT NULL,
       description TEXT,
-      parent_category_id VARCHAR(36),
+      slug VARCHAR(255) UNIQUE,
+      is_active BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (parent_category_id) REFERENCES categories(id)
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_is_active (is_active),
+      INDEX idx_slug (slug)
+
     )
   `;
 
@@ -96,9 +149,9 @@ const initializeTables = async (): Promise<void> => {
       id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
       title VARCHAR(500) NOT NULL,
       author_id VARCHAR(36) NOT NULL,
-      category_id VARCHAR(36) NOT NULL,
-      content TEXT,
-      status ENUM('draft', 'submitted', 'under_review', 'changes_requested', 'approved', 'published') DEFAULT 'draft',
+      category_id VARCHAR(36) ,
+      content LONGTEXT,
+      status ENUM('draft', 'submitted', 'under_review', 'changes_requested', 'approved', 'published', 'rejected') DEFAULT 'draft',
       featured BOOLEAN DEFAULT FALSE,
       trending_score INT DEFAULT 0,
       likes_count INT DEFAULT 0,
@@ -107,7 +160,58 @@ const initializeTables = async (): Promise<void> => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       FOREIGN KEY (author_id) REFERENCES users(id),
-      FOREIGN KEY (category_id) REFERENCES categories(id)
+      FOREIGN KEY (category_id) REFERENCES categories(category_id),
+      INDEX idx_author_status (author_id, status),
+      INDEX idx_status (status),
+      INDEX idx_created_at (created_at)
+    )
+  `;
+
+  const createAttachmentsTable = `
+    CREATE TABLE IF NOT EXISTS attachments (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      article_id VARCHAR(36) NOT NULL,
+      storage_path VARCHAR(1000) NOT NULL,
+      public_url VARCHAR(2000) NULL,
+      filename VARCHAR(512),
+      mime_type VARCHAR(100),
+      size_bytes BIGINT,
+      uploaded_by VARCHAR(36),
+      uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE,
+      INDEX idx_article_id (article_id),
+      INDEX idx_uploaded_by (uploaded_by)
+    )
+  `;
+
+  const createWorkflowEventsTable = `
+    CREATE TABLE IF NOT EXISTS workflow_events (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      article_id VARCHAR(36) NOT NULL,
+      actor_id VARCHAR(36) NULL,
+      from_status ENUM('draft', 'submitted', 'under_review', 'changes_requested', 'approved', 'published', 'rejected') NULL,
+      to_status ENUM('draft', 'submitted', 'under_review', 'changes_requested', 'approved', 'published', 'rejected') NOT NULL,
+      note TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE,
+      INDEX idx_wf_article (article_id),
+      INDEX idx_wf_actor (actor_id)
+    )
+  `;
+
+  const createReviewsTable = `
+    CREATE TABLE IF NOT EXISTS reviews (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      article_id VARCHAR(36) NOT NULL,
+      reviewer_id VARCHAR(36) NOT NULL,
+      summary TEXT,
+      details LONGTEXT,
+      decision ENUM('approve','request_changes','reject') DEFAULT 'request_changes',
+      similarity_score FLOAT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE,
+      INDEX idx_review_article (article_id),
+      INDEX idx_reviewer_id (reviewer_id)
     )
   `;
 
@@ -204,6 +308,14 @@ const initializeTables = async (): Promise<void> => {
     await mysqlDb.execute(createUsersTable);
     console.log('✅ Users table created');
 
+    console.log('🔄 Creating authors table...');
+    await mysqlDb.execute(createAuthorsTable);
+    console.log('✅ Authors table created');
+
+    console.log('🔄 Creating author_stats table...');
+    await mysqlDb.execute(createAuthorStatsTable);
+    console.log('✅ Author stats table created');
+
     console.log('🔄 Creating categories table...');
     await mysqlDb.execute(createCategoriesTable);
     console.log('✅ Categories table created');
@@ -211,6 +323,18 @@ const initializeTables = async (): Promise<void> => {
     console.log('🔄 Creating content table...');
     await mysqlDb.execute(createContentTable);
     console.log('✅ Content table created');
+
+    console.log('🔄 Creating attachments table...');
+    await mysqlDb.execute(createAttachmentsTable);
+    console.log('✅ Attachments table created');
+
+    console.log('🔄 Creating workflow_events table...');
+    await mysqlDb.execute(createWorkflowEventsTable);
+    console.log('✅ Workflow events table created');
+
+    console.log('🔄 Creating reviews table...');
+    await mysqlDb.execute(createReviewsTable);
+    console.log('✅ Reviews table created');
 
     console.log('🔄 Creating subscription_plans table...');
     await mysqlDb.execute(createSubscriptionPlansTable);
@@ -334,11 +458,16 @@ const verifyTableCreation = async (): Promise<void> => {
     const tableNames = tables.map((t: any) => t.TABLE_NAME);
     console.log('📋 MySQL tables found:', tableNames);
 
-    // Updated expected tables list
+    // Updated expected tables list (includes newly added tables)
     const expectedTables = [
-      'users', 
-      'categories', 
-      'content', 
+      'users',
+      'authors',
+      'author_stats',
+      'categories',
+      'content',
+      'attachments',
+      'workflow_events',
+      'reviews',
       'subscription_plans',
       'payment_orders',
       'user_subscriptions',

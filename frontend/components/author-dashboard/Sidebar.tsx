@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { LogOut, LayoutDashboard, Send, FileText, User, Settings, Menu, X } from "lucide-react";
+import LogoutConfirmation from "../LogoutConfirmation";
 
 const navItems = [
   { label: "Dashboard", path: "/author-dashboard", icon: LayoutDashboard },
@@ -16,6 +17,61 @@ export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const handleLogout = () => {
+    // Clear all auth-related data from localStorage
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    
+    // Clear any other app-specific data if needed
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("app_")) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+    
+    // Force a complete app reset
+    setOpen(false);
+    setShowLogoutConfirm(false);
+    
+    // Dispatch logout event for other components
+    window.dispatchEvent(new Event("userLogout"));
+    
+    // IMPORTANT: Use window.location.href for complete redirect
+    // This ensures we leave the current route completely
+    window.location.href = "/";
+  };
+
+  // Listen for logout events from other components (like Navbar)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const user = localStorage.getItem("user");
+      if (!user) {
+        // User was logged out from elsewhere
+        window.location.href = "/";
+      }
+    };
+
+    const handleUserLogout = () => {
+      window.location.href = "/";
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("userLogout", handleUserLogout);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("userLogout", handleUserLogout);
+    };
+  }, []);
+
+  const handleLogoutClick = () => {
+    setShowLogoutConfirm(true);
+  };
 
   return (
     <>
@@ -43,7 +99,7 @@ export default function Sidebar() {
           transform transition-transform duration-300 z-40
           ${open ? "translate-x-0" : "-translate-x-full"}
           md:translate-x-0
-          min-h-full flex flex-col   /* ✅ allows sidebar to extend to footer */
+          min-h-full flex flex-col
         `}
       >
         {/* Close Button (Mobile) */}
@@ -91,10 +147,7 @@ export default function Sidebar() {
         {/* ✅ Logout Button pinned to bottom */}
         <div className="p-6 border-t border-slate-200 dark:border-slate-700">
           <button
-            onClick={() => {
-              localStorage.clear();
-              router.push("/login");
-            }}
+            onClick={handleLogoutClick}
             className="flex items-center gap-3 w-full text-left px-4 py-3 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-all"
           >
             <LogOut className="h-5 w-5" />
@@ -103,6 +156,14 @@ export default function Sidebar() {
         </div>
 
       </aside>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <LogoutConfirmation
+          onConfirm={handleLogout}
+          onCancel={() => setShowLogoutConfirm(false)}
+        />
+      )}
     </>
   );
 }
