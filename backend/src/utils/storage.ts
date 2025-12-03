@@ -1,34 +1,41 @@
 // src/utils/storage.ts
 import admin from 'firebase-admin';
-import { Storage } from '@google-cloud/storage';
+import { Storage, Bucket, File } from '@google-cloud/storage';
 
 /**
  * Helper to get the storage bucket instance.
  * Uses the firebase-admin initialized app's storage() bucket if available,
  * otherwise constructs a google-cloud/storage client using env vars.
  */
-export const getStorageBucket = (): any => {
-  // If firebase-admin initialized, admin.storage() should exist
+export const getStorageBucket = (): Bucket => {
+  // Try firebase-admin bucket first (if admin has been initialized)
   try {
-    const fbBucket = admin.storage && admin.storage().bucket();
-    if (fbBucket && fbBucket.name) {
-      return fbBucket;
+    // When admin is initialized, admin.storage() should be available
+    if (admin && (admin as any).storage) {
+      const fbStorage = (admin as any).storage();
+      if (fbStorage && typeof fbStorage.bucket === 'function') {
+        const fbBucket = fbStorage.bucket();
+        if (fbBucket && fbBucket.name) {
+          return fbBucket as Bucket;
+        }
+      }
     }
   } catch (e) {
-    // continue to fallback
+    // fall through to fallback
   }
 
   // fallback: use google-cloud storage client (requires GOOGLE_APPLICATION_CREDENTIALS or env keys)
   const bucketName = process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`;
   if (!bucketName) throw new Error('FIREBASE_STORAGE_BUCKET or FIREBASE_PROJECT_ID must be set');
+
   const storage = new Storage();
   return storage.bucket(bucketName);
 };
 
 /**
  * getSignedUrl(path, mode, expiryMs, opts)
- * - path: storage path (object name)
- * - mode: 'read' | 'write'
+ * - path: storage path (object name) relative to the bucket
+ * - mode: 'read' | 'write' (read => GET, write => PUT)
  * - expiryMs: number of milliseconds from now the signed URL should expire
  * - opts: { contentType?: string }
  *
@@ -40,15 +47,16 @@ export const getSignedUrl = async (
   expiryMs: number = 15 * 60 * 1000,
   opts: { contentType?: string } = {}
 ): Promise<string> => {
+  if (!storagePath) throw new Error('storagePath is required for getSignedUrl');
+
   const bucket = getStorageBucket();
   if (!bucket) throw new Error('Storage bucket not configured');
 
-  const file = bucket.file(storagePath);
-
+  const file: File = bucket.file(storagePath);
   const expires = Date.now() + expiryMs;
   const expiresDate = new Date(expires);
 
-  // google-cloud-storage requires options slightly differently, use file.getSignedUrl
+  // google-cloud-storage expects action: 'read'|'write'|'delete'|'resumable'
   const action = mode === 'write' ? 'write' : 'read';
 
   const getUrlOptions: any = {
@@ -56,12 +64,41 @@ export const getSignedUrl = async (
     expires: expiresDate,
   };
 
-  // For write signed URLs you may want to force contentType; the client must set content-type accordingly when uploading.
+  // For 'write' (upload) signed URLs, you may need to require a specific contentType,
+  // client must set this content-type when uploading with the signed URL.
   if (opts.contentType && action === 'write') {
     getUrlOptions.contentType = opts.contentType;
   }
 
-  // file.getSignedUrl returns a Promise resolving to [url] or throws
+  // file.getSignedUrl returns Promise<[string]>; return the first string
   const [url] = await file.getSignedUrl(getUrlOptions);
   return url;
+};
+
+/**
+ * Make an object public (best-effort).
+ * Returns the public URL if succeeded.
+ */
+export const makeFilePublic = async (storagePath: string): Promise<string> => {
+  if (!storagePath) throw new Error('storagePath is required for makeFilePublic');
+
+  const bucket = getStorageBucket();
+  const file = bucket.file(storagePath);
+  await file.makePublic();
+  const bucketName = (bucket as any).name || process.env.FIREBASE_STORAGE_BUCKET;
+  const publicUrl = `https://storage.googleapis.com/${bucketName}/${encodeURI(storagePath)}`;
+  return publicUrl;
+};
+
+/**
+ * Delete a file from storage (best-effort)
+ */
+export const deleteFile = async (storagePath: string): Promise<void> => {
+  if (!storagePath) return;
+  const bucket = getStorageBucket();
+  const file = bucket.file(storagePath);
+  await file.delete().catch((err) => {
+    // swallow errors (caller should log if needed)
+    // but rethrow if needed: throw err;
+  });
 };

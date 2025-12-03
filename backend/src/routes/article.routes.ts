@@ -9,9 +9,14 @@ import {
   getArticleDetails,
   updateArticleStatus,
   deleteArticle,
+  getCategories,
+  // New handlers:
+  downloadAttachment,
+  deleteAttachment,
+  uploadAttachment,
 } from '../controllers/article.controller';
 import { authenticate } from '../middleware/auth';
-import { getCategories } from '../controllers/article.controller';
+import multer from 'multer';
 
 const router = express.Router();
 
@@ -50,15 +55,6 @@ const listArticlesValidation = [
   query('offset').optional().isInt({ min: 0 }).toInt(),
 ];
 
-router.get(
-  '/author/articles',
-  [
-    query('status').optional().isString(),
-    query('limit').optional().isInt({ min: 1, max: 100 }),
-    query('offset').optional().isInt({ min: 0 })
-  ],
-  listAuthorArticles
-);
 const getArticleValidation = [
   param('articleId').isString().notEmpty().withMessage('articleId is required'),
 ];
@@ -79,6 +75,14 @@ const deleteArticleValidation = [
   param('articleId').isString().notEmpty().withMessage('articleId is required'),
 ];
 
+// Create multer instance for file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: parseInt(process.env.MAX_UPLOAD_BYTES || String(50 * 1024 * 1024), 10),
+  },
+});
+
 /**
  * Routes
  */
@@ -91,17 +95,14 @@ router.post(
   createArticle
 );
 
-// Add this route in article.routes.ts
-
-
-// Add this route definition
+// Categories
 router.get(
   '/categories',
   authenticate,
   getCategories
 );
 
-// Request signed upload URL for attachment
+// Legacy signed URL endpoints (kept for compatibility)
 router.post(
   '/author/articles/:articleId/attachments/signed-url',
   authenticate,
@@ -109,12 +110,41 @@ router.post(
   getAttachmentSignedUrl
 );
 
-// Finalize attachment after upload
 router.post(
   '/author/articles/:articleId/attachments/:attachmentId/complete',
   authenticate,
   completeAttachmentValidation,
   completeAttachmentUpload
+);
+
+// NEW: Upload attachment to server (GCS-backed). Multipart using field "file".
+router.post(
+  '/author/articles/:articleId/attachments',
+  authenticate,
+  // Apply multer middleware here
+  upload.single('file'),
+  // Then call the handler
+  uploadAttachment
+);
+
+// NEW: Download attachment (streams / redirects to signed URL)
+router.get(
+  '/author/articles/:articleId/attachments/:attachmentId',
+  authenticate,
+  // validate params
+  param('articleId').isString().notEmpty().withMessage('articleId is required'),
+  param('attachmentId').isString().notEmpty().withMessage('attachmentId is required'),
+  // actual handler
+  downloadAttachment
+);
+
+// NEW: Delete attachment
+router.delete(
+  '/author/articles/:articleId/attachments/:attachmentId',
+  authenticate,
+  param('articleId').isString().notEmpty().withMessage('articleId is required'),
+  param('attachmentId').isString().notEmpty().withMessage('attachmentId is required'),
+  deleteAttachment
 );
 
 // List articles (author)

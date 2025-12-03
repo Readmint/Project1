@@ -7,6 +7,8 @@ import { getDatabase } from '../config/database';
 import { logger } from '../utils/logger';
 import { getStorageBucket, getSignedUrl } from '../utils/storage';
 
+// NOTE: removed GridFS/mongo imports
+
 declare global {
   namespace Express {
     interface Request {
@@ -31,10 +33,10 @@ const normalizeSignedUrl = (val: any): string | null => {
   if (!val) return null;
   if (typeof val === 'string') return val;
   if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'string') return val[0];
-  if (typeof val === 'object') {
-    if (val.url && typeof val.url === 'string') return val.url;
-    if (val.publicUrl && typeof val.publicUrl === 'string') return val.publicUrl;
-    if (val.public_url && typeof val.public_url === 'string') return val.public_url;
+  if (typeof val === 'object' && val !== null) {
+    if (typeof val.url === 'string') return val.url;
+    if (typeof val.publicUrl === 'string') return val.publicUrl;
+    if (typeof val.public_url === 'string') return val.public_url;
   }
   return null;
 };
@@ -42,7 +44,7 @@ const normalizeSignedUrl = (val: any): string | null => {
 /**
  * POST /api/author/articles
  */
-export const createArticle = async (req: Request, res: Response): Promise<any> => {
+export const createArticle = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!requireAuth(req, res)) return;
 
@@ -134,23 +136,25 @@ export const createArticle = async (req: Request, res: Response): Promise<any> =
       [articleId, authorId, null, status, `Created as ${status}`]
     );
 
-    return res.status(201).json({
+    res.status(201).json({
       status: 'success',
       message: 'Article created',
       data: { id: articleId, title: title.trim(), status, category_id: finalCategoryId, summary: summary || '' },
     });
+    return;
   } catch (err: any) {
     logger.error('createArticle error:', err);
     const errorMessage = err?.sqlMessage || err?.message || 'Unknown database error';
     const errorCode = err?.code || 'UNKNOWN_ERROR';
-    return res.status(500).json({ status: 'error', message: 'Failed to create article', error: errorMessage, code: errorCode });
+    res.status(500).json({ status: 'error', message: 'Failed to create article', error: errorMessage, code: errorCode });
+    return;
   }
 };
 
 /**
  * GET /api/author/articles/categories
  */
-export const getCategories = async (req: Request, res: Response): Promise<any> => {
+export const getCategories = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!requireAuth(req, res)) return;
     const db: any = getDatabase();
@@ -160,7 +164,8 @@ export const getCategories = async (req: Request, res: Response): Promise<any> =
       const [rows]: any = await db.execute(
         'SELECT category_id as id, name, description, slug, is_active FROM categories WHERE is_active = 1 ORDER BY name'
       );
-      return res.status(200).json({ status: 'success', data: { categories: rows } });
+      res.status(200).json({ status: 'success', data: { categories: rows } });
+      return;
     } catch (err: any) {
       logger.warn('getCategories: SELECT category_id failed, trying fallback', err?.message);
     }
@@ -170,141 +175,275 @@ export const getCategories = async (req: Request, res: Response): Promise<any> =
       const [rows2]: any = await db.execute(
         'SELECT id as id, name, description, slug, is_active FROM categories WHERE is_active = 1 ORDER BY name'
       );
-      return res.status(200).json({ status: 'success', data: { categories: rows2 } });
+      res.status(200).json({ status: 'success', data: { categories: rows2 } });
+      return;
     } catch (err2: any) {
       logger.error('getCategories: fallback also failed', err2);
-      return res.status(500).json({ status: 'error', message: 'Failed to fetch categories', error: err2?.message });
+      res.status(500).json({ status: 'error', message: 'Failed to fetch categories', error: err2?.message });
+      return;
     }
   } catch (err: any) {
     logger.error('getCategories error:', err);
-    return res.status(500).json({ status: 'error', message: 'Failed to fetch categories', error: err?.message });
+    res.status(500).json({ status: 'error', message: 'Failed to fetch categories', error: err?.message });
+    return;
   }
 };
 
 /**
- * POST /api/author/articles/:articleId/attachments/signed-url
+ * Deprecated signed URL endpoints: kept for compatibility but intentionally return 501 guidance.
  */
-export const getAttachmentSignedUrl = async (req: Request, res: Response): Promise<any> => {
+export const getAttachmentSignedUrl = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!requireAuth(req, res)) return;
 
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ status: 'error', message: 'Validation failed', errors: errors.array() });
+    res.status(501).json({
+      status: 'error',
+      message:
+        'Signed-upload is disabled. Upload attachments to the server using multipart POST to /api/author/articles/:articleId/attachments (field name "file").',
+      alternative: { method: 'POST', path: `/api/author/articles/:articleId/attachments`, formField: 'file' },
+    });
+    return;
+  } catch (err: any) {
+    logger.error('getAttachmentSignedUrl error:', err);
+    res.status(500).json({ status: 'error', message: 'Failed to process request', error: err?.message });
+    return;
+  }
+};
+
+export const completeAttachmentUpload = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!requireAuth(req, res)) return;
+
+    res.status(501).json({
+      status: 'error',
+      message:
+        'Complete upload endpoint is deprecated. Upload files via multipart to /api/author/articles/:articleId/attachments which finalizes upload server-side.',
+    });
+    return;
+  } catch (err: any) {
+    logger.error('completeAttachmentUpload error (deprecated):', err);
+    res.status(500).json({ status: 'error', message: 'Failed to process request', error: err?.message });
+    return;
+  }
+};
+
+/* ===========================
+   GCS-backed attachment APIs
+   =========================== */
+
+/**
+ * POST /api/author/articles/:articleId/attachments
+ * multipart/form-data field: file
+ *
+ * router should attach multer middleware on this route: upload.single('file')
+ */
+export const uploadAttachment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!requireAuth(req, res)) return;
+    const dbMy: any = getDatabase();
+    const userId = req.user!.userId!;
+    const { articleId } = req.params;
+
+    // Validate article exists and ownership in MySQL
+    const [articleRows]: any = await dbMy.execute('SELECT id, author_id FROM content WHERE id = ?', [articleId]);
+    if (!articleRows || articleRows.length === 0) {
+      res.status(404).json({ status: 'error', message: 'Article not found' });
+      return;
+    }
+    const article = articleRows[0];
+    if (article.author_id !== userId && !['admin', 'content_manager'].includes(req.user!.role || '')) {
+      res.status(403).json({ status: 'error', message: 'Forbidden to upload for this article' });
+      return;
     }
 
-    const db: any = getDatabase();
-    const { articleId } = req.params;
-    const { filename, contentType = 'application/octet-stream' } = req.body;
-    const userId = req.user!.userId!;
-
-    if (!filename) return res.status(400).json({ status: 'error', message: 'filename is required' });
-
-    const [rows]: any = await db.execute('SELECT id, author_id, status FROM content WHERE id = ?', [articleId]);
-    if (!rows || rows.length === 0) return res.status(404).json({ status: 'error', message: 'Article not found' });
-
-    const article = rows[0];
-    if (article.author_id !== userId && !['admin', 'content_manager'].includes(req.user!.role || '')) {
-      return res.status(403).json({ status: 'error', message: 'Forbidden to upload for this article' });
+    const file = (req as any).file;
+    if (!file) {
+      res.status(400).json({ status: 'error', message: 'No file provided' });
+      return;
     }
 
     const attachmentId = uuidv4();
-    const safeFilename = filename.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-\.]/g, '');
-    const storagePath = `articles/${articleId}/attachments/${attachmentId}--${safeFilename}`;
+    const originalName = file.originalname || `attachment-${attachmentId}`;
+    const contentType = file.mimetype || 'application/octet-stream';
 
-    const rawUploadUrl = await getSignedUrl(storagePath, 'write', MAX_SIGNED_URL_EXPIRES_MS, { contentType });
-    const uploadUrl = normalizeSignedUrl(rawUploadUrl);
+    const safeName = originalName.replace(/[^\w.\-]/g, '_').slice(0, 200);
+    const destPath = `attachments/${articleId}/${attachmentId}-${safeName}`;
 
-    if (!uploadUrl) {
-      logger.error('getAttachmentSignedUrl: signed url generation returned invalid result', { raw: rawUploadUrl });
-      return res.status(500).json({ status: 'error', message: 'Failed to generate upload URL' });
+    try {
+      const bucket = getStorageBucket();
+      const gcsFile = bucket.file(destPath);
+
+      // Save buffer to GCS
+      await gcsFile.save(file.buffer, {
+        metadata: {
+          contentType,
+        },
+        resumable: false,
+      });
+
+      // Optionally set ACL or make public — keep null and use signed URLs for reads
+      const publicUrl = null;
+      const sizeBytes = file.size || (file.buffer ? file.buffer.length : 0);
+
+      // Save metadata in MySQL attachments table
+      await dbMy.execute(
+        `INSERT INTO attachments (id, article_id, storage_path, public_url, filename, mime_type, size_bytes, uploaded_by, uploaded_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [attachmentId, articleId, destPath, publicUrl, originalName, contentType, sizeBytes, userId]
+      );
+
+      res.status(201).json({
+        status: 'success',
+        message: 'File uploaded to Firebase Storage',
+        data: {
+          attachmentId,
+          storagePath: destPath,
+          filename: originalName,
+          size: sizeBytes,
+          mime_type: contentType,
+        },
+      });
+      return;
+    } catch (err: any) {
+      logger.error('uploadAttachment: failed to upload to GCS or save DB row', err);
+      res.status(500).json({ status: 'error', message: 'Upload failed', error: err?.message });
+      return;
     }
-
-    await db.execute(
-      `INSERT INTO attachments (id, article_id, storage_path, public_url, filename, mime_type, size_bytes, uploaded_by, uploaded_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [attachmentId, articleId, storagePath, null, filename, contentType, null, userId]
-    );
-
-    return res.status(201).json({
-      status: 'success',
-      message: 'Signed upload URL generated',
-      data: { attachmentId, uploadUrl, storagePath, expiresAt: Date.now() + MAX_SIGNED_URL_EXPIRES_MS },
-    });
   } catch (err: any) {
-    logger.error('getAttachmentSignedUrl error:', err);
-    let errorMessage = 'Failed to generate signed URL';
-    if (err?.message && err.message.includes('Bucket name not specified')) errorMessage = 'Storage bucket not configured. Check FIREBASE_STORAGE_BUCKET.';
-    return res.status(500).json({ status: 'error', message: errorMessage, error: err?.message });
+    logger.error('uploadAttachment error', err);
+    if (!res.headersSent) res.status(500).json({ status: 'error', message: 'Upload failed', error: err?.message });
   }
 };
 
 /**
- * POST /api/author/articles/:articleId/attachments/:attachmentId/complete
+ * GET /api/author/articles/:articleId/attachments/:attachmentId
+ * Redirection to signed URL or public URL
  */
-export const completeAttachmentUpload = async (req: Request, res: Response): Promise<any> => {
+export const downloadAttachment = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!requireAuth(req, res)) return;
-    const db: any = getDatabase();
+    const dbMy: any = getDatabase();
     const userId = req.user!.userId!;
     const { articleId, attachmentId } = req.params;
-    const { makePublic = false } = req.body;
 
-    const [rows]: any = await db.execute('SELECT * FROM attachments WHERE id = ? AND article_id = ?', [attachmentId, articleId]);
-    if (!rows || rows.length === 0) return res.status(404).json({ status: 'error', message: 'Attachment not found' });
+    const [rows]: any = await dbMy.execute('SELECT * FROM attachments WHERE id = ? AND article_id = ?', [attachmentId, articleId]);
+    if (!rows || rows.length === 0) {
+      res.status(404).json({ status: 'error', message: 'Attachment not found' });
+      return;
+    }
+    const att = rows[0];
 
-    const attachment = rows[0];
-    if (attachment.uploaded_by !== userId && !['admin', 'content_manager'].includes(req.user!.role || '')) {
-      return res.status(403).json({ status: 'error', message: 'Forbidden' });
+    // Permission: allow author or privileged roles
+    if (att.uploaded_by !== userId && !['admin', 'content_manager', 'editor'].includes(req.user!.role || '')) {
+      res.status(403).json({ status: 'error', message: 'Forbidden' });
+      return;
     }
 
-    const bucket = getStorageBucket();
-    const file = bucket.file(attachment.storage_path);
-
-    let meta: any = {};
+    const storagePath: string = att.storage_path || '';
+    // Assume storagePath is a GCS path relative to bucket (e.g., attachments/<articleId>/file.pdf)
     try {
-      const [fileMeta] = await file.getMetadata();
-      meta = fileMeta || {};
-    } catch (e) {
-      logger.warn('Unable to read storage metadata for file:', attachment.storage_path, e);
-    }
+      const bucketGCS = getStorageBucket();
+      // if stored with a 'gcs/' prefix previously, handle it
+      const gcsPath = storagePath.startsWith('gcs/') ? storagePath.slice(4) : storagePath;
 
-    const sizeBytes = meta.size ? parseInt(String(meta.size), 10) : null;
-    const mimeType = meta.contentType || attachment.mime_type || null;
-
-    let publicUrl: string | null = null;
-    if (makePublic) {
-      try {
-        const rawReadUrl = await getSignedUrl(attachment.storage_path, 'read', READ_SIGNED_URL_EXPIRES_MS);
-        publicUrl = normalizeSignedUrl(rawReadUrl);
-      } catch (e) {
-        logger.warn('Failed to create read signed url, attempting file.makePublic()', e);
-        try {
-          await file.makePublic();
-          const bucketName = (getStorageBucket() as any).name || process.env.FIREBASE_STORAGE_BUCKET;
-          publicUrl = `https://storage.googleapis.com/${bucketName}/${attachment.storage_path}`;
-        } catch (err) {
-          logger.warn('Failed to make file public', err);
-        }
+      // If the DB row already contains a public_url, redirect directly
+      if (att.public_url) {
+        res.redirect(att.public_url);
+        return;
       }
+
+      // Ask utils for a signed read URL
+      const rawReadUrl = await getSignedUrl(gcsPath, 'read', READ_SIGNED_URL_EXPIRES_MS);
+      const readUrl = normalizeSignedUrl(rawReadUrl);
+      if (readUrl) {
+        res.redirect(readUrl);
+        return;
+      }
+
+      // Fallback: try to make file public (best-effort)
+      try {
+        const file = bucketGCS.file(gcsPath);
+        await file.makePublic();
+        const bucketName = (bucketGCS as any).name || process.env.FIREBASE_STORAGE_BUCKET;
+        const publicUrl = `https://storage.googleapis.com/${bucketName}/${encodeURI(gcsPath)}`;
+        // Update DB public_url (best-effort)
+        try {
+          await dbMy.execute('UPDATE attachments SET public_url = ? WHERE id = ?', [publicUrl, attachmentId]);
+        } catch (e) {
+          logger.warn('Failed to update attachments.public_url after makePublic', e);
+        }
+        res.redirect(publicUrl);
+        return;
+      } catch (e) {
+        logger.warn('downloadAttachment: could not create signed URL and makePublic failed', e);
+        res.status(500).json({ status: 'error', message: 'Failed to provide file' });
+        return;
+      }
+    } catch (e: any) {
+      logger.error('downloadAttachment (GCS) error', e);
+      res.status(500).json({ status: 'error', message: 'Failed to provide attachment', error: e?.message });
+      return;
+    }
+  } catch (err: any) {
+    logger.error('downloadAttachment error', err);
+    if (!res.headersSent) res.status(500).json({ status: 'error', message: 'Failed to download attachment', error: err?.message });
+    return;
+  }
+};
+
+/**
+ * DELETE /api/author/articles/:articleId/attachments/:attachmentId
+ */
+export const deleteAttachment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!requireAuth(req, res)) return;
+    const dbMy: any = getDatabase();
+    const userId = req.user!.userId!;
+    const { articleId, attachmentId } = req.params;
+
+    const [rows]: any = await dbMy.execute('SELECT * FROM attachments WHERE id = ? AND article_id = ?', [attachmentId, articleId]);
+    if (!rows || rows.length === 0) {
+      res.status(404).json({ status: 'error', message: 'Attachment not found' });
+      return;
+    }
+    const att = rows[0];
+
+    // permission check
+    if (att.uploaded_by !== userId && req.user!.role !== 'admin') {
+      res.status(403).json({ status: 'error', message: 'Forbidden' });
+      return;
     }
 
-    await db.execute(
-      `UPDATE attachments SET public_url = ?, mime_type = ?, size_bytes = ?, uploaded_at = NOW() WHERE id = ?`,
-      [publicUrl, mimeType, sizeBytes, attachmentId]
-    );
+    const storagePath: string = att.storage_path || '';
+    try {
+      const bucketGCS = getStorageBucket();
+      const gcsPath = storagePath.startsWith('gcs/') ? storagePath.slice(4) : storagePath;
+      if (gcsPath) {
+        const file = bucketGCS.file(gcsPath);
+        await file.delete().catch(() => {
+          logger.warn(`Could not delete file from GCS: ${gcsPath} (may not exist)`);
+        });
+      }
+    } catch (e) {
+      logger.warn('deleteAttachment: failed to delete from GCS', e);
+    }
 
-    return res.status(200).json({ status: 'success', message: 'Attachment finalized', data: { attachmentId, publicUrl, mimeType, sizeBytes } });
+    // remove metadata row
+    await dbMy.execute('DELETE FROM attachments WHERE id = ?', [attachmentId]);
+
+    res.status(200).json({ status: 'success', message: 'Attachment deleted' });
+    return;
   } catch (err: any) {
-    logger.error('completeAttachmentUpload error:', err);
-    return res.status(500).json({ status: 'error', message: 'Failed to finalize attachment', error: err?.message });
+    logger.error('deleteAttachment error:', err);
+    if (!res.headersSent) res.status(500).json({ status: 'error', message: 'Failed to delete attachment', error: err?.message });
+    return;
   }
 };
 
 /**
  * GET /api/author/articles
  */
-export const listAuthorArticles = async (req: Request, res: Response): Promise<any> => {
+export const listAuthorArticles = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!requireAuth(req, res)) return;
     const db: any = getDatabase();
@@ -395,7 +534,8 @@ export const listAuthorArticles = async (req: Request, res: Response): Promise<a
       };
     });
 
-    return res.status(200).json({ status: 'success', message: 'Articles fetched successfully', data: { articles } });
+    res.status(200).json({ status: 'success', message: 'Articles fetched successfully', data: { articles } });
+    return;
   } catch (err: any) {
     logger.error('listAuthorArticles error:', err);
     // fallback: simpler pattern-match query
@@ -408,10 +548,12 @@ export const listAuthorArticles = async (req: Request, res: Response): Promise<a
         [pattern]
       );
       const articles = (rows || []).map((r: any) => ({ id: r.id, title: r.title, status: r.status, publishedAt: r.created_at, created_at: r.created_at, updated_at: r.updated_at }));
-      return res.status(200).json({ status: 'success', message: 'Articles fetched (fallback)', data: { articles } });
+      res.status(200).json({ status: 'success', message: 'Articles fetched (fallback)', data: { articles } });
+      return;
     } catch (fallbackErr: any) {
       logger.error('listAuthorArticles fallback failed:', fallbackErr);
-      return res.status(200).json({ status: 'success', message: 'No articles found', data: { articles: [] } });
+      res.status(200).json({ status: 'success', message: 'No articles found', data: { articles: [] } });
+      return;
     }
   }
 };
@@ -419,7 +561,7 @@ export const listAuthorArticles = async (req: Request, res: Response): Promise<a
 /**
  * GET /api/author/articles/:articleId
  */
-export const getArticleDetails = async (req: Request, res: Response): Promise<any> => {
+export const getArticleDetails = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!requireAuth(req, res)) return;
     const db: any = getDatabase();
@@ -427,29 +569,35 @@ export const getArticleDetails = async (req: Request, res: Response): Promise<an
     const { articleId } = req.params;
 
     const [rows]: any = await db.execute('SELECT * FROM content WHERE id = ?', [articleId]);
-    if (!rows || rows.length === 0) return res.status(404).json({ status: 'error', message: 'Article not found' });
+    if (!rows || rows.length === 0) {
+      res.status(404).json({ status: 'error', message: 'Article not found' });
+      return;
+    }
 
     const article = rows[0];
     const privileged = ['admin', 'content_manager', 'editor', 'reviewer'];
     if (article.author_id !== userId && !privileged.includes(req.user!.role || '')) {
-      return res.status(403).json({ status: 'error', message: 'Forbidden' });
+      res.status(403).json({ status: 'error', message: 'Forbidden' });
+      return;
     }
 
     const [attachments]: any = await db.execute('SELECT id, filename, public_url, storage_path, mime_type, size_bytes, uploaded_at FROM attachments WHERE article_id = ?', [articleId]);
     const [events]: any = await db.execute('SELECT id, actor_id, from_status, to_status, note, created_at FROM workflow_events WHERE article_id = ? ORDER BY created_at DESC', [articleId]);
     const [reviews]: any = await db.execute('SELECT id, reviewer_id, summary, details, decision, similarity_score, created_at FROM reviews WHERE article_id = ? ORDER BY created_at DESC', [articleId]);
 
-    return res.status(200).json({ status: 'success', message: 'Article details fetched', data: { article, attachments, workflow: events, reviews } });
+    res.status(200).json({ status: 'success', message: 'Article details fetched', data: { article, attachments, workflow: events, reviews } });
+    return;
   } catch (err: any) {
     logger.error('getArticleDetails error:', err);
-    return res.status(500).json({ status: 'error', message: 'Failed to fetch article details', error: err?.message });
+    res.status(500).json({ status: 'error', message: 'Failed to fetch article details', error: err?.message });
+    return;
   }
 };
 
 /**
  * PATCH /api/author/articles/:articleId/status
  */
-export const updateArticleStatus = async (req: Request, res: Response): Promise<any> => {
+export const updateArticleStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!requireAuth(req, res)) return;
     const db: any = getDatabase();
@@ -457,18 +605,30 @@ export const updateArticleStatus = async (req: Request, res: Response): Promise<
     const { articleId } = req.params;
     const { status, note = '' } = req.body;
 
-    if (!status) return res.status(400).json({ status: 'error', message: 'Status is required' });
+    if (!status) {
+      res.status(400).json({ status: 'error', message: 'Status is required' });
+      return;
+    }
 
     const [rows]: any = await db.execute('SELECT author_id, status FROM content WHERE id = ?', [articleId]);
-    if (!rows || rows.length === 0) return res.status(404).json({ status: 'error', message: 'Article not found' });
+    if (!rows || rows.length === 0) {
+      res.status(404).json({ status: 'error', message: 'Article not found' });
+      return;
+    }
 
     const article = rows[0];
 
     if (article.author_id === userId) {
-      if (!['submitted', 'draft'].includes(status)) return res.status(403).json({ status: 'error', message: 'Author cannot set this status' });
+      if (!['submitted', 'draft'].includes(status)) {
+        res.status(403).json({ status: 'error', message: 'Author cannot set this status' });
+        return;
+      }
     } else {
       const allowedRoles = ['admin', 'content_manager', 'editor', 'reviewer'];
-      if (!allowedRoles.includes(req.user!.role || '')) return res.status(403).json({ status: 'error', message: 'Forbidden' });
+      if (!allowedRoles.includes(req.user!.role || '')) {
+        res.status(403).json({ status: 'error', message: 'Forbidden' });
+        return;
+      }
     }
 
     await db.execute('UPDATE content SET status = ?, updated_at = NOW() WHERE id = ?', [status, articleId]);
@@ -481,17 +641,19 @@ export const updateArticleStatus = async (req: Request, res: Response): Promise<
     );
 
     logger.info(`Article ${articleId} status changed from ${article.status} to ${status} by ${userId}`);
-    return res.status(200).json({ status: 'success', message: 'Status updated', data: { id: articleId, status } });
+    res.status(200).json({ status: 'success', message: 'Status updated', data: { id: articleId, status } });
+    return;
   } catch (err: any) {
     logger.error('updateArticleStatus error:', err);
-    return res.status(500).json({ status: 'error', message: 'Failed to update status', error: err?.message });
+    res.status(500).json({ status: 'error', message: 'Failed to update status', error: err?.message });
+    return;
   }
 };
 
 /**
  * DELETE /api/author/articles/:articleId
  */
-export const deleteArticle = async (req: Request, res: Response): Promise<any> => {
+export const deleteArticle = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!requireAuth(req, res)) return;
     const db: any = getDatabase();
@@ -499,28 +661,37 @@ export const deleteArticle = async (req: Request, res: Response): Promise<any> =
     const { articleId } = req.params;
 
     const [rows]: any = await db.execute('SELECT author_id, status FROM content WHERE id = ?', [articleId]);
-    if (!rows || rows.length === 0) return res.status(404).json({ status: 'error', message: 'Article not found' });
+    if (!rows || rows.length === 0) {
+      res.status(404).json({ status: 'error', message: 'Article not found' });
+      return;
+    }
 
     const article = rows[0];
 
     if (article.author_id !== userId && req.user!.role !== 'admin') {
-      return res.status(403).json({ status: 'error', message: 'Forbidden' });
+      res.status(403).json({ status: 'error', message: 'Forbidden' });
+      return;
     }
 
     if (article.status !== 'draft' && req.user!.role !== 'admin') {
-      return res.status(400).json({ status: 'error', message: 'Only drafts can be deleted by the author' });
+      res.status(400).json({ status: 'error', message: 'Only drafts can be deleted by the author' });
+      return;
     }
 
     // Delete attachments from storage and DB
     const [attachments]: any = await db.execute('SELECT id, storage_path FROM attachments WHERE article_id = ?', [articleId]);
-    const bucket = admin.storage().bucket();
+    const bucketGCS = getStorageBucket();
 
     for (const att of attachments || []) {
       try {
-        const file = bucket.file(att.storage_path);
-        await file.delete().catch(() => {
-          logger.warn(`Could not delete file from storage: ${att.storage_path} (may not exist)`);
-        });
+        const storagePath = att.storage_path || '';
+        const gcsPath = storagePath.startsWith('gcs/') ? storagePath.slice(4) : storagePath;
+        if (gcsPath) {
+          const file = bucketGCS.file(gcsPath);
+          await file.delete().catch(() => {
+            logger.warn(`Could not delete file from storage: ${gcsPath} (may not exist)`);
+          });
+        }
       } catch (e) {
         logger.warn('Error deleting file from storage', e);
       }
@@ -532,9 +703,11 @@ export const deleteArticle = async (req: Request, res: Response): Promise<any> =
     await db.execute('DELETE FROM content WHERE id = ?', [articleId]);
 
     logger.info(`Article ${articleId} deleted by ${userId}`);
-    return res.status(200).json({ status: 'success', message: 'Article deleted' });
+    res.status(200).json({ status: 'success', message: 'Article deleted' });
+    return;
   } catch (err: any) {
     logger.error('deleteArticle error:', err);
-    return res.status(500).json({ status: 'error', message: 'Failed to delete article', error: err?.message });
+    res.status(500).json({ status: 'error', message: 'Failed to delete article', error: err?.message });
+    return;
   }
 };

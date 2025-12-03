@@ -265,109 +265,62 @@ export default function SubmitArticlePage() {
 
         const uploadResults: UploadResult[] = [];
 
-        // For each attachment -> request signed url -> PUT -> finalize
-        for (const file of attachments) {
-          setStatusMsg(`Requesting upload URL for ${file.name}...`);
+        // helper to upload a single file to the backend using multipart/form-data
+        const uploadFileToServer = async (file: File, articleId: string) => {
+          setStatusMsg(`Uploading ${file.name} to server...`);
 
-          // Request signed URL
-          const signedRes = await fetch(
-            `${API_BASE}/article/author/articles/${articleId}/attachments/signed-url`,
+          const form = new FormData();
+          form.append("file", file);
+
+          const res = await fetch(
+            `${API_BASE}/article/author/articles/${articleId}/attachments`,
             {
               method: "POST",
               headers: {
-                "Content-Type": "application/json",
                 Authorization: `Bearer ${getToken()}`,
+                // NOTE: do NOT set Content-Type; browser will set it (multipart boundary)
               },
-              body: JSON.stringify({
-                filename: file.name,
-                contentType: file.type || "application/octet-stream",
-              }),
+              body: form,
             }
           );
 
-          const signedBody = await (async () => {
-            try {
-              return await signedRes.json();
-            } catch {
-              return null;
-            }
-          })();
-
-          if (!signedRes.ok) {
-            throw new Error(
-              signedBody?.message || `Failed to get upload URL for ${file.name}`
-            );
+          let body: any = null;
+          try {
+            body = await res.json();
+          } catch {
+            // non-json or empty
           }
 
-          const uploadUrl = signedBody?.data?.uploadUrl || signedBody?.uploadUrl;
-          const attachmentId =
-            signedBody?.data?.attachmentId || signedBody?.attachmentId;
-
-          if (!uploadUrl || !attachmentId) {
-            throw new Error(
-              `Signed-url response missing uploadUrl or attachmentId for ${file.name}`
-            );
+          if (!res.ok) {
+            const msg = body?.message || `Upload failed for ${file.name} (status ${res.status})`;
+            throw new Error(msg);
           }
 
-          setStatusMsg(`Uploading ${file.name}...`);
+          // expected: { status: 'success', data: { attachmentId, filename, size, mime_type, ... } }
+          return body?.data || body;
+        };
 
-          // Upload directly to storage (PUT)
-          const putRes = await fetch(uploadUrl, {
-            method: "PUT",
-            headers: {
-              "Content-Type": file.type || "application/octet-stream",
-            },
-            body: file,
-          });
+        try {
+          for (const file of attachments) {
+            setStatusMsg(`Uploading ${file.name}...`);
 
-          // some storage providers return 200/201 - treat all non-2xx as failures
-          if (!putRes.ok && !(putRes.status >= 200 && putRes.status < 300)) {
-            throw new Error(`Upload failed for ${file.name} (status ${putRes.status})`);
+            const result = await uploadFileToServer(file, articleId);
+
+            uploadResults.push({
+              attachmentId: result?.attachmentId || result?._id || null,
+              publicUrl: result?.publicUrl ?? null,
+              sizeBytes: result?.size ?? result?.size_bytes ?? null,
+              mimeType: result?.mime_type ?? result?.mimeType ?? null,
+            });
+
+            setStatusMsg(`${file.name} uploaded`);
           }
 
-          setStatusMsg(`Finalizing ${file.name}...`);
-
-          // Finalize attachment
-          const completeRes = await fetch(
-            `${API_BASE}/article/author/articles/${articleId}/attachments/${attachmentId}/complete`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${getToken()}`,
-              },
-              body: JSON.stringify({ makePublic: true }),
-            }
-          );
-
-          const completeBody = await (async () => {
-            try {
-              return await completeRes.json();
-            } catch {
-              return null;
-            }
-          })();
-
-          if (!completeRes.ok) {
-            throw new Error(
-              completeBody?.message || `Failed to finalize attachment ${file.name}`
-            );
-          }
-
-          uploadResults.push({
-            attachmentId,
-            publicUrl: completeBody?.data?.publicUrl ?? null,
-            mimeType: completeBody?.data?.mimeType ?? null,
-            sizeBytes:
-              completeBody?.data?.sizeBytes !== undefined
-                ? completeBody.data.sizeBytes
-                : null,
-          });
-
-          setStatusMsg(`${file.name} uploaded`);
+          setStatusMsg("All attachments uploaded — article submitted!");
+        } catch (err: any) {
+          // stop on first file error and surface to user
+          throw new Error(err?.message || "Attachment upload failed");
         }
-
-        setStatusMsg("All attachments uploaded — article submitted!");
       } else {
         setStatusMsg("Article submitted without attachments!");
       }
