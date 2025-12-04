@@ -5,21 +5,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import AuthorSection from "@/components/home/AuthorSection";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import { motion } from "framer-motion";
-import { Card, CardContent } from "@/components/ui/card";  // ✅ CARD IMPORT FIXED
-
-interface FeaturedArticle {
-  id: number;
-  title: string;
-  author: string;
-  category: string;
-  excerpt: string;
-  image: string;
-  date: string;
-}
+import { Card, CardContent } from "@/components/ui/card";
 
 interface AdvertisementPlan {
   id: string;
@@ -29,41 +19,15 @@ interface AdvertisementPlan {
   perks: string[];
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const PAYU_PAYMENT_URL =
+  process.env.NEXT_PUBLIC_PAYU_MODE === 'production'
+    ? 'https://secure.payu.in/_payment'
+    : 'https://test.payu.in/_payment';
+
 export default function HomePage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-
-  const featuredArticles: FeaturedArticle[] = [
-    {
-      id: 1,
-      title: "The Future of Web Design",
-      author: "Sarah Chen",
-      category: "Design",
-      excerpt:
-        "Exploring emerging trends in web design and how they shape the digital landscape.",
-      image: "/images/article1.jpg",
-      date: "Mar 15, 2024",
-    },
-    {
-      id: 2,
-      title: "Building Scalable Applications",
-      author: "James Wilson",
-      category: "Technology",
-      excerpt: "Best practices for designing systems that grow with your needs.",
-      image: "/images/article2.jpg",
-      date: "Mar 12, 2024",
-    },
-    {
-      id: 3,
-      title: "Creative Direction in 2024",
-      author: "Emma Rodriguez",
-      category: "Creative",
-      excerpt:
-        "How modern brands are redefining creativity and visual storytelling.",
-      image: "/images/article3.jpg",
-      date: "Mar 10, 2024",
-    },
-  ];
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
   const adPlans: AdvertisementPlan[] = [
     {
@@ -101,215 +65,272 @@ export default function HomePage() {
     }
   ];
 
+  // Modal state to collect contact info if user not logged in or missing email
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [contactPlan, setContactPlan] = useState<AdvertisementPlan | null>(null);
+  const [contactData, setContactData] = useState({ name: '', email: '', phone: '9999999999' });
+
+  // Helper to get stored user (if you already save a user object in localStorage)
+  function getStoredUser() {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  function openContactModalForPlan(plan: AdvertisementPlan) {
+    setContactPlan(plan);
+    setShowContactModal(true);
+  }
+
+  function closeContactModal() {
+    setShowContactModal(false);
+    setContactPlan(null);
+    setContactData({ name: '', email: '', phone: '9999999999' });
+  }
+
+  function handleContactChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const { name, value } = e.target;
+    setContactData(prev => ({ ...prev, [name]: value }));
+  }
+
+  // MAIN: improved handleEnquire that uses stored user or opens inline modal to collect details
+  async function handleEnquire(plan: AdvertisementPlan) {
+    // guard SSR
+    if (typeof window === 'undefined') {
+      toast.error('Payment cannot be initiated from the server');
+      return;
+    }
+
+    // read local user (if any)
+    const user = getStoredUser();
+
+    // If we don't have an email or name, open modal to collect contact details
+    const hasEmail = !!(user?.email);
+    if (!hasEmail) {
+      // open modal to collect name/email/phone for this plan
+      openContactModalForPlan(plan);
+      toast('Please enter contact details to proceed.', { icon: 'ℹ️' });
+      return;
+    }
+
+    // build payload using stored user
+    const userId = user?.id || 'guest';
+    const payload = {
+      planId: plan.id,
+      amount: plan.price,
+      userId,
+      userEmail: user.email || '',
+      userPhone: user.phone || user.mobile || ''
+    };
+
+    await createOrderAndRedirect(payload, plan.id);
+  }
+
+  // Called either by the modal (guest contact info) or directly from handleEnquire
+  async function createOrderAndRedirect(payload: {
+    planId: string;
+    amount: number;
+    userId: string;
+    userEmail: string;
+    userPhone?: string;
+    firstName?: string;
+  }, planIdForLoading?: string) {
+    setLoadingPlan(planIdForLoading || payload.planId);
+    toast.loading('Initiating payment...', { id: 'pay' });
+
+    try {
+      const res = await fetch(`${API_BASE}/api/subscription/payu/create-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...payload,
+          firstName: payload.firstName || ''
+        })
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data || data.status !== 'success') {
+        const msg = data?.message || `Failed to create payment order (status ${res?.status})`;
+        throw new Error(msg);
+      }
+
+      const params = data.data || {};
+
+      // parse hash safely (backend sends JSON-stringified object { v1, v2 })
+      let payuHash = '';
+      if (params.hash) {
+        try {
+          const parsed = typeof params.hash === 'string' ? JSON.parse(params.hash) : params.hash;
+          payuHash = parsed.v1 || parsed.v2 || '';
+        } catch {
+          payuHash = typeof params.hash === 'string' ? params.hash : '';
+        }
+      }
+
+      // build form and submit to PayU
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = PAYU_PAYMENT_URL;
+
+      const fields: Record<string, string> = {
+        key: params.key || '',
+        txnid: params.txnid || '',
+        amount: (params.amount || '').toString(),
+        productinfo: params.productinfo || 'Advertisement Plan',
+        firstname: params.firstname || '',
+        email: params.email || payload.userEmail || '',
+        phone: params.phone || payload.userPhone || '',
+        surl: params.surl || `${window.location.origin}/payment/success`,
+        furl: params.furl || `${window.location.origin}/payment/failure`,
+        hash: payuHash || '',
+        service_provider: params.service_provider || 'payu_paisa',
+        udf1: params.udf1 || '',
+        udf2: params.udf2 || '',
+        udf3: params.udf3 || '',
+        udf4: params.udf4 || '',
+        udf5: params.udf5 || ''
+      };
+
+      Object.entries(fields).forEach(([k, v]) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = k;
+        input.value = v ?? '';
+        form.appendChild(input);
+      });
+
+      document.body.appendChild(form);
+      toast.success('Redirecting to payment gateway...', { id: 'pay' });
+      form.submit();
+    } catch (err: any) {
+      console.error('Payment init error', err);
+      toast.error(err?.message || 'Payment initialization failed', { id: 'pay' });
+    } finally {
+      setLoadingPlan(null);
+    }
+  }
+
+  // Called when user fills modal and hits "Proceed to Pay"
+  async function handleModalProceed() {
+    if (!contactPlan) return;
+    if (!contactData.name || !contactData.email) {
+      toast.error('Please enter name and email');
+      return;
+    }
+
+    // Use 'guest' user id when not logged in
+    const stored = getStoredUser();
+    const userId = stored?.id || 'guest';
+
+    const payload = {
+      planId: contactPlan.id,
+      amount: contactPlan.price,
+      userId,
+      userEmail: contactData.email,
+      userPhone: contactData.phone,
+      firstName: contactData.name
+    };
+
+    // Optionally save guest contact locally for session convenience
+    try {
+      localStorage.setItem('guest_contact', JSON.stringify({ name: contactData.name, email: contactData.email, phone: contactData.phone }));
+    } catch {}
+
+    closeContactModal();
+    await createOrderAndRedirect(payload, contactPlan.id);
+  }
+
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 overflow-y-auto">
-      
-      {/* HERO */}
       <HeroCarousel />
 
-      {/* FEATURED ISSUES (unchanged) */}
-      <div className="mx-auto px-4 sm:px-6 lg:px-8 py-20 bg-gray-50 dark:bg-slate-800">
-        <div className="mb-12 text-center">
-          <h4 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-4">
-            Featured Issues
-          </h4>
-          <p className="text-slate-600 dark:text-slate-300 text-lg">
-            Explore our latest and most popular magazine issues
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {featuredArticles.map((article) => (
-            <Link key={article.id} href={`/issues/${article.id}`}>
-              <article className="rounded-xl overflow-hidden hover:shadow-lg dark:hover:shadow-indigo-900/20 transition-shadow duration-300 flex flex-col h-full bg-slate-50 dark:bg-slate-800 cursor-pointer">
-                <Image
-                  src={article.image}
-                  width={600}
-                  height={400}
-                  alt={article.title}
-                  className="w-full h-48 object-cover"
-                />
-
-                <div className="p-6 flex flex-col flex-grow">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/40 px-3 py-1 rounded-full">
-                      {article.category}
-                    </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      {article.date}
-                    </span>
-                  </div>
-
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                    {article.title}
-                  </h3>
-
-                  <p className="text-slate-600 dark:text-slate-300 text-sm mb-4 flex-grow">
-                    {article.excerpt}
-                  </p>
-
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                    By {article.author}
-                  </p>
-                </div>
-              </article>
-            </Link>
-          ))}
-        </div>
-
-        <div className="mt-12 text-center">
-          <Link href="/issues">
-            <Button size="lg" className="bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-800 text-white font-semibold px-8">
-              View All Issues
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      {/* ✅ NEW: EDITOR’S DESK */}
-      <section className="py-16 px-4 bg-white dark:bg-slate-900">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold mb-6 text-center text-slate-900 dark:text-white">
-            Editor’s Desk
-          </h2>
-          <Card className="p-6 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700 rounded-2xl shadow-md">
-            <CardContent>
-              <p className="text-lg leading-relaxed text-center text-slate-700 dark:text-slate-300">
-                Every issue is curated with a commitment to storytelling excellence, authenticity, and creative boldness. Our editorial lens amplifies voices that matter, blending insight, culture, and craft.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-
-      {/* ✅ NEW: EDITORIAL MEMBERS */}
-      <section className="py-16 px-4 bg-gray-50 dark:bg-slate-800">
-        <div className="max-w-6xl mx-auto text-center mb-12">
-          <h2 className="text-3xl font-bold mb-4 text-slate-900 dark:text-white">
-            Editorial Members
-          </h2>
-          <p className="text-slate-600 dark:text-slate-300 text-lg">
-            The minds refining every narrative
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl mx-auto">
-          {[
-            { name: "Aditi Banerjee", role: "Chief Editor", img: "/images/editorA.jpg" },
-            { name: "Rohan Verma", role: "Senior Copy Lead", img: "/images/editorB.jpg" },
-            { name: "Mei Takahashi", role: "Creative Review Director", img: "/images/editorC.jpg" },
-            { name: "Ibrahim Al-Farsi", role: "Editorial Advisor", img: "/images/editorD.jpg" },
-          ].map((member, i) => (
-            <motion.div key={i} whileHover={{ scale: 1.03 }}>
-              <Card className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-md hover:shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col items-center text-center">
-                <div className="w-24 h-24 relative mb-4 rounded-full overflow-hidden border border-indigo-300 dark:border-indigo-600">
-                  <Image src={member.img} alt={member.name} fill className="object-cover"/>
-                </div>
-                <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
-                  {member.name}
-                </h3>
-                <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300 mt-1">
-                  {member.role}
-                </p>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      {/* ✅ NEW: ADVERTISEMENT PLANS */}
+      {/* ADVERTISEMENT PLANS */}
       <section className="py-16 px-4 bg-white dark:bg-slate-900">
         <div className="max-w-6xl mx-auto text-center mb-12">
-          <h2 className="text-3xl font-bold mb-4 text-slate-900 dark:text-white">
-            Advertisement Plans
-          </h2>
-          <p className="text-slate-600 dark:text-slate-400 text-lg">
-            Reach the audience shaping culture
-          </p>
+          <h2 className="text-3xl font-bold mb-4 text-slate-900 dark:text-white">Advertisement Plans</h2>
+          <p className="text-slate-600 dark:text-slate-400 text-lg">Reach the audience shaping culture</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto px-4">
           {adPlans.map((ad) => (
             <Card key={ad.id} className="bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl shadow-lg p-8 flex flex-col border hover:border-indigo-500 transition-all duration-300">
               <h3 className="text-2xl font-bold mb-2">{ad.name}</h3>
               <p className="text-xl font-semibold mb-4">₹{ad.price.toLocaleString()}</p>
               <p className="text-slate-600 dark:text-slate-400 mb-6">{ad.description}</p>
               <ul className="space-y-2 flex-grow text-slate-700 dark:text-slate-300 mb-6">
-                {ad.perks.map((perk, idx) => (
-                  <li key={idx}>✓ {perk}</li>
-                ))}
+                {ad.perks.map((perk, idx) => <li key={idx}>✓ {perk}</li>)}
               </ul>
-              <Button className="mt-6 bg-indigo-600 hover:bg-indigo-700 text-white">
-                Enquire Now
-              </Button>
+              <div className="flex gap-3">
+                <Button
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white"
+                  onClick={() => handleEnquire(ad)}
+                  disabled={loadingPlan !== null}
+                >
+                  {loadingPlan === ad.id ? 'Processing...' : 'Enquire Now'}
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/subscribe/${ad.id}`)}
+                >
+                  View Details
+                </Button>
+              </div>
             </Card>
           ))}
         </div>
       </section>
 
-      {/* ✅ NEW: PARTNERS / COLLABORATORS */}
-      <section className="py-16 px-4 bg-gray-100 dark:bg-slate-900">
-        <div className="max-w-6xl mx-auto text-center mb-10">
-          <h2 className="text-3xl font-bold mb-4 text-slate-900 dark:text-white">
-            Partners & Collaborators
-          </h2>
-
-          <p className="text-lg text-slate-600 dark:text-slate-400">
-            The organizations amplifying our reach and vision
-          </p>
-        </div>
-
-        <div className="flex justify-center flex-wrap gap-16 max-w-5xl mx-auto opacity-85 hover:opacity-100 transition-all">
-          {[
-            "/images/collab1.svg",
-            "/images/collab2.svg",
-            "/images/collab3.svg",
-            "/images/collab4.svg",
-          ].map((logo, i) => (
-            <div key={i} className="w-40 h-14 relative grayscale hover:grayscale-0 transition-all">
-              <Image src={logo} alt="Collaborator logo" fill className="object-contain"/>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* AUTHORS SECTION still works unchanged */}
       <AuthorSection />
 
-      {/* CTA still works unchanged */}
+      {/* CTA */}
       <section className="bg-indigo-600 text-white py-20 mt-20">
         <div className="max-w-5xl mx-auto px-4 text-center">
-
           <h2 className="text-4xl font-bold mb-4">Ready to Start Reading?</h2>
-          <p className="text-lg opacity-90 mb-8">
-            Join thousands of readers and get access to premium content today
-          </p>
-
+          <p className="text-lg opacity-90 mb-8">Join thousands of readers and get access to premium content today</p>
           <div className="flex justify-center gap-6">
-
-            <Button 
-              className="bg-white text-indigo-600 hover:bg-slate-100"
-              onClick={() => router.push('/signup')}
-            >
-              Get Started for Free
-            </Button>
-
-            <Button 
-              className="bg-white text-indigo-600 hover:bg-slate-100"
-              onClick={() => router.push('/issues')}
-            >
-              Browse Issues
-            </Button>
-
+            <Button className="bg-white text-indigo-600 hover:bg-slate-100" onClick={() => router.push('/signup')}>Get Started for Free</Button>
+            <Button className="bg-white text-indigo-600 hover:bg-slate-100" onClick={() => router.push('/issues')}>Browse Issues</Button>
           </div>
-
-          <div className="mt-8 text-sm opacity-80">
-            <p>No credit card required for free plan • Cancel anytime • No hidden fees</p>
-          </div>
-
+          <div className="mt-8 text-sm opacity-80"><p>No credit card required for free plan • Cancel anytime • No hidden fees</p></div>
         </div>
       </section>
 
+      {/* CONTACT MODAL (inline) */}
+      {showContactModal && contactPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-xl p-6 shadow-lg">
+            <h3 className="text-xl font-bold mb-2">Provide Contact Details</h3>
+            <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">We need your name & email to create the payment order for the <strong>{contactPlan.name}</strong> plan.</p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm mb-1">Full name</label>
+                <input name="name" value={contactData.name} onChange={handleContactChange} className="w-full px-3 py-2 rounded border" />
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Email</label>
+                <input name="email" value={contactData.email} onChange={handleContactChange} className="w-full px-3 py-2 rounded border" />
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Phone</label>
+                <input name="phone" value={contactData.phone} onChange={handleContactChange} className="w-full px-3 py-2 rounded border" />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <Button variant="ghost" onClick={closeContactModal}>Cancel</Button>
+              <Button className="bg-indigo-600 text-white" onClick={handleModalProceed}>Proceed to Pay</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

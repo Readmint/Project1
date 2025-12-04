@@ -16,9 +16,10 @@ interface SubscriptionPlan {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const PAYU_BASE = process.env.NEXT_PUBLIC_PAYU_MODE === 'production' ? 'https://secure.payu.in' : 'https://test.payu.in';
 
 export default function SubscribePage() {
-  const params = useParams();
+  const params: any = useParams();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState<SubscriptionPlan | null>(null);
@@ -32,9 +33,8 @@ export default function SubscribePage() {
   useEffect(() => {
     const fetchPlans = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/subscriptions/plans`);
-        if (!response.ok) throw new Error(`HTTP error`);
-
+        const response = await fetch(`${API_BASE_URL}/api/subscription/plans`);
+        if (!response.ok) throw new Error('HTTP error');
         const data = await response.json();
         if (data.status === 'success') {
           const fetchedPlans = data.data.plans.map((p: any) => ({
@@ -42,28 +42,23 @@ export default function SubscribePage() {
             price_monthly: Number(p.price_monthly) || 0,
             price_yearly: Number(p.price_yearly) || 0
           }));
-
           setPlans(fetchedPlans);
-
           const selected =
             fetchedPlans.find((p: SubscriptionPlan) => p.id === params.planId) ||
-            fetchedPlans.find((p: SubscriptionPlan) =>
-              p.name.toLowerCase().includes((params.planId as string)?.toLowerCase())
-            );
-
+            fetchedPlans.find((p: SubscriptionPlan) => p.name.toLowerCase().includes((params.planId as string)?.toLowerCase()));
           if (!selected) {
             toast.error('Plan not found');
             router.push('/');
             return;
           }
           setPlan(selected);
+        } else {
+          throw new Error('Bad response from plans API');
         }
       } catch (e) {
-        toast.error('Failed to load plans. Using backup plans.');
-
+        toast.error('Failed to load plans. Using fallback plans.');
         const fallback = getFallbackPlans();
         setPlans(fallback);
-
         const selected = fallback.find(p => p.id === params.planId) || fallback[0];
         setPlan(selected);
       }
@@ -122,6 +117,17 @@ export default function SubscribePage() {
     setFormData((p) => ({ ...p, [name]: value }));
   };
 
+  // read user from localStorage if available
+  function getCurrentUser() {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
   const handlePayment = async () => {
     if (!plan) return;
     if (!formData.name || !formData.email) {
@@ -130,65 +136,85 @@ export default function SubscribePage() {
     }
 
     setLoading(true);
-
     try {
+      const currentUser = getCurrentUser();
+      const userId = currentUser?.id || 'guest';
+
       const requestData = {
         planId: plan.id,
         amount: plan.price_monthly,
-        userId: 'guest',
+        userId,
         userEmail: formData.email,
         userPhone: formData.phone,
         firstName: formData.name,
         lastName: ''
       };
 
-      const response = await fetch(`${API_BASE_URL}/api/subscriptions/payu/create-order`, {
+      const response = await fetch(`${API_BASE_URL}/api/subscription/payu/create-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData)
       });
 
-      if (!response.ok) throw new Error();
-
-      const data = await response.json();
-
-      if (data.status === 'success') {
-        const paymentData = data.data;
-
-        let hashValue = paymentData.hash;
-        try {
-          const parsed = JSON.parse(paymentData.hash);
-          hashValue = parsed.v1;
-        } catch {}
-
-        const payuBase = process.env.NEXT_PUBLIC_PAYU_MODE === 'production'
-          ? 'https://secure.payu.in'
-          : 'https://test.payu.in';
-
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = `${payuBase}/_payment`;
-
-        Object.keys(paymentData).forEach((key) => {
-          const input = document.createElement('input');
-          input.type = 'hidden';
-          input.name = key;
-          input.value = key === 'hash' ? hashValue : paymentData[key];
-          form.appendChild(input);
-        });
-
-        document.body.appendChild(form);
-        form.submit();
-
-        setTimeout(() => form.remove(), 1000);
-      } else {
-        toast.error(data.message || 'Error creating payment');
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data || data.status !== 'success') {
+        throw new Error(data?.message || 'Error creating payment');
       }
-    } catch (error) {
-      toast.error('Payment failed');
-    }
 
-    setLoading(false);
+      const paymentData = data.data;
+
+      // parse hash (backend returns JSON stringified object)
+      let hashValue = '';
+      if (paymentData.hash) {
+        try {
+          const parsed = typeof paymentData.hash === 'string' ? JSON.parse(paymentData.hash) : paymentData.hash;
+          hashValue = parsed.v1 || parsed.v2 || '';
+        } catch {
+          if (typeof paymentData.hash === 'string') hashValue = paymentData.hash;
+        }
+      }
+
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = `${PAYU_BASE}/_payment`;
+
+      // append fields
+      const fields: Record<string, any> = {
+        key: paymentData.key || '',
+        txnid: paymentData.txnid || '',
+        amount: paymentData.amount || '',
+        productinfo: paymentData.productinfo || 'Subscription',
+        firstname: paymentData.firstname || formData.name,
+        email: paymentData.email || formData.email,
+        phone: paymentData.phone || formData.phone,
+        surl: paymentData.surl || `${window.location.origin}/payment/success`,
+        furl: paymentData.furl || `${window.location.origin}/payment/failure`,
+        hash: hashValue,
+        service_provider: paymentData.service_provider || 'payu_paisa',
+        udf1: paymentData.udf1 || '',
+        udf2: paymentData.udf2 || '',
+        udf3: paymentData.udf3 || '',
+        udf4: paymentData.udf4 || '',
+        udf5: paymentData.udf5 || ''
+      };
+
+      Object.keys(fields).forEach((key) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = fields[key] ?? '';
+        form.appendChild(input);
+      });
+
+      document.body.appendChild(form);
+      form.submit();
+
+    } catch (error: any) {
+      console.error('Payment failed', error);
+      toast.error(error?.message || 'Payment failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderFeatures = (features: string[]) =>
@@ -282,19 +308,12 @@ export default function SubscribePage() {
               {plans
                 .filter((p) => p.id !== plan.id)
                 .map((other) => (
-                  <div
-                    key={other.id}
-                    className="bg-white dark:bg-slate-800 rounded-lg shadow border border-slate-200 dark:border-slate-700 p-6"
-                  >
+                  <div key={other.id} className="bg-white dark:bg-slate-800 rounded-lg shadow border border-slate-200 dark:border-slate-700 p-6">
                     <h3 className="font-bold text-lg mb-2">{other.name}</h3>
                     <p className="text-slate-600 dark:text-slate-400 text-sm mb-3">{other.description}</p>
                     <p className="text-xl font-bold text-indigo-600">₹{formatPrice(other.price_monthly)}/month</p>
 
-                    <Button
-                      onClick={() => router.push(`/subscribe/${other.id}`)}
-                      variant="outline"
-                      className="w-full mt-4 border-slate-300 dark:border-slate-600"
-                    >
+                    <Button onClick={() => router.push(`/subscribe/${other.id}`)} variant="outline" className="w-full mt-4 border-slate-300 dark:border-slate-600">
                       View Details
                     </Button>
                   </div>

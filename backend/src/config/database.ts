@@ -1,3 +1,4 @@
+// database.ts
 import admin from 'firebase-admin';
 import mysql from 'mysql2/promise';
 import { logger } from '../utils/logger';
@@ -303,6 +304,86 @@ const createAuthorStatsTable = `
     )
   `;
 
+  // -------------------------
+  // NEW: Reader-related tables
+  // -------------------------
+  const createReadersTable = `
+    CREATE TABLE IF NOT EXISTS readers (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      user_id VARCHAR(36) NOT NULL UNIQUE,
+      subscription_status ENUM('free','active','expired','cancelled') DEFAULT 'free',
+      preferences JSON,
+      saved_items_count INT DEFAULT 0,
+      likes_count INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_user_id_reader (user_id),
+      INDEX idx_subscription_status (subscription_status)
+    )
+  `;
+
+  const createReadingProgressTable = `
+    CREATE TABLE IF NOT EXISTS reading_progress (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      user_id VARCHAR(36) NOT NULL,
+      content_id VARCHAR(36) NOT NULL,
+      last_read_position VARCHAR(255),
+      percent_read INT DEFAULT 0,
+      last_opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
+      UNIQUE KEY uniq_user_content (user_id, content_id),
+      INDEX idx_user_progress (user_id),
+      INDEX idx_content_progress (content_id),
+      INDEX idx_last_opened_at (last_opened_at)
+    )
+  `;
+
+  const createBookmarksTable = `
+    CREATE TABLE IF NOT EXISTS user_bookmarks (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      user_id VARCHAR(36) NOT NULL,
+      content_id VARCHAR(36) NOT NULL,
+      saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      note TEXT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
+      UNIQUE KEY uniq_user_content_bookmark (user_id, content_id),
+      INDEX idx_user_bookmarks (user_id),
+      INDEX idx_content_bookmarks (content_id)
+    )
+  `;
+
+  const createLikesTable = `
+    CREATE TABLE IF NOT EXISTS user_likes (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      user_id VARCHAR(36) NOT NULL,
+      content_id VARCHAR(36) NOT NULL,
+      liked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
+      UNIQUE KEY uniq_user_content_like (user_id, content_id),
+      INDEX idx_user_likes (user_id),
+      INDEX idx_content_likes (content_id)
+    )
+  `;
+
+  const createRecommendationsTable = `
+    CREATE TABLE IF NOT EXISTS recommendations (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      user_id VARCHAR(36) NOT NULL,
+      algorithm_version VARCHAR(50),
+      items JSON,
+      generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_user_recommendations (user_id),
+      INDEX idx_generated_at (generated_at)
+    )
+  `;
+
   try {
     console.log('🔄 Creating users table...');
     await mysqlDb.execute(createUsersTable);
@@ -351,6 +432,27 @@ const createAuthorStatsTable = `
     console.log('🔄 Creating payment_transactions table...');
     await mysqlDb.execute(createPaymentTransactionsTable);
     console.log('✅ Payment transactions table created');
+
+    // Reader-related creations
+    console.log('🔄 Creating readers table...');
+    await mysqlDb.execute(createReadersTable);
+    console.log('✅ Readers table created');
+
+    console.log('🔄 Creating reading_progress table...');
+    await mysqlDb.execute(createReadingProgressTable);
+    console.log('✅ Reading progress table created');
+
+    console.log('🔄 Creating user_bookmarks table...');
+    await mysqlDb.execute(createBookmarksTable);
+    console.log('✅ User bookmarks table created');
+
+    console.log('🔄 Creating user_likes table...');
+    await mysqlDb.execute(createLikesTable);
+    console.log('✅ User likes table created');
+
+    console.log('🔄 Creating recommendations table...');
+    await mysqlDb.execute(createRecommendationsTable);
+    console.log('✅ Recommendations table created');
 
     // Insert default subscription plans if table is empty
     await seedDefaultPlans();
@@ -471,7 +573,13 @@ const verifyTableCreation = async (): Promise<void> => {
       'subscription_plans',
       'payment_orders',
       'user_subscriptions',
-      'payment_transactions'
+      'payment_transactions',
+      // Reader related
+      'readers',
+      'reading_progress',
+      'user_bookmarks',
+      'user_likes',
+      'recommendations'
     ];
     
     const createdTables = expectedTables.filter(table => tableNames.includes(table));

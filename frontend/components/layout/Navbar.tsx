@@ -265,12 +265,13 @@ export default function Navbar() {
                     </div>
                     <div className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300">
                       {user.photoURL ? (
-                        <Image 
-                          src={user.photoURL} 
-                          alt={getUserDisplayName()} 
-                          width={32} 
-                          height={32} 
-                          className="rounded-full"
+                        // Use a plain <img> for external user.photoURL to avoid next/image host validation
+                        <img
+                          src={user.photoURL}
+                          alt={getUserDisplayName()}
+                          width={32}
+                          height={32}
+                          className="rounded-full object-cover"
                         />
                       ) : (
                         <User size={16} />
@@ -349,12 +350,13 @@ export default function Navbar() {
                     <div className="flex items-center gap-3">
                       <div className="flex items-center justify-center w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300">
                         {user.photoURL ? (
-                          <Image 
-                            src={user.photoURL} 
-                            alt={getUserDisplayName()} 
-                            width={40} 
-                            height={40} 
-                            className="rounded-full"
+                          // Use a plain <img> for external user.photoURL to avoid next/image host validation
+                          <img
+                            src={user.photoURL}
+                            alt={getUserDisplayName()}
+                            width={40}
+                            height={40}
+                            className="rounded-full object-cover"
                           />
                         ) : (
                           <User size={20} />

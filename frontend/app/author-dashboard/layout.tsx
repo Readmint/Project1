@@ -4,6 +4,9 @@ import Sidebar from "@/components/author-dashboard/Sidebar";
 import TopNavbar from "@/components/author-dashboard/TopNavbar";
 import { useState } from "react";
 
+// Import the chatbot component
+import ChatbotAuthor from "@/components/author-dashboard/chatbotAuthor"; // Fixed path
+
 export default function AuthorDashboardLayout({ children }: { children: React.ReactNode }) {
   const sidebarWidth = 256; // w-64 = 256px
   const [search, setSearch] = useState("");
@@ -45,6 +48,11 @@ export default function AuthorDashboardLayout({ children }: { children: React.Re
       {/* ✅ ensures nothing visually hits footer too early */}
       <div className="h-2"></div>
 
+      {/* ✅ Global Chatbot: visible on all author pages */}
+      <ChatbotAuthor 
+        // No config prop needed - the component handles everything internally
+        className="z-50"
+      />
     </div>
   );
 }

@@ -47,7 +47,7 @@ setupSwagger(app);
 app.use('/api/auth', authRoutes);
 app.use('/api/featured', featuredRoutes);
 app.use('/api/content', contentRoutes);
-app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/author', authorRoutes);
 app.use('/api/article', articleRoutes);
 

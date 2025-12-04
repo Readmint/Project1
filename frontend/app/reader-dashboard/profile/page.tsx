@@ -53,6 +53,8 @@ export default function ReaderProfilePage() {
     setProfile(form);
     setEditMode(false);
     localStorage.setItem("reader_profile", JSON.stringify(form));
+    // Optional: call backend endpoint to persist profile when available.
+    // fetch(`/api/user/${userId}/profile`, {...})
   };
 
   /* Handle image upload */
@@ -167,9 +169,7 @@ export default function ReaderProfilePage() {
 
               {/* Bio */}
               <div className="border-t border-slate-200 dark:border-slate-700 pt-5 text-center">
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
-                  About You
-                </h3>
+                <h3 className="Text-lg font-semibold text-slate-900 dark:text-white mb-2">About You</h3>
                 {!editMode ? (
                   <p className="text-xs leading-relaxed text-slate-700 dark:text-slate-300">
                     {profile.bio}

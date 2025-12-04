@@ -43,6 +43,19 @@ export default function Login() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const redirectByRole = (user: any) => {
+    // Normalize role check and redirect accordingly
+    const role = user?.role || user?.roles || user?.roleName;
+    if (role === "author") {
+      router.push("/author-dashboard");
+    } else if (role === "reader") {
+      router.push("/reader-dashboard");
+    } else {
+      // fallback for other roles (reviewer, editor, content_manager, admin, etc.)
+      router.push("/");
+    }
+  };
+
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     if (!validateForm()) return;
@@ -52,19 +65,14 @@ export default function Login() {
       const res = await postJSON("/auth/login", { email, password });
       const token = res.data.token;
       const user = res.data.user;
-      
+
       // store app JWT
-      localStorage.setItem("token", token);
+      if (token) localStorage.setItem("token", token);
       // store user data
-      localStorage.setItem("user", JSON.stringify(user));
-      
-      // Redirect based on user role
-      if (user.role === 'author') {
-        router.push("/author-dashboard");
-      } else {
-        // For other roles (reader, reviewer, editor, content_manager, admin)
-        router.push("/");
-      }
+      if (user) localStorage.setItem("user", JSON.stringify(user));
+
+      // Redirect based on user role (author / reader / others)
+      redirectByRole(user);
     } catch (err: any) {
       const message = err?.data?.message || "Login failed";
       setErrors((prev) => ({ ...prev, password: message }));
@@ -75,56 +83,76 @@ export default function Login() {
 
   // Simple Firebase OAuth - No backend endpoint needed
   const handleGoogle = async () => {
-    setOauthLoading('google');
+    setOauthLoading("google");
     try {
       // Firebase handles everything on frontend
       const result = await signInWithGoogle();
       const user = result.user;
-      
-      console.log('Google sign-in successful:', user.email);
-      
+
+      console.log("Google sign-in successful:", user.email);
+
       // Get user data from Firebase
       const userData = {
         uid: user.uid,
         email: user.email,
         name: user.displayName,
         photoURL: user.photoURL,
-        emailVerified: user.emailVerified
+        emailVerified: user.emailVerified,
       };
-      
-      // Store user data in localStorage
+
+      // Store Firebase-only user data in localStorage (temporary)
       localStorage.setItem("user", JSON.stringify(userData));
-      
+
+      // Try to read role from Firebase ID token claims (custom claims)
+      try {
+        const idTokenResult: any = await user.getIdTokenResult();
+        const claims = idTokenResult?.claims || {};
+        const claimRole = claims.role || claims.roles || claims.roleName;
+
+        if (claimRole) {
+          // If role available in claims, create a richer user object and redirect
+          const finalUser = { ...userData, role: claimRole };
+          localStorage.setItem("user", JSON.stringify(finalUser));
+
+          // Optionally store idToken as app token (if you want)
+          const idToken = idTokenResult?.token;
+          if (idToken) localStorage.setItem("token", idToken);
+
+          // Redirect by role (author/reader/others)
+          redirectByRole(finalUser);
+          return;
+        }
+      } catch (claimErr) {
+        console.log("Could not read ID token claims:", claimErr);
+        // Continue; we'll try backend sync next
+      }
+
       // Optional: Sync with backend to get app token and role
       try {
         const idToken = await user.getIdToken();
-        const res = await postJSON("/auth/sync-user", { 
+        const res = await postJSON("/auth/sync-user", {
           idToken,
           email: user.email,
           name: user.displayName,
-          photoURL: user.photoURL
+          photoURL: user.photoURL,
         });
-        
+
         // Store app token if backend returns one
         if (res.data?.token) {
           localStorage.setItem("token", res.data.token);
-          const userData = res.data.user;
-          localStorage.setItem("user", JSON.stringify(userData));
-          
-          // Redirect based on user role after sync
-          if (userData.role === 'author') {
-            router.push("/author-dashboard");
-          } else {
-            router.push("/");
-          }
-          return; // Exit early since we already redirected
+        }
+        const backendUser = res.data?.user;
+        if (backendUser) {
+          localStorage.setItem("user", JSON.stringify(backendUser));
+          redirectByRole(backendUser);
+          return; // we already redirected
         }
       } catch (syncError) {
-        console.log('Backend sync optional - using Firebase auth only');
+        console.log("Backend sync optional - using Firebase auth only", syncError);
         // Continue with Firebase-only flow
       }
-      
-      // If no backend sync or sync failed, redirect to home
+
+      // If no backend sync and no claims role, default to generic redirect (home)
       router.push("/");
     } catch (err: any) {
       console.error("Google sign-in failed", err);
@@ -222,8 +250,8 @@ export default function Login() {
               </Link>
             </div>
 
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               disabled={isLoading}
               className="w-full h-9 text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-lg hover:shadow-xl transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -247,7 +275,7 @@ export default function Login() {
             >
               <Image src="/icons/google.png" width={18} height={18} alt="Google" />
               <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                {oauthLoading === 'google' ? "Connecting..." : "Continue with Google"}
+                {oauthLoading === "google" ? "Connecting..." : "Continue with Google"}
               </span>
             </button>
 
@@ -263,9 +291,7 @@ export default function Login() {
                           disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Image src="/icons/facebook.png" width={18} height={18} alt="Facebook" />
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                Continue with Facebook
-              </span>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Continue with Facebook</span>
             </button>
 
             {/* Apple */}
@@ -280,9 +306,7 @@ export default function Login() {
                           disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Image src="/icons/apple.png" width={18} height={18} alt="Apple" />
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                Continue with Apple
-              </span>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Continue with Apple</span>
             </button>
 
             <p className="text-center text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-4">

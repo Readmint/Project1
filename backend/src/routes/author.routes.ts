@@ -32,4 +32,5 @@ router.get('/subscription/current', getCurrentSubscription);
 // Public route (no authentication required)
 router.get('/top', getTopAuthors);
 
+
 export default router;

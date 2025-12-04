@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 
 interface Issue {
-  id: number;
+  id: string | number;
   title: string;
   category: string;
   image: string;
@@ -17,7 +17,7 @@ interface Issue {
   description: string;
 }
 
-const issues: Issue[] = [
+const fallbackIssues: Issue[] = [
   { id: 1, title: "Global Tech 2025", category: "Technology", image: "/images/issue1.jpg", price: 299, description: "A deep dive into the next wave of innovations in tech, AI, and computing." },
   { id: 2, title: "Design Forward", category: "Design", image: "/images/issue2.jpg", price: 199, description: "A curated collection on modern layouts, UI trends, and digital aesthetics." },
   { id: 3, title: "Health Digest", category: "Health", image: "/images/issue3.jpg", price: 149, description: "Well-researched articles on mental health, wellness, and lifestyle improvements." },
@@ -31,53 +31,98 @@ const issues: Issue[] = [
   { id: 11, title: "Extra Issue (Search Test)", category: "Test", image: "/images/issue11.jpg", price: 249, description: "This issue is kept hidden from sections for testing search." },
 ];
 
-/* Modal placeholder preserved for when you add real content later */
-function IssueModal({ issue, onClose }: { issue: Issue; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 bg-black/60 dark:bg-black/70 flex justify-center items-center z-50 p-4">
-      <motion.div
-        initial={{opacity:0, scale:0.97}}
-        animate={{opacity:1, scale:1}}
-        transition={{duration:0.3}}
-        className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 w-full max-w-lg p-6"
-      >
-        {/* Header */}
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-            {issue.title}
-          </h2>
-          <Button onClick={onClose} variant="ghost" className="text-slate-700 dark:text-white hover:text-indigo-500">Close</Button>
-        </div>
-
-        {/* Body */}
-        <div className="relative w-full h-56 mb-4 rounded-xl overflow-hidden">
-          <Image src={issue.image} alt={issue.title} fill className="object-cover"/>
-        </div>
-
-        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-          {issue.description}
-        </p>
-
-        <div className="mt-6 text-center">
-          <Button className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 rounded-full">Read Now →</Button>
-        </div>
-      </motion.div>
-    </div>
-  );
+function getCurrentUserId() {
+  return typeof window !== "undefined" ? localStorage.getItem("userId") : null;
 }
 
 export default function LibraryPage() {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const visibleIssues = issues.filter(i => i.id !== 11); // 10 issues shown in UI
-  const filtered = issues.filter(i => i.title.toLowerCase().includes(search.toLowerCase())); // 11 issues searched
+  useEffect(() => {
+    // Try to fetch /api/reader/home and map its lists into issues for library view
+    const userId = getCurrentUserId();
+    const token = typeof window !== "undefined" ? localStorage.getItem("authToken") : null;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/reader/home`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (res.ok) {
+          const json = await res.json();
+          // Combine featured + recent + trending into a single list for library display
+          const combined = [
+            ...(json.featured ?? []),
+            ...(json.recent ?? []),
+            ...(json.trending ?? [])
+          ];
+          // Normalize to Issue[] shape
+          const mapped: Issue[] = combined.map((c: any) => ({
+            id: c.id ?? c.contentId ?? `${c.title}-${Math.random()}`,
+            title: c.title ?? c.name ?? "Untitled",
+            category: (c.metadata && c.metadata.category) || c.category || "General",
+            image: (c.metadata && c.metadata.coverUrl) || c.coverUrl || "/images/issue1.jpg",
+            price: c.metadata?.price ?? c.price ?? 0,
+            description: (c.metadata && c.metadata.excerpt) || c.excerpt || ""
+          }));
+          // If empty fallback to local issues
+          setIssues(mapped.length ? mapped.filter(i => String(i.id) !== "11") : fallbackIssues.filter(i => i.id !== 11));
+        } else {
+          setIssues(fallbackIssues.filter(i => i.id !== 11));
+        }
+      } catch (err) {
+        setIssues(fallbackIssues.filter(i => i.id !== 11));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const visibleIssues = issues.filter(i => String(i.id) !== "11");
+  const filtered = issues.filter(i => i.title.toLowerCase().includes(search.toLowerCase()));
+
+  const openContentStream = async (issue: Issue) => {
+    const userId = getCurrentUserId();
+    if (!userId) {
+      alert("Please log in to read the issue.");
+      return;
+    }
+    const token = localStorage.getItem("authToken");
+    try {
+      const res = await fetch(`/api/reader/content/${issue.id}/stream`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      });
+      if (!res.ok) {
+        alert("Unable to fetch content URL.");
+        return;
+      }
+      const json = await res.json();
+      if (json.url) {
+        // Optionally register reading progress: mark as started with 0%
+        await fetch(`/api/reader/users/${userId}/progress`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({ contentId: String(issue.id), lastReadPosition: "0", percentRead: 0 })
+        }).catch(() => {});
+        window.open(json.url, "_blank");
+      } else {
+        alert("No URL returned from server.");
+      }
+    } catch (err) {
+      alert("Network error when trying to open issue.");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors px-4 sm:px-6 lg:px-8 py-16">
-
-      {/* Welcome Header */}
+      {/* Header */}
       <div className="max-w-6xl mx-auto mb-10">
         <h1 className="text-3xl sm:text-4xl font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-2 mb-1">
           <BookOpen size={22}/> My Library
@@ -101,7 +146,9 @@ export default function LibraryPage() {
       </div>
 
       {/* Search Results */}
-      {search ? (
+      {loading ? (
+        <p className="text-center">Loading library…</p>
+      ) : search ? (
         <div className="max-w-6xl mx-auto">
           <h2 className="text-lg font-semibold mb-4 text-slate-800 dark:text-white flex items-center gap-2">
             <Search size={15}/> Search Results
@@ -111,19 +158,17 @@ export default function LibraryPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-7">
               {filtered.map(issue => (
-                <IssueCard key={issue.id} issue={issue} onSelect={setSelectedIssue} />
+                <IssueCard key={String(issue.id)} issue={issue} onSelect={setSelectedIssue} />
               ))}
             </div>
           )}
         </div>
       ) : (
-
         /* Grid View */
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-7 max-w-6xl mx-auto">
           {visibleIssues.map(issue => (
-            <motion.div key={issue.id} whileHover={{ scale:1.02 }}>
+            <motion.div key={String(issue.id)} whileHover={{ scale:1.02 }}>
               <Card className="overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-md rounded-2xl cursor-pointer">
-                
                 {/* Cover */}
                 <div className="relative w-full h-48">
                   <Image src={issue.image} alt={issue.title} fill className="object-cover"/>
@@ -144,14 +189,19 @@ export default function LibraryPage() {
                     {issue.title}
                   </h3>
 
-                  <Button
-                    onClick={() => setSelectedIssue(issue)}
-                    variant="outline"
-                    className="w-full border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-all rounded-full text-xs"
-                  >
-                    <Eye size={11} className="mr-2"/> View Issue
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => setSelectedIssue(issue)}
+                      variant="outline"
+                      className="w-full border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-all rounded-full text-xs"
+                    >
+                      <Eye size={11} className="mr-2"/> View Issue
+                    </Button>
 
+                    <Button onClick={() => openContentStream(issue)} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-xs px-3">
+                      Read
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -160,13 +210,39 @@ export default function LibraryPage() {
       )}
 
       {/* Issue Modal */}
-      {selectedIssue && <IssueModal issue={selectedIssue} onClose={() => setSelectedIssue(null)}/>}
+      {selectedIssue && (
+        <div className="fixed inset-0 bg-black/60 dark:bg-black/70 flex justify-center items-center z-50 p-4">
+          <motion.div
+            initial={{opacity:0, scale:0.97}}
+            animate={{opacity:1, scale:1}}
+            transition={{duration:0.3}}
+            className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 w-full max-w-lg p-6"
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{selectedIssue.title}</h2>
+              <Button onClick={() => setSelectedIssue(null)} variant="ghost" className="text-slate-700 dark:text-white hover:text-indigo-500">Close</Button>
+            </div>
 
+            <div className="relative w-full h-56 mb-4 rounded-xl overflow-hidden">
+              <Image src={selectedIssue.image} alt={selectedIssue.title} fill className="object-cover"/>
+            </div>
+
+            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+              {selectedIssue.description}
+            </p>
+
+            <div className="mt-6 text-center flex gap-3 justify-center">
+              <Button onClick={() => openContentStream(selectedIssue)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 rounded-full text-xs">Read Now →</Button>
+              <Button variant="outline" onClick={() => setSelectedIssue(null)} className="text-xs">Close</Button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
 
-/* Small helper component for Continuing + Recommended cards */
+/* Small helper component for cards */
 function IssueCard({ issue, onSelect }: { issue: Issue; onSelect: (iss: Issue) => void }) {
   return (
     <motion.div whileHover={{scale:1.03}}>
