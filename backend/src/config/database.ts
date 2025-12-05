@@ -184,6 +184,23 @@ const createAuthorStatsTable = `
       INDEX idx_uploaded_by (uploaded_by)
     )
   `;
+   const createPlagiarismReportsTable = `
+  CREATE TABLE IF NOT EXISTS plagiarism_reports (
+    id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    article_id VARCHAR(36) NOT NULL,
+    run_by VARCHAR(36),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    similarity_summary JSON NULL,
+    report_storage_path VARCHAR(1000),
+    report_public_url VARCHAR(2000),
+    status ENUM('pending','completed','failed') DEFAULT 'completed',
+    notes TEXT,
+    FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE,
+    INDEX idx_article_id_plag (article_id),
+    INDEX idx_run_by (run_by)
+  )
+`;
+
 
   const createWorkflowEventsTable = `
     CREATE TABLE IF NOT EXISTS workflow_events (
@@ -409,6 +426,11 @@ const createAuthorStatsTable = `
     await mysqlDb.execute(createAttachmentsTable);
     console.log('✅ Attachments table created');
 
+    console.log('🔄 Creating plagiarism_reports table...');
+    await mysqlDb.execute(createPlagiarismReportsTable);
+    console.log('✅ Plagiarism reports table created');
+
+
     console.log('🔄 Creating workflow_events table...');
     await mysqlDb.execute(createWorkflowEventsTable);
     console.log('✅ Workflow events table created');
@@ -568,6 +590,7 @@ const verifyTableCreation = async (): Promise<void> => {
       'categories',
       'content',
       'attachments',
+      'plagiarism_reports',
       'workflow_events',
       'reviews',
       'subscription_plans',

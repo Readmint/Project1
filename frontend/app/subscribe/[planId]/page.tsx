@@ -1,9 +1,11 @@
+// app/subscribe/[planId]/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { toast } from 'react-hot-toast';
+import { createOrderAndRedirect } from '@/lib/payments';
 
 interface SubscriptionPlan {
   id: string;
@@ -16,7 +18,6 @@ interface SubscriptionPlan {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-const PAYU_BASE = process.env.NEXT_PUBLIC_PAYU_MODE === 'production' ? 'https://secure.payu.in' : 'https://test.payu.in';
 
 export default function SubscribePage() {
   const params: any = useParams();
@@ -36,26 +37,30 @@ export default function SubscribePage() {
         const response = await fetch(`${API_BASE_URL}/api/subscription/plans`);
         if (!response.ok) throw new Error('HTTP error');
         const data = await response.json();
-        if (data.status === 'success') {
-          const fetchedPlans = data.data.plans.map((p: any) => ({
-            ...p,
-            price_monthly: Number(p.price_monthly) || 0,
-            price_yearly: Number(p.price_yearly) || 0
-          }));
-          setPlans(fetchedPlans);
-          const selected =
-            fetchedPlans.find((p: SubscriptionPlan) => p.id === params.planId) ||
-            fetchedPlans.find((p: SubscriptionPlan) => p.name.toLowerCase().includes((params.planId as string)?.toLowerCase()));
-          if (!selected) {
-            toast.error('Plan not found');
-            router.push('/');
-            return;
-          }
-          setPlan(selected);
-        } else {
-          throw new Error('Bad response from plans API');
+        const fetchedRaw = data?.data?.plans ?? data?.plans ?? data ?? [];
+        const fetchedPlans = (Array.isArray(fetchedRaw) ? fetchedRaw : []).map((p: any) => ({
+          ...p,
+          price_monthly: Number(p.price_monthly) || Number(p.price) || 0,
+          price_yearly: Number(p.price_yearly) || 0
+        }));
+        if (!fetchedPlans.length) throw new Error('No plans');
+        setPlans(fetchedPlans);
+        const selected =
+          fetchedPlans.find((p: SubscriptionPlan) => p.id === params.planId) ||
+          fetchedPlans.find((p: SubscriptionPlan) => p.name.toLowerCase().includes((params.planId as string)?.toLowerCase()));
+        if (!selected) {
+          toast.error('Plan not found');
+          router.push('/');
+          return;
+        }
+        setPlan(selected);
+        // prefill user info if logged
+        const currentUser = getCurrentUser();
+        if (currentUser) {
+          setFormData({ name: currentUser.name || '', email: currentUser.email || '', phone: currentUser.phone || '9999999999' });
         }
       } catch (e) {
+        console.warn('Failed to fetch plans, using fallback', e);
         toast.error('Failed to load plans. Using fallback plans.');
         const fallback = getFallbackPlans();
         setPlans(fallback);
@@ -117,7 +122,6 @@ export default function SubscribePage() {
     setFormData((p) => ({ ...p, [name]: value }));
   };
 
-  // read user from localStorage if available
   function getCurrentUser() {
     try {
       const raw = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
@@ -150,68 +154,12 @@ export default function SubscribePage() {
         lastName: ''
       };
 
-      const response = await fetch(`${API_BASE_URL}/api/subscription/payu/create-order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData)
-      });
-
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data || data.status !== 'success') {
-        throw new Error(data?.message || 'Error creating payment');
-      }
-
-      const paymentData = data.data;
-
-      // parse hash (backend returns JSON stringified object)
-      let hashValue = '';
-      if (paymentData.hash) {
-        try {
-          const parsed = typeof paymentData.hash === 'string' ? JSON.parse(paymentData.hash) : paymentData.hash;
-          hashValue = parsed.v1 || parsed.v2 || '';
-        } catch {
-          if (typeof paymentData.hash === 'string') hashValue = paymentData.hash;
-        }
-      }
-
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = `${PAYU_BASE}/_payment`;
-
-      // append fields
-      const fields: Record<string, any> = {
-        key: paymentData.key || '',
-        txnid: paymentData.txnid || '',
-        amount: paymentData.amount || '',
-        productinfo: paymentData.productinfo || 'Subscription',
-        firstname: paymentData.firstname || formData.name,
-        email: paymentData.email || formData.email,
-        phone: paymentData.phone || formData.phone,
-        surl: paymentData.surl || `${window.location.origin}/payment/success`,
-        furl: paymentData.furl || `${window.location.origin}/payment/failure`,
-        hash: hashValue,
-        service_provider: paymentData.service_provider || 'payu_paisa',
-        udf1: paymentData.udf1 || '',
-        udf2: paymentData.udf2 || '',
-        udf3: paymentData.udf3 || '',
-        udf4: paymentData.udf4 || '',
-        udf5: paymentData.udf5 || ''
-      };
-
-      Object.keys(fields).forEach((key) => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = key;
-        input.value = fields[key] ?? '';
-        form.appendChild(input);
-      });
-
-      document.body.appendChild(form);
-      form.submit();
-
+      // Use shared helper
+      await createOrderAndRedirect(requestData);
+      // If it returns without redirect, something failed (helper throws on error).
     } catch (error: any) {
-      console.error('Payment failed', error);
-      toast.error(error?.message || 'Payment failed');
+      console.error('Payment initiation error', error);
+      // createOrderAndRedirect already shows toast; additional handling here if needed
     } finally {
       setLoading(false);
     }
@@ -240,12 +188,9 @@ export default function SubscribePage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 py-12">
       <div className="max-w-4xl mx-auto px-4 text-slate-900 dark:text-white">
-
         <h1 className="text-3xl font-bold text-center mb-8">Complete Your Subscription</h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-
-          {/* LEFT CARD */}
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 p-8">
             <h2 className="text-2xl font-bold mb-4">{plan.name}</h2>
             <p className="text-slate-600 dark:text-slate-400 mb-6">{plan.description}</p>
@@ -267,9 +212,7 @@ export default function SubscribePage() {
             <ul>{renderFeatures(plan.features)}</ul>
           </div>
 
-          {/* RIGHT CARD */}
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 p-8">
-
             <h2 className="text-2xl font-bold mb-6 text-slate-900 dark:text-white">Payment Details</h2>
 
             <div className="space-y-4 mb-6">
@@ -299,11 +242,9 @@ export default function SubscribePage() {
           </div>
         </div>
 
-        {/* OTHER PLANS */}
         {plans.length > 1 && (
           <div className="mt-12">
             <h2 className="text-2xl font-bold text-center mb-6">Other Plans</h2>
-
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {plans
                 .filter((p) => p.id !== plan.id)
@@ -326,8 +267,7 @@ export default function SubscribePage() {
   );
 }
 
-/* ----------------------- SMALL COMPONENTS ----------------------- */
-
+/* Small helper components */
 function Input({ label, name, formData, handler }: any) {
   return (
     <div>
@@ -342,7 +282,6 @@ function Input({ label, name, formData, handler }: any) {
     </div>
   );
 }
-
 function SummaryRow({ label, value, bold = false }: any) {
   return (
     <div className="flex justify-between items-center py-1 text-sm text-slate-700 dark:text-slate-300">

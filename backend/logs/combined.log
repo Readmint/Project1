@@ -273,4 +273,31 @@
 {"level":"error","message":"Error in getCurrentSubscriptionInternal:","service":"readmint-backend","timestamp":"2025-12-04 19:57:07"}
 {"level":"error","message":"Error in getCurrentSubscriptionInternal:","service":"readmint-backend","timestamp":"2025-12-04 20:35:45"}
 {"level":"error","message":"Error in getCurrentSubscriptionInternal:","service":"readmint-backend","timestamp":"2025-12-04 20:35:45"}
+<<<<<<< Updated upstream
 {"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-05 13:16:30"}
+=======
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-04 20:44:35"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-04 20:44:35"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-04 20:44:35"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-04 20:44:35"}
+{"level":"error","message":"Error in getCurrentSubscriptionInternal:","service":"readmint-backend","timestamp":"2025-12-04 21:03:39"}
+{"level":"error","message":"Error in getCurrentSubscriptionInternal:","service":"readmint-backend","timestamp":"2025-12-04 21:03:39"}
+{"level":"info","message":"Author profile updated for user ab6bd878-ce96-11f0-ac57-00155dc911bb","service":"readmint-backend","timestamp":"2025-12-04 21:04:07"}
+{"level":"error","message":"Error in getCurrentSubscriptionInternal:","service":"readmint-backend","timestamp":"2025-12-04 21:04:07"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-05 15:20:12"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-05 15:20:12"}
+{"code":"ER_PARSE_ERROR","errno":1064,"level":"error","message":"Error initializing MySQL tables: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '()),\n      txnid VARCHAR(255) NOT NULL UNIQUE,\n      plan_id VARCHAR(255) NOT NU' at line 2","service":"readmint-backend","sql":"\n    CREATE TABLE IF NOT EXISTS payment_orders (\n      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()()),\n      txnid VARCHAR(255) NOT NULL UNIQUE,\n      plan_id VARCHAR(255) NOT NULL,\n      user_id VARCHAR(255) NOT NULL,\n      amount DECIMAL(10,2) NOT NULL,\n      currency VARCHAR(10) DEFAULT 'INR',\n      email VARCHAR(255),\n      phone VARCHAR(20),\n      firstname VARCHAR(100),\n      productinfo VARCHAR(255) DEFAULT 'Magazine Subscription',\n      status ENUM('pending', 'completed', 'failed', 'cancelled') DEFAULT 'pending',\n      hash VARCHAR(255),\n      payment_date DATETIME,\n      error_message TEXT,\n      udf1 VARCHAR(255),\n      udf2 VARCHAR(255),\n      udf3 VARCHAR(255),\n      udf4 VARCHAR(255),\n      udf5 VARCHAR(255),\n      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n      INDEX idx_user_id (user_id),\n      INDEX idx_status (status),\n      INDEX idx_txnid (txnid),\n      INDEX idx_created_at (created_at)\n    )\n  ","sqlMessage":"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '()),\n      txnid VARCHAR(255) NOT NULL UNIQUE,\n      plan_id VARCHAR(255) NOT NU' at line 2","sqlState":"42000","stack":"Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '()),\n      txnid VARCHAR(255) NOT NULL UNIQUE,\n      plan_id VARCHAR(255) NOT NU' at line 2\n    at PromiseConnection.execute (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\mysql2\\lib\\promise\\connection.js:47:22)\n    at initializeTables (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\config\\database.ts:443:19)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async connectDatabase (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\config\\database.ts:56:7)\n    at async startServer (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\server.ts:77:5)","timestamp":"2025-12-05 15:20:12"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-05 15:20:12"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-05 15:21:09"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-05 15:21:09"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-05 15:21:09"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-05 15:21:09"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-05 15:24:49"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-05 15:24:49"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-05 15:24:49"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-05 15:24:49"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-05 16:15:42"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-05 16:15:42"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-05 16:15:43"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-05 16:15:43"}
+>>>>>>> Stashed changes

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +29,20 @@ type Category = {
   description?: string;
 };
 
+type PlagiarismSummaryPair = {
+  a: string;
+  b: string;
+  similarity: number;
+};
+
+type PlagiarismSummary = {
+  max_similarity?: number;
+  avg_similarity?: number;
+  pairs?: PlagiarismSummaryPair[];
+  notice?: string;
+  files?: string[];
+};
+
 // Fix the API_BASE - remove trailing slash if present
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "";
 
@@ -49,10 +63,59 @@ export default function SubmitArticlePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
 
+  // Plagiarism UI state
+  const [lastArticleId, setLastArticleId] = useState<string | null>(null);
+  const [plagiarismLoading, setPlagiarismLoading] = useState(false);
+  const [plagiarismStatus, setPlagiarismStatus] = useState<string | null>(null);
+  const [plagiarismSummary, setPlagiarismSummary] = useState<PlagiarismSummary | null>(null);
+  const [plagiarismReportUrl, setPlagiarismReportUrl] = useState<string | null>(null);
+  const [plagLanguage, setPlagLanguage] = useState<string>("python3");
+
+  // Auth / authorization states
+  const [userRole, setUserRole] = useState<string>("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isAuthorizedToRun, setIsAuthorizedToRun] = useState<boolean>(false);
+
+  // Privileged roles that can always run checks
+  const privilegedRoles = ["admin", "content_manager", "editor"];
+
   const strip = (t: string) => t.replace(/<[^>]+>/g, "");
   const words = strip(content).split(/\s+/).filter(Boolean).length;
   const chars = strip(content).length;
   const mins = Math.ceil(words / 200);
+
+  // minimal JWT decode for client-side claims reading (no verification)
+  function parseJwt(token: string | null) {
+    if (!token) return null;
+    try {
+      const parts = token.split(".");
+      if (parts.length !== 3) return null;
+      const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+      return payload;
+    } catch {
+      return null;
+    }
+  }
+
+  // Populate userRole / userId from token or localStorage on mount
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      // fallback to localStorage role if your app writes it there
+      setUserRole(localStorage.getItem("role") || "");
+      setUserId(localStorage.getItem("userId") || null);
+      return;
+    }
+    const payload = parseJwt(token);
+    if (payload) {
+      // adjust claim names if your token uses different keys (sub / uid / userId)
+      setUserRole((payload.role as string) || (localStorage.getItem("role") || ""));
+      setUserId((payload.userId as string) || (payload.sub as string) || (localStorage.getItem("userId") || null));
+    } else {
+      setUserRole(localStorage.getItem("role") || "");
+      setUserId(localStorage.getItem("userId") || null);
+    }
+  }, []);
 
   // Fetch categories on component mount
   useEffect(() => {
@@ -63,11 +126,11 @@ export default function SubmitArticlePage() {
     try {
       setIsLoadingCategories(true);
       const token = localStorage.getItem("token") || "";
-      
+
       const res = await fetch(`${API_BASE}/article/categories`, {
         method: "GET",
         headers: {
-          "Authorization": `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -112,13 +175,13 @@ export default function SubmitArticlePage() {
       try {
         localStorage.setItem(
           "draft",
-          JSON.stringify({ 
-            title, 
-            summary, 
-            content, 
+          JSON.stringify({
+            title,
+            summary,
+            content,
             category_id,
-            tags, 
-            issue_id
+            tags,
+            issue_id,
           })
         );
         setStatusMsg("Draft autosaved...");
@@ -167,7 +230,7 @@ export default function SubmitArticlePage() {
       })();
 
       if (!res.ok) {
-        const errorMsg = body?.errors 
+        const errorMsg = body?.errors
           ? `Validation failed: ${JSON.stringify(body.errors)}`
           : body?.message || `Failed to save draft (${res.status})`;
         throw new Error(errorMsg);
@@ -218,7 +281,6 @@ export default function SubmitArticlePage() {
       if (issue_id && issue_id.trim()) {
         payload.issue_id = issue_id.trim();
       }
-      // If issue_id is empty, don't include it in the payload
 
       console.log("Submit payload:", payload);
 
@@ -242,11 +304,11 @@ export default function SubmitArticlePage() {
 
       if (!createRes.ok) {
         // Handle category validation error specifically
-        if (createBody?.message?.includes('category_id') || createBody?.details?.includes('category')) {
+        if (createBody?.message?.includes("category_id") || createBody?.details?.includes("category")) {
           throw new Error(`Invalid category ID. Please select a valid category from the dropdown.`);
         }
-        
-        const errorMsg = createBody?.errors 
+
+        const errorMsg = createBody?.errors
           ? `Validation failed: ${JSON.stringify(createBody.errors)}`
           : createBody?.message || `Failed to create article (${createRes.status})`;
         throw new Error(errorMsg);
@@ -258,6 +320,9 @@ export default function SubmitArticlePage() {
       if (!articleId) {
         throw new Error("Article ID not returned by server");
       }
+
+      // Save last created article ID so user can run plagiarism check
+      setLastArticleId(articleId);
 
       // Only proceed with attachments if there are any
       if (attachments.length > 0) {
@@ -334,6 +399,110 @@ export default function SubmitArticlePage() {
       console.error("Submit error:", err);
       setStatusMsg("❌ Submission failed: " + (err.message || ""));
       setIsSubmitting(false);
+    }
+  };
+
+  // Check authorization for an article: privileged roles OR author must match
+  const checkAuthorizationForArticle = useCallback(
+    async (articleId?: string | null) => {
+      // privileged role -> authorized immediately
+      if (privilegedRoles.includes(userRole)) {
+        setIsAuthorizedToRun(true);
+        return;
+      }
+
+      // if user is author, validate ownership
+      if (userRole === "author" && articleId) {
+        try {
+          const res = await fetch(`${API_BASE}/article/author/articles/${encodeURIComponent(articleId)}`, {
+            method: "GET",
+            headers: { Authorization: `Bearer ${getToken()}` },
+          });
+          if (!res.ok) {
+            setIsAuthorizedToRun(false);
+            return;
+          }
+          const body = await res.json();
+          // your endpoint returns article in data.article or data.article/object shape — try multiple paths
+          const article = body.data?.article || body.data || body.article || body;
+          const authorIdFromApi = article?.author_id || article?.authorId || article?.author;
+          if (authorIdFromApi && userId && String(authorIdFromApi) === String(userId)) {
+            setIsAuthorizedToRun(true);
+            return;
+          } else {
+            setIsAuthorizedToRun(false);
+            return;
+          }
+        } catch (e) {
+          console.warn("Could not verify article ownership", e);
+          setIsAuthorizedToRun(false);
+          return;
+        }
+      }
+
+      // default: not authorized
+      setIsAuthorizedToRun(false);
+    },
+    [userRole, userId]
+  );
+
+  // Keep isAuthorizedToRun up-to-date when article id or role changes
+  useEffect(() => {
+    checkAuthorizationForArticle(lastArticleId);
+  }, [lastArticleId, userRole, userId, checkAuthorizationForArticle]);
+
+  // Plagiarism check caller
+  const runPlagiarismCheck = async (articleId?: string) => {
+    const idToUse = articleId || lastArticleId;
+    if (!idToUse) {
+      setPlagiarismStatus("Article ID required to run plagiarism check");
+      return;
+    }
+
+    // final client-side gate
+    if (!isAuthorizedToRun) {
+      setPlagiarismStatus("You are not authorized to run a plagiarism check for this article.");
+      return;
+    }
+
+    setPlagiarismLoading(true);
+    setPlagiarismStatus("Starting plagiarism check...");
+    setPlagiarismSummary(null);
+    setPlagiarismReportUrl(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/articles/${encodeURIComponent(idToUse)}/plagiarism`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ language: plagLanguage }),
+      });
+
+      const body = await (async () => {
+        try {
+          return await res.json();
+        } catch {
+          return null;
+        }
+      })();
+
+      if (!res.ok) {
+        const msg = body?.message || `Plagiarism check failed (${res.status})`;
+        throw new Error(msg);
+      }
+
+      // expected: { status: 'success', data: { reportId, reportUrl, summary } }
+      const data = body?.data;
+      setPlagiarismStatus("Completed");
+      setPlagiarismReportUrl(data?.reportUrl || data?.report_url || null);
+      setPlagiarismSummary(data?.summary || data?.similarity_summary || null);
+    } catch (err: any) {
+      console.error("Plagiarism check error:", err);
+      setPlagiarismStatus("❌ " + (err.message || "Failed"));
+    } finally {
+      setPlagiarismLoading(false);
     }
   };
 
@@ -516,12 +685,12 @@ export default function SubmitArticlePage() {
               <UploadCloud size={18} /> Upload Attachments
             </h3>
 
-            <input 
-              id="fileInput" 
-              type="file" 
-              multiple 
-              onChange={attachUpload} 
-              className="hidden" 
+            <input
+              id="fileInput"
+              type="file"
+              multiple
+              onChange={attachUpload}
+              className="hidden"
               disabled={isSubmitting}
             />
 
@@ -543,8 +712,8 @@ export default function SubmitArticlePage() {
               {attachments.map((file) => (
                 <div key={file.name} className="flex justify-between items-center bg-slate-100 dark:bg-slate-900 text-xs p-2 rounded-xl">
                   <span className="truncate max-w-[85%]">{file.name}</span>
-                  <button 
-                    onClick={() => !isSubmitting && removeAttachment(file.name)} 
+                  <button
+                    onClick={() => !isSubmitting && removeAttachment(file.name)}
                     className={`${isSubmitting ? 'text-gray-400 cursor-not-allowed' : 'text-red-600'}`}
                     disabled={isSubmitting}
                   >
@@ -577,9 +746,9 @@ export default function SubmitArticlePage() {
                   </option>
                 ))}
               </select>
-              <ChevronDown 
-                size={14} 
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none" 
+              <ChevronDown
+                size={14}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none"
               />
               {isLoadingCategories && (
                 <p className="text-[10px] text-slate-500 mt-1">Loading categories...</p>
@@ -601,8 +770,8 @@ export default function SubmitArticlePage() {
                 }}
                 disabled={isSubmitting}
               />
-              <button 
-                onClick={addTag} 
+              <button
+                onClick={addTag}
                 className={`bg-indigo-600 text-white text-xs px-3 rounded-r-lg ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                 disabled={isSubmitting}
               >
@@ -615,10 +784,10 @@ export default function SubmitArticlePage() {
                 <span key={tag} className="bg-indigo-100 text-indigo-600 text-[10px] px-2 py-1 rounded-full flex items-center gap-1">
                   {tag}
                   {!isSubmitting && (
-                    <XCircle 
-                      size={10} 
-                      className="cursor-pointer" 
-                      onClick={() => removeTag(tag)} 
+                    <XCircle
+                      size={10}
+                      className="cursor-pointer"
+                      onClick={() => removeTag(tag)}
                     />
                   )}
                 </span>
@@ -633,6 +802,90 @@ export default function SubmitArticlePage() {
               className="w-full border bg-slate-100 dark:bg-slate-900 text-xs p-2 rounded-lg"
               disabled={isSubmitting}
             />
+          </Card>
+
+          {/* Plagiarism Check Card */}
+          <Card className="p-5 rounded-2xl border">
+            <h3 className="text-sm font-semibold mb-2 text-center">Plagiarism Check</h3>
+
+            <p className="text-xs mb-2">You can run a plagiarism check for an article and get a zipped report.</p>
+
+            <div className="text-xs mb-2">
+              <label className="block mb-1">Article ID (optional)</label>
+              <input
+                value={lastArticleId ?? ""}
+                onChange={(e) => setLastArticleId(e.target.value)}
+                placeholder="Enter existing article ID or leave empty to use last created"
+                className="w-full border bg-slate-100 dark:bg-slate-900 text-xs p-2 rounded-lg mb-2"
+                disabled={plagiarismLoading}
+              />
+            </div>
+
+            <div className="flex gap-2 items-center mb-3">
+              <label className="text-xs mr-2">Language</label>
+              <select
+                value={plagLanguage}
+                onChange={(e) => setPlagLanguage(e.target.value)}
+                className="border bg-white text-xs p-1 rounded"
+                disabled={plagiarismLoading}
+              >
+                <option value="python3">Python 3</option>
+                <option value="java">Java</option>
+                <option value="c">C</option>
+                <option value="cpp">C++</option>
+                <option value="javascript">JavaScript</option>
+              </select>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={() => runPlagiarismCheck()}
+                disabled={plagiarismLoading || !isAuthorizedToRun}
+                className={`flex-1 ${plagiarismLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+              >
+                {plagiarismLoading ? "Running..." : "Run plagiarism check"}
+              </Button>
+
+              {!isAuthorizedToRun && (
+                <div className="text-[11px] text-slate-500 self-center">
+                  {privilegedRoles.includes(userRole)
+                    ? "Preparing..."
+                    : userRole === "author"
+                      ? "You can run plagiarism checks on your own articles — enter the Article ID or create one first."
+                      : "Only admins/editors/content managers/authors can run checks."}
+                </div>
+              )}
+            </div>
+
+            {plagiarismStatus && <p className="text-xs mt-3">{plagiarismStatus}</p>}
+
+            {plagiarismReportUrl && (
+              <div className="mt-3 text-xs">
+                <a href={plagiarismReportUrl} target="_blank" rel="noreferrer" className="text-indigo-600 underline">
+                  Download report
+                </a>
+              </div>
+            )}
+
+            {plagiarismSummary && (
+              <div className="mt-3 text-xs">
+                <p><b>Max similarity:</b> {String(plagiarismSummary.max_similarity ?? "N/A")}</p>
+                <p><b>Avg similarity:</b> {String(plagiarismSummary.avg_similarity ?? "N/A")}</p>
+                {plagiarismSummary.pairs && plagiarismSummary.pairs.length > 0 && (
+                  <div className="mt-2">
+                    <p className="font-medium">Top pairs</p>
+                    <ul className="list-disc pl-4">
+                      {plagiarismSummary.pairs.slice(0,5).map((p, i) => (
+                        <li key={i}>
+                          {p.a} ↔ {p.b} — {p.similarity}%
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {plagiarismSummary.notice && <p className="mt-2 text-xs text-slate-500">{plagiarismSummary.notice}</p>}
+              </div>
+            )}
           </Card>
 
           {/* TIPS */}

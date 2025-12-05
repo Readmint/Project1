@@ -14,7 +14,9 @@ import {
   downloadAttachment,
   deleteAttachment,
   uploadAttachment,
+  runPlagiarismCheck,
 } from '../controllers/article.controller';
+
 import { authenticate } from '../middleware/auth';
 import multer from 'multer';
 
@@ -169,6 +171,15 @@ router.patch(
   authenticate,
   updateStatusValidation,
   updateArticleStatus
+);
+
+
+//Plagrism checker
+router.post(
+  '/admin/articles/:articleId/plagiarism',
+  authenticate,
+  param('articleId').isString().notEmpty().withMessage('articleId is required'),
+  runPlagiarismCheck
 );
 
 // Delete article (drafts by author, admin otherwise)

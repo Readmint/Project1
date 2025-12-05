@@ -711,3 +711,262 @@ export const deleteArticle = async (req: Request, res: Response): Promise<void> 
     return;
   }
 };
+
+
+
+import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
+import { spawn } from 'child_process';
+import archiver from 'archiver'; // npm i archiver
+
+/**
+ * POST /api/admin/articles/:articleId/plagiarism
+ *
+ * Runs JPlag (via Docker) against attachments for an article and saves
+ * a zipped report to storage, and a metadata row in plagiarism_reports.
+ *
+ * NOTE: requires Docker on host OR replace the docker exec with `java -jar jplag.jar`.
+ * Env vars used:
+ *  - process.env.JPLAG_DOCKER_IMAGE  (e.g. ghcr.io/edulinq/jplag-docker:latest)
+ *  - process.env.JPLAG_THREADS
+ */
+const JPLAG_DOCKER_IMAGE = process.env.JPLAG_DOCKER_IMAGE || 'ghcr.io/edulinq/jplag-docker:latest';
+const JPLAG_THREADS = process.env.JPLAG_THREADS || '4';
+
+// Replace your existing runPlagiarismCheck with this function
+export const runPlagiarismCheck = async (req: Request, res: Response): Promise<void> => {
+  try {
+    // require authentication middleware to have populated req.user
+    if (!req.user || !req.user.userId) {
+      res.status(401).json({ status: 'error', message: 'Unauthorized' });
+      return;
+    }
+
+    const db: any = getDatabase();
+    const { articleId } = req.params;
+    if (!articleId) {
+      res.status(400).json({ status: 'error', message: 'articleId required' });
+      return;
+    }
+
+    // Fetch article to verify existence and get author_id
+    const [articleRows]: any = await db.execute('SELECT id, author_id FROM content WHERE id = ?', [articleId]);
+    if (!articleRows || articleRows.length === 0) {
+      res.status(404).json({ status: 'error', message: 'Article not found' });
+      return;
+    }
+    const article = articleRows[0];
+    const callerUserId = req.user!.userId!;
+    const callerRole = req.user!.role || '';
+
+    // Authorization: allow privileged roles OR the article's author
+    const privileged = ['admin', 'content_manager', 'editor'];
+    const isAuthor = String(article.author_id) === String(callerUserId);
+    if (!privileged.includes(callerRole) && !isAuthor) {
+      res.status(403).json({ status: 'error', message: 'Forbidden' });
+      return;
+    }
+
+    // Fetch attachments for the article (same as before)
+    const [attachments]: any = await db.execute(
+      'SELECT id, filename, storage_path, public_url FROM attachments WHERE article_id = ?',
+      [articleId]
+    );
+    if (!attachments || attachments.length === 0) {
+      res.status(404).json({ status: 'error', message: 'No attachments found to run JPlag on' });
+      return;
+    }
+
+    // Create temp working dir
+    const workRoot = await fs.mkdtemp(path.join(os.tmpdir(), `jplag-${articleId}-`));
+    const submissionsDir = path.join(workRoot, 'submissions');
+    await fs.mkdir(submissionsDir);
+
+    // Download attachments to submissions dir
+    const bucket = getStorageBucket();
+    for (const att of attachments) {
+      const fname = att.filename || att.id;
+      const localPath = path.join(submissionsDir, `${att.id}-${fname}`);
+      if (att.public_url) {
+        const fetch = (await import('node-fetch')).default;
+        const resp = await fetch(att.public_url);
+        if (!resp.ok) throw new Error(`Failed to download ${att.public_url}`);
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        await fs.writeFile(localPath, buffer);
+      } else if (att.storage_path) {
+        const gcsPath = att.storage_path.startsWith('gcs/') ? att.storage_path.slice(4) : att.storage_path;
+        const file = bucket.file(gcsPath);
+        await file.download({ destination: localPath });
+      } else {
+        logger.warn('attachment missing storage reference', att);
+      }
+    }
+
+    // Decide JPlag language (body.language or default)
+    const language = (req.body && req.body.language) || 'python3';
+
+    // Create out dir
+    const resultDir = path.join(workRoot, 'out');
+    await fs.mkdir(resultDir);
+
+    // Build docker args (respect env defaults)
+    const dockerImage = process.env.JPLAG_DOCKER_IMAGE || 'ghcr.io/edulinq/jplag-docker:latest';
+    const threads = process.env.JPLAG_THREADS || '4';
+
+    const dockerArgs = [
+      'run', '--rm',
+      '-v', `${workRoot}:/jplag:Z`,
+      dockerImage,
+      '--mode', 'RUN',
+      '--csv-export',
+      '--language', language,
+      '-t', threads,
+      '/jplag/submissions'
+    ];
+
+    logger.info('Running JPlag docker', { dockerArgs });
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn('docker', dockerArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      proc.stdout.on('data', (d) => logger.info(`[jplag] ${d.toString()}`));
+      proc.stderr.on('data', (d) => logger.warn(`[jplag-err] ${d.toString()}`));
+      proc.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`jplag docker exited with code ${code}`));
+      });
+      proc.on('error', reject);
+    });
+
+    // Locate report directory (try common names)
+    const possibleOut = ['out', 'report', 'jplag-out', 'results'].map(n => path.join(workRoot, n));
+    let reportPath: string | null = null;
+    for (const p of possibleOut) {
+      try {
+        const stat = await fs.stat(p);
+        if (stat && stat.isDirectory()) {
+          reportPath = p;
+          break;
+        }
+      } catch (e) {
+        // continue
+      }
+    }
+    if (!reportPath) reportPath = workRoot;
+
+    // Zip the report
+    const reportZipPath = path.join(workRoot, 'jplag-report.zip');
+    await zipFolder(reportPath, reportZipPath);
+
+    // Upload zip to storage
+    const reportId = uuidv4();
+    const storagePath = `plagiarism_reports/${articleId}/${reportId}.zip`;
+    const file = bucket.file(storagePath);
+    await file.save(await fs.readFile(reportZipPath), {
+      metadata: { contentType: 'application/zip' },
+      resumable: false,
+    });
+
+    // Create signed URL (7 days)
+    const [signedUrl] = await file.getSignedUrl({ action: 'read', expires: Date.now() + 7 * 24 * 60 * 60 * 1000 });
+
+    // Parse CSV if available (best-effort)
+    let similaritySummary: any = {};
+    try {
+      const csvPath = path.join(reportPath, 'report.csv');
+      const csvExists = await exists(csvPath);
+      if (csvExists) {
+        const csv = await fs.readFile(csvPath, 'utf8');
+        similaritySummary = parseJPlagCsv(csv);
+      } else {
+        const files = await fs.readdir(reportPath);
+        const csvFile = files.find((f) => f.toLowerCase().endsWith('.csv'));
+        if (csvFile) {
+          const csv = await fs.readFile(path.join(reportPath, csvFile), 'utf8');
+          similaritySummary = parseJPlagCsv(csv);
+        } else {
+          similaritySummary = { notice: 'no-csv-found', files };
+        }
+      }
+    } catch (e) {
+      logger.warn('Failed to parse jplag csv', e);
+    }
+
+    // Persist report metadata
+    await db.execute(
+      `INSERT INTO plagiarism_reports (id, article_id, run_by, similarity_summary, report_storage_path, report_public_url, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        reportId,
+        articleId,
+        req.user!.userId || null,
+        JSON.stringify(similaritySummary),
+        storagePath,
+        signedUrl,
+        'completed'
+      ]
+    );
+
+    // (optional) cleanup temp directory if you want:
+    // await fs.rm(workRoot, { recursive: true, force: true });
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Plagiarism check completed',
+      data: {
+        reportId,
+        reportUrl: signedUrl,
+        summary: similaritySummary,
+      },
+    });
+    return;
+  } catch (err: any) {
+    logger.error('runPlagiarismCheck error', err);
+    res.status(500).json({ status: 'error', message: 'Plagiarism check failed', error: err?.message || String(err) });
+    return;
+  }
+};
+
+/* ---------- helper utilities used above ---------- */
+
+async function exists(p: string) {
+  try {
+    await fs.stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function zipFolder(folderPath: string, outPath: string) {
+  return new Promise<void>((resolve, reject) => {
+    const output = require('fs').createWriteStream(outPath);
+    const archive = archiver('zip', { zlib: { level: 9 }});
+    output.on('close', () => resolve());
+    archive.on('error', reject);
+    archive.pipe(output);
+    archive.directory(folderPath, false);
+    archive.finalize();
+  });
+}
+
+/**
+ * Naive CSV parser: expects header + rows where similarity column exists.
+ * Adjust per your JPlag docker CSV layout if needed.
+ */
+function parseJPlagCsv(csv: string) {
+  const lines = csv.trim().split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length <= 1) return { notice: 'no-rows' };
+  const header = lines[0].split(',');
+  const rows = lines.slice(1).map(r => r.split(',').map(c => c.trim()));
+  let simIdx = header.findIndex(h => /similar/i.test(h));
+  if (simIdx < 0) simIdx = header.length - 1;
+  const pairs = rows.map(cols => ({
+    a: cols[0],
+    b: cols[1],
+    similarity: parseFloat(cols[simIdx]) || 0
+  }));
+  const max = pairs.reduce((m, p) => (p.similarity > m ? p.similarity : m), 0);
+  const avg = pairs.reduce((s, p) => s + p.similarity, 0) / Math.max(1, pairs.length);
+  return { max_similarity: max, avg_similarity: avg, pairs: pairs.slice(0, 20) };
+}
