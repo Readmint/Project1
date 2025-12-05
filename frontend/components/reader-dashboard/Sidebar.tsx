@@ -12,16 +12,16 @@ import {
   X,
   Settings,
   User,
+  CreditCard,
 } from "lucide-react";
 import LogoutConfirmation from "../LogoutConfirmation";
-// If you have a firebase signOut helper in your firebase client, import it.
-// import { firebaseSignOut } from "@/lib/firebaseClient";
 
 const navItems = [
   { label: "Dashboard", path: "/reader-dashboard", icon: LayoutDashboard },
   { label: "My Library", path: "/reader-dashboard/library", icon: Library },
   { label: "Bookmarks", path: "/reader-dashboard/bookmarks", icon: BookMarked },
   { label: "Certificates", path: "/reader-dashboard/certificates", icon: Award },
+  { label: "Billing & Orders", path: "/reader-dashboard/billing", icon: CreditCard }, // ✅ NEW
   { label: "Profile", path: "/reader-dashboard/profile", icon: User },
   { label: "Settings", path: "/reader-dashboard/settings", icon: Settings },
 ];
@@ -34,42 +34,26 @@ export default function Sidebar() {
 
   const handleLogout = async () => {
     try {
-      // If you use Firebase auth, sign out there as well (optional)
-      // try { await firebaseSignOut(); } catch (e) { console.warn("Firebase signOut failed", e); }
-
-      // Clear app storage
       localStorage.removeItem("token");
       localStorage.removeItem("user");
 
-      // remove keys that start with "reader_"
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && key.startsWith("reader_")) {
-          keysToRemove.push(key);
-        }
+        if (key && key.startsWith("reader_")) keysToRemove.push(key);
       }
-      keysToRemove.forEach((key) => localStorage.removeItem(key));
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
 
-      setOpen(false);
-      setShowLogoutConfirm(false);
-
-      // notify other windows/tabs
       window.dispatchEvent(new Event("readerLogout"));
-
-      // redirect to home
       window.location.href = "/";
     } catch (err) {
-      console.error("Logout failed", err);
-      // still try to navigate home as fallback
       window.location.href = "/";
     }
   };
 
   useEffect(() => {
     const handleStorageChange = () => {
-      const user = localStorage.getItem("user");
-      if (!user) window.location.href = "/";
+      if (!localStorage.getItem("user")) window.location.href = "/";
     };
 
     const handleReaderLogout = () => {
@@ -85,17 +69,12 @@ export default function Sidebar() {
     };
   }, []);
 
-  const handleLogoutClick = () => {
-    setShowLogoutConfirm(true);
-  };
-
   return (
     <>
       {/* Mobile Toggle */}
       <button
         onClick={() => setOpen(true)}
         className="md:hidden fixed top-4 left-4 z-50 p-2 bg-indigo-600 text-white rounded-lg shadow"
-        aria-label="Open menu"
       >
         <Menu className="h-5 w-5" />
       </button>
@@ -111,18 +90,14 @@ export default function Sidebar() {
       {/* Sidebar */}
       <aside
         className={`
-hidden md:flex flex-col w-64 bg-white dark:bg-slate-900
-  border-r border-slate-200 dark:border-slate-700 shadow-lg
-  sticky top-[80px] h-[calc(100vh-80px)] z-10
-  transition-transform duration-300
-  ${open ? "md:translate-x-0" : "md:translate-x-0"}
-`}
+          hidden md:flex flex-col w-64 bg-white dark:bg-slate-900
+          border-r border-slate-200 dark:border-slate-700 shadow-lg
+          sticky top-[80px] h-[calc(100vh-80px)] z-10
+        `}
       >
-        {/* Close Button (Mobile) */}
         <button
           onClick={() => setOpen(false)}
           className="md:hidden absolute top-4 right-4 text-slate-800 dark:text-white"
-          aria-label="Close menu"
         >
           <X className="h-6 w-6" />
         </button>
@@ -146,14 +121,12 @@ hidden md:flex flex-col w-64 bg-white dark:bg-slate-900
                   router.push(item.path);
                   setOpen(false);
                 }}
-                className={`
-                  flex items-center gap-3 w-full text-left px-4 py-3 rounded-lg transition-all
-                  ${
-                    active
-                      ? "bg-indigo-600 text-white shadow"
-                      : "text-slate-700 dark:text-white hover:bg-indigo-50 dark:hover:bg-slate-800"
-                  }
-                `}
+                className={`flex items-center gap-3 w-full text-left px-4 py-3 rounded-lg transition-all
+                ${
+                  active
+                    ? "bg-indigo-600 text-white shadow"
+                    : "text-slate-700 dark:text-white hover:bg-indigo-50 dark:hover:bg-slate-800"
+                }`}
               >
                 <Icon className="h-5 w-5" />
                 <span className="text-sm font-medium">{item.label}</span>
@@ -162,11 +135,11 @@ hidden md:flex flex-col w-64 bg-white dark:bg-slate-900
           })}
         </nav>
 
-        {/* Logout pinned at bottom */}
+        {/* Logout */}
         <div className="p-6 border-t border-slate-200 dark:border-slate-700">
           <button
-            onClick={handleLogoutClick}
-            className="flex items-center gap-3 w-full text-left px-4 py-3 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-all"
+            onClick={() => setShowLogoutConfirm(true)}
+            className="flex items-center gap-3 w-full text-left px-4 py-3 rounded-lg bg-red-600 text-white hover:bg-red-700"
           >
             <LogOutIcon className="h-5 w-5" />
             <span className="text-sm font-medium">Log Out</span>
