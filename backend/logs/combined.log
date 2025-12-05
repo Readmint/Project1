@@ -301,3 +301,39 @@
 {"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-05 16:15:43"}
 {"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-05 16:15:43"}
 >>>>>>> Stashed changes
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-05 18:00:35"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-05 18:00:35"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-05 18:00:35"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-05 18:00:35"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-05 18:31:41"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-05 18:31:41"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-05 18:31:41"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-05 18:31:41"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-05 18:59:55"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-05 18:59:55"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-05 18:59:55"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-05 18:59:55"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-05 19:47:20"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-05 19:47:20"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-05 19:47:20"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-05 19:47:20"}
+{"dockerArgs":["run","--rm","-v","C:\\Users\\Devanshu\\AppData\\Local\\Temp\\jplag-8af4d92b-8a76-4cc8-a3e9-3a0f19b3b02e-ji5GnL:/jplag:Z","ghcr.io/edulinq/jplag-docker:latest","--mode","RUN","--csv-export","--language","python3","-t","4","/jplag/submissions"],"level":"info","message":"Running JPlag docker","service":"readmint-backend","timestamp":"2025-12-05 19:52:46"}
+{"level":"warn","message":"[jplag-err] docker: error during connect: Head \"http://%2F%2F.%2Fpipe%2FdockerDesktopLinuxEngine/_ping\": open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.\n\nRun 'docker run --help' for more information\n","service":"readmint-backend","timestamp":"2025-12-05 19:52:46"}
+{"level":"error","message":"runPlagiarismCheck error jplag docker exited with code 127","service":"readmint-backend","stack":"Error: jplag docker exited with code 127\n    at ChildProcess.<anonymous> (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\controllers\\article.controller.ts:914:21)\n    at ChildProcess.emit (node:events:508:28)\n    at ChildProcess.emit (node:domain:489:12)\n    at maybeClose (node:internal/child_process:1085:16)\n    at Process.ChildProcess._handle.onexit (node:internal/child_process:304:5)","timestamp":"2025-12-05 19:52:46"}
+{"dockerArgs":["run","--rm","-v","C:\\Users\\Devanshu\\AppData\\Local\\Temp\\jplag-8af4d92b-8a76-4cc8-a3e9-3a0f19b3b02e-FwUw6B:/jplag:Z","ghcr.io/edulinq/jplag-docker:latest","--mode","RUN","--csv-export","--language","python3","-t","4","/jplag/submissions"],"level":"info","message":"Running JPlag docker","service":"readmint-backend","timestamp":"2025-12-05 20:48:26"}
+{"level":"warn","message":"[jplag-err] docker: error during connect: Head \"http://%2F%2F.%2Fpipe%2FdockerDesktopLinuxEngine/_ping\": open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.\n\nRun 'docker run --help' for more information\n","service":"readmint-backend","timestamp":"2025-12-05 20:48:26"}
+{"level":"error","message":"runPlagiarismCheck error jplag docker exited with code 127","service":"readmint-backend","stack":"Error: jplag docker exited with code 127\n    at ChildProcess.<anonymous> (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\controllers\\article.controller.ts:914:21)\n    at ChildProcess.emit (node:events:508:28)\n    at ChildProcess.emit (node:domain:489:12)\n    at maybeClose (node:internal/child_process:1085:16)\n    at Process.ChildProcess._handle.onexit (node:internal/child_process:304:5)","timestamp":"2025-12-05 20:48:26"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-05 20:49:01"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-05 20:49:01"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-05 20:49:01"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-05 20:49:01"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-05 21:15:59"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-05 21:15:59"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-05 21:15:59"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-05 21:15:59"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-05 21:25:28"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-05 21:25:28"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-05 21:25:28"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-05 21:25:28"}
+{"level":"warn","message":"extractTextFromBuffer failed for add more list all related to it.pdf: pdfParse is not a function","service":"readmint-backend","stack":"TypeError: pdfParse is not a function\n    at extractTextFromBuffer (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\controllers\\article.controller.ts:823:26)\n    at computeTfidfSimilarities (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\controllers\\article.controller.ts:858:22)\n    at runSimilarityCheck (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\controllers\\article.controller.ts:992:26)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)","timestamp":"2025-12-05 21:27:38"}
+{"level":"warn","message":"extractTextFromBuffer failed for E- Magzine SRS.pdf: pdfParse is not a function","service":"readmint-backend","stack":"TypeError: pdfParse is not a function\n    at extractTextFromBuffer (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\controllers\\article.controller.ts:823:26)\n    at computeTfidfSimilarities (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\controllers\\article.controller.ts:858:22)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async runSimilarityCheck (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\controllers\\article.controller.ts:992:20)","timestamp":"2025-12-05 21:27:38"}

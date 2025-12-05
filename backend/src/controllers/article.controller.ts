@@ -6,8 +6,45 @@ import { validationResult } from 'express-validator';
 import { getDatabase } from '../config/database';
 import { logger } from '../utils/logger';
 import { getStorageBucket, getSignedUrl } from '../utils/storage';
+import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
+import { spawn } from 'child_process';
+import archiver from 'archiver';
 
-// NOTE: removed GridFS/mongo imports
+//
+// Robust pdf-parse loader to handle ESM / CommonJS interop
+//
+let pdfParse: any = null;
+try {
+  // Prefer require for CommonJS environments
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const _pdf = require('pdf-parse');
+  pdfParse = typeof _pdf === 'function' ? _pdf : (_pdf && _pdf.default) ? _pdf.default : _pdf;
+} catch (cjsErr) {
+  try {
+    // Try dynamic import (for ESM environments)
+    // Use import() but keep usage synchronous-safe: set pdfParse when resolved (may be null until then)
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    (async () => {
+      try {
+        const mod = await import('pdf-parse');
+        pdfParse = mod?.default || mod;
+        logger && logger.info && logger.info('pdf-parse loaded via dynamic import', { pdfParseType: typeof pdfParse });
+      } catch (impErr) {
+        pdfParse = null;
+        logger && logger.warn && logger.warn('pdf-parse dynamic import failed; PDF parsing disabled', { cjsErr, impErr });
+      }
+    })();
+  } catch (impErr) {
+    pdfParse = null;
+    logger && logger.warn && logger.warn('pdf-parse load failed; PDF parsing disabled', { cjsErr, impErr });
+  }
+}
+
+import mammoth from 'mammoth';
+import { TfIdf } from 'natural';
+import fetch from 'node-fetch';
 
 declare global {
   namespace Express {
@@ -391,6 +428,80 @@ export const downloadAttachment = async (req: Request, res: Response): Promise<v
   }
 };
 
+export const getAttachmentSignedDownloadUrl = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!requireAuth(req, res)) return;
+    const dbMy: any = getDatabase();
+    const userId = req.user!.userId!;
+    const { articleId, attachmentId } = req.params;
+
+    // find attachment
+    const [rows]: any = await dbMy.execute(
+      'SELECT id, filename, public_url, storage_path, uploaded_by FROM attachments WHERE id = ? AND article_id = ?',
+      [attachmentId, articleId]
+    );
+
+    if (!rows || rows.length === 0) {
+      res.status(404).json({ status: 'error', message: 'Attachment not found' });
+      return;
+    }
+    const att = rows[0];
+
+    // permission check: author / uploader or privileged roles
+    const allowedPrivileged = ['admin', 'content_manager', 'editor'];
+    const isUploader = String(att.uploaded_by) === String(userId);
+    const isPrivileged = allowedPrivileged.includes(req.user!.role || '');
+    if (!isUploader && !isPrivileged) {
+      // also allow article author: check content.author_id
+      const [articleRows]: any = await dbMy.execute('SELECT author_id FROM content WHERE id = ?', [articleId]);
+      const article = articleRows && articleRows[0] ? articleRows[0] : null;
+      const isAuthor = article && String(article.author_id) === String(userId);
+      if (!isAuthor) {
+        res.status(403).json({ status: 'error', message: 'Forbidden' });
+        return;
+      }
+    }
+
+    // if public_url exists, return that
+    if (att.public_url) {
+      res.status(200).json({ status: 'success', data: { url: att.public_url } });
+      return;
+    }
+
+    // Must have storage_path to produce signed URL
+    const storagePath: string = att.storage_path || '';
+    if (!storagePath) {
+      res.status(500).json({ status: 'error', message: 'Attachment missing storage reference' });
+      return;
+    }
+
+    // normalize gcs path if needed
+    const gcsPath = storagePath.startsWith('gcs/') ? storagePath.slice(4) : storagePath;
+
+    // Use your existing getSignedUrl utility (should accept path, 'read', expiryMs)
+    try {
+      const readSigned = await getSignedUrl(gcsPath, 'read', READ_SIGNED_URL_EXPIRES_MS);
+      // normalizeSignedUrl helper exists above in the file
+      const signed = normalizeSignedUrl(readSigned);
+      if (!signed) {
+        res.status(500).json({ status: 'error', message: 'Could not create signed URL' });
+        return;
+      }
+
+      res.status(200).json({ status: 'success', data: { url: signed } });
+      return;
+    } catch (err: any) {
+      logger.error('getAttachmentSignedDownloadUrl: failed to create signed URL', err);
+      res.status(500).json({ status: 'error', message: 'Failed to create signed URL', error: err?.message || String(err) });
+      return;
+    }
+  } catch (err: any) {
+    logger.error('getAttachmentSignedDownloadUrl error', err);
+    res.status(500).json({ status: 'error', message: 'Failed to process request', error: err?.message || String(err) });
+    return;
+  }
+};
+
 /**
  * DELETE /api/author/articles/:articleId/attachments/:attachmentId
  */
@@ -712,29 +823,237 @@ export const deleteArticle = async (req: Request, res: Response): Promise<void> 
   }
 };
 
+/* ---------------------------
+   TF-IDF Similarity Utilities
+   --------------------------- */
 
+function cosineVec(a: number[], b: number[]) {
+  let dot = 0, na = 0, nb = 0;
+  const len = Math.min(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    dot += (a[i] || 0) * (b[i] || 0);
+    na += (a[i] || 0) * (a[i] || 0);
+    nb += (b[i] || 0) * (b[i] || 0);
+  }
+  if (na === 0 || nb === 0) return 0;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
 
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
-import { spawn } from 'child_process';
-import archiver from 'archiver'; // npm i archiver
+async function extractTextFromBuffer(filename: string, buffer: Buffer): Promise<string> {
+  const ext = (filename.split('.').pop() || '').toLowerCase();
+  
+  try {
+    if (ext === 'pdf') {
+      if (!pdfParse) {
+        logger.warn('pdf-parse not available, skipping PDF text extraction for', filename);
+        return '';
+      }
+      // pdf-parse accepts Buffer / Uint8Array
+      const data = await pdfParse(buffer);
+      return data?.text || '';
+    }
+    
+    if (ext === 'docx' || ext === 'doc') {
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value || '';
+    }
+    
+    // For text files (txt, md, html, etc.)
+    if (['txt', 'md', 'text', 'rtf', 'html', 'htm'].includes(ext)) {
+      return buffer.toString('utf8');
+    }
+    
+    // For other file types, try to decode as UTF-8
+    try {
+      return buffer.toString('utf8');
+    } catch {
+      return '';
+    }
+  } catch (err) {
+    logger.warn(`extractTextFromBuffer failed for ${filename}:`, err);
+    return '';
+  }
+}
+
+/**
+ * computeTfidfSimilarities
+ * attachments: Array<{ id, filename, buffer }>
+ * returns { docs: [{ id, filename, text }], pairs: [{ aId, bId, score }] }
+ */
+export async function computeTfidfSimilarities(attachments: { id: string; filename: string; buffer: Buffer }[]) {
+  // 1) Extract and normalize text
+  const docs = [];
+  for (const att of attachments) {
+    let text = await extractTextFromBuffer(att.filename || att.id, att.buffer);
+    // normalize whitespace and trim; cap to reasonable length for TF-IDF
+    text = text.replace(/\s+/g, ' ').trim();
+    if (text.length > 200000) text = text.slice(0, 200000);
+    docs.push({ id: att.id, filename: att.filename || att.id, text });
+  }
+
+  // If fewer than 2 docs, nothing to compare
+  if (docs.length < 2) {
+    return { docs, pairs: [] };
+  }
+
+  // 2) Build TF-IDF using natural
+  const tfidf = new TfIdf();
+  docs.forEach((d) => tfidf.addDocument(d.text));
+
+  // 3) Build vocabulary of top terms across docs (limit to keep vectors manageable)
+  const vocabSet = new Set<string>();
+  for (let i = 0; i < docs.length; i++) {
+    const terms = tfidf.listTerms(i).slice(0, 800); // top terms per doc
+    terms.forEach((t: any) => vocabSet.add(t.term));
+  }
+  const vocab = Array.from(vocabSet);
+  const indexOf = new Map<string, number>();
+  vocab.forEach((t, i) => indexOf.set(t, i));
+
+  // 4) Build vectors
+  const vectors: number[][] = [];
+  for (let i = 0; i < docs.length; i++) {
+    const vec = new Array(vocab.length).fill(0);
+    const terms = tfidf.listTerms(i); // returns {term, tfidf}
+    terms.forEach((t: any) => {
+      const idx = indexOf.get(t.term);
+      if (idx !== undefined) vec[idx] = t.tfidf;
+    });
+    vectors.push(vec);
+  }
+
+  // 5) Pairwise cosine
+  const pairs: Array<{ aId: string; bId: string; score: number }> = [];
+  for (let i = 0; i < vectors.length; i++) {
+    for (let j = i + 1; j < vectors.length; j++) {
+      const s = cosineVec(vectors[i], vectors[j]);
+      pairs.push({ aId: docs[i].id, bId: docs[j].id, score: Number(s.toFixed(4)) });
+    }
+  }
+  pairs.sort((a, b) => b.score - a.score);
+
+  return { docs, pairs };
+}
+
+/**
+ * Route handler: POST /api/author/articles/:articleId/similarity
+ * - Authenticated
+ * - Author or privileged roles OR article author allowed
+ * - Downloads attachments into buffers (public_url or GCS path)
+ * - Runs TF-IDF similarity and returns top pairs
+ *
+ * Query params:
+ *  - threshold (optional): number 0..1 to filter returned pairs (default 0.6)
+ *  - top (optional): number of top pairs to return (default 20)
+ */
+export const runSimilarityCheck = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!requireAuth(req, res)) return;
+    const db: any = getDatabase();
+    const userId = req.user!.userId!;
+    const { articleId } = req.params;
+    if (!articleId) {
+      res.status(400).json({ status: 'error', message: 'articleId required' });
+      return;
+    }
+
+    // Verify article exists
+    const [articleRows]: any = await db.execute('SELECT id, author_id FROM content WHERE id = ?', [articleId]);
+    if (!articleRows || articleRows.length === 0) {
+      res.status(404).json({ status: 'error', message: 'Article not found' });
+      return;
+    }
+    const article = articleRows[0];
+
+    // Authorization: allow article author or privileged roles
+    const privileged = ['admin', 'content_manager', 'editor'];
+    const callerRole = req.user!.role || '';
+    const isAuthor = String(article.author_id) === String(userId);
+    if (!isAuthor && !privileged.includes(callerRole)) {
+      res.status(403).json({ status: 'error', message: 'Forbidden' });
+      return;
+    }
+
+    // Fetch attachments
+    const [attachmentsRows]: any = await db.execute(
+      'SELECT id, filename, public_url, storage_path FROM attachments WHERE article_id = ?',
+      [articleId]
+    );
+    if (!attachmentsRows || attachmentsRows.length === 0) {
+      res.status(404).json({ status: 'error', message: 'No attachments found to compare' });
+      return;
+    }
+
+    // Download attachments into buffers
+    const bucket = getStorageBucket();
+    const attachmentsWithBuffer: Array<{ id: string; filename: string; buffer: Buffer }> = [];
+
+    for (const att of attachmentsRows) {
+      try {
+        if (att.public_url) {
+          // fetch via public url
+          const resp = await fetch(att.public_url);
+          if (!resp.ok) {
+            logger.warn(`Failed to download public_url for attachment ${att.id}`, att.public_url, resp.status);
+            continue;
+          }
+          const arrayBuf = await resp.arrayBuffer();
+          attachmentsWithBuffer.push({ id: att.id, filename: att.filename || att.id, buffer: Buffer.from(arrayBuf) });
+        } else if (att.storage_path) {
+          const gcsPath = att.storage_path.startsWith('gcs/') ? att.storage_path.slice(4) : att.storage_path;
+          const file = bucket.file(gcsPath);
+          const [buf] = await file.download();
+          attachmentsWithBuffer.push({ id: att.id, filename: att.filename || att.id, buffer: buf });
+        } else {
+          logger.warn('Attachment has no storage reference', att.id);
+        }
+      } catch (e) {
+        logger.warn('Failed to download attachment', att.id, e);
+      }
+    }
+
+    if (attachmentsWithBuffer.length < 2) {
+      res.status(200).json({ status: 'success', message: 'Not enough attachments to compare', data: { docs: [], pairs: [] } });
+      return;
+    }
+
+    // run TF-IDF similarity (fast free method)
+    const result = await computeTfidfSimilarities(attachmentsWithBuffer);
+
+    // Apply query filters
+    const threshold = typeof req.query.threshold !== 'undefined' ? Number(req.query.threshold) : 0.6;
+    const topN = typeof req.query.top !== 'undefined' ? Math.max(1, Math.min(200, Number(req.query.top))) : 20;
+
+    const filteredPairs = result.pairs.filter((p) => p.score >= (isNaN(threshold) ? 0.0 : threshold)).slice(0, topN);
+
+    // Optionally persist summary in reviews/plagiarism table — omitted here (keep simple)
+    res.status(200).json({
+      status: 'success',
+      message: 'Similarity check completed',
+      data: {
+        docs: result.docs.map((d) => ({ id: d.id, filename: d.filename, textExcerpt: d.text?.slice(0, 200) })),
+        pairs: filteredPairs,
+        meta: { method: 'tfidf', threshold, topN },
+      },
+    });
+    return;
+  } catch (err: any) {
+    logger.error('runSimilarityCheck error', err);
+    res.status(500).json({ status: 'error', message: 'Similarity check failed', error: err?.message || String(err) });
+    return;
+  }
+};
+
+/* =========================
+   Existing JPlag / plumbing
+   ========================= */
 
 /**
  * POST /api/admin/articles/:articleId/plagiarism
  *
  * Runs JPlag (via Docker) against attachments for an article and saves
  * a zipped report to storage, and a metadata row in plagiarism_reports.
- *
- * NOTE: requires Docker on host OR replace the docker exec with `java -jar jplag.jar`.
- * Env vars used:
- *  - process.env.JPLAG_DOCKER_IMAGE  (e.g. ghcr.io/edulinq/jplag-docker:latest)
- *  - process.env.JPLAG_THREADS
  */
-const JPLAG_DOCKER_IMAGE = process.env.JPLAG_DOCKER_IMAGE || 'ghcr.io/edulinq/jplag-docker:latest';
-const JPLAG_THREADS = process.env.JPLAG_THREADS || '4';
-
-// Replace your existing runPlagiarismCheck with this function
 export const runPlagiarismCheck = async (req: Request, res: Response): Promise<void> => {
   try {
     // require authentication middleware to have populated req.user
@@ -789,7 +1108,6 @@ export const runPlagiarismCheck = async (req: Request, res: Response): Promise<v
       const fname = att.filename || att.id;
       const localPath = path.join(submissionsDir, `${att.id}-${fname}`);
       if (att.public_url) {
-        const fetch = (await import('node-fetch')).default;
         const resp = await fetch(att.public_url);
         if (!resp.ok) throw new Error(`Failed to download ${att.public_url}`);
         const buffer = Buffer.from(await resp.arrayBuffer());

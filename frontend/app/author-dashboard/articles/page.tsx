@@ -227,13 +227,60 @@ export default function MyArticlesPage() {
     router.push(`/author-dashboard/articles/${article.id}/stats`);
   };
 
-  const handleViewArticle = (article: Article) => {
-    if (article.slug) {
-      router.push(`/articles/${article.slug}`);
-    } else {
-      router.push(`/author-dashboard/articles/${article.id}/preview`);
+ // replace existing handleViewArticle with this version
+const handleViewArticle = async (article: Article) => {
+  // Basic guard
+  if (!article || !article.id || article.id.trim() === "") {
+    alert("Cannot preview: missing article id. Please refresh the page.");
+    console.error("Preview blocked: missing article id for", article);
+    return;
+  }
+
+  // If article has a public slug, go to public article page
+  if (article.slug) {
+    router.push(`/articles/${article.slug}`);
+    return;
+  }
+
+  // Otherwise: verify article exists on server before navigating
+  try {
+    const token = getToken();
+    if (!token) {
+      alert("Not authenticated. Please log in.");
+      router.push("/login");
+      return;
     }
-  };
+
+    // Build URL — ensure API_BASE is set correctly (no double 'article')
+    // Expected: API_BASE = 'http://localhost:5000/api/article'
+    const url = `${API_BASE}/article/author/articles/${encodeURIComponent(article.id)}`;
+    console.log("Preview: fetching article details from", url);
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    let body: any = null;
+    try { body = await res.json(); } catch (e) { /* ignore */ }
+
+    console.log("Preview fetch status:", res.status, body);
+
+    if (!res.ok) {
+      // Show useful message to user
+      const message = body?.message || `Preview fetch failed (${res.status})`;
+      alert(`Cannot preview article: ${message}`);
+      return;
+    }
+
+    // success — navigate to preview page (your Next route)
+    router.push(`/author-dashboard/articles/${article.id}/preview`);
+  } catch (err: any) {
+    console.error("Preview error:", err);
+    alert("Failed to load article preview: " + (err.message || String(err)));
+  }
+};
+
 
   const handleEditArticle = (article: Article) => {
     router.push(`/author-dashboard/submit?articleId=${article.id}`);

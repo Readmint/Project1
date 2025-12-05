@@ -1,16 +1,25 @@
-// reader.controller.ts
+// src/controllers/reader.controller.ts
 import { Request, Response } from 'express';
 import admin from 'firebase-admin';
 import { getMySQLDatabase, getFirestoreDatabase } from '../config/database'; // adjust path if needed
 import { logger } from '../utils/logger';
 
-const mysqlDb = getMySQLDatabase();
-let firestoreDb: any;
-try {
-  firestoreDb = getFirestoreDatabase();
-} catch (err) {
-  // Firestore might be optional in some environments
-  firestoreDb = null;
+/**
+ * Helper: safe getter for mysql_db at request time
+ */
+function mysql() {
+  return getMySQLDatabase();
+}
+
+/**
+ * Helper: safe getter for firestore (optional)
+ */
+function firestore() {
+  try {
+    return getFirestoreDatabase();
+  } catch (err) {
+    return null;
+  }
 }
 
 /**
@@ -19,7 +28,8 @@ try {
  */
 export const getReaderHome = async (req: Request, res: Response) => {
   try {
-    // simple: fetch featured + top trending items
+    const mysqlDb = mysql();
+
     const [featured]: any = await mysqlDb.execute(
       `SELECT id, title, metadata, featured, reads_count, likes_count, created_at
        FROM content
@@ -63,6 +73,8 @@ export const getContentById = async (req: Request, res: Response) => {
   try {
     const { contentId } = req.params;
     const uid = (req as any).user?.uid || null; // if you have auth middleware that sets req.user
+
+    const mysqlDb = mysql();
 
     const [rows]: any = await mysqlDb.execute(
       `SELECT id, title, author_id, category_id, metadata, featured, reads_count, likes_count, status
@@ -111,6 +123,7 @@ export const getContentById = async (req: Request, res: Response) => {
 export const getContentStream = async (req: Request, res: Response) => {
   try {
     const { contentId } = req.params;
+    const mysqlDb = mysql();
 
     const [rows]: any = await mysqlDb.execute(
       `SELECT id, title, metadata FROM content WHERE id = ? LIMIT 1`,
@@ -162,6 +175,8 @@ export const postReadingProgress = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'userId and contentId are required' });
     }
 
+    const mysqlDb = mysql();
+
     // Upsert (insert or update)
     await mysqlDb.execute(
       `INSERT INTO reading_progress (id, user_id, content_id, last_read_position, percent_read, last_opened_at, created_at, updated_at)
@@ -188,6 +203,8 @@ export const postReadingProgress = async (req: Request, res: Response) => {
 export const getReadingProgress = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
+    const mysqlDb = mysql();
+
     const [rows]: any = await mysqlDb.execute(
       `SELECT user_id, content_id, last_read_position, percent_read, last_opened_at
        FROM reading_progress
@@ -216,6 +233,8 @@ export const toggleBookmark = async (req: Request, res: Response) => {
     if (!userId || !contentId) {
       return res.status(400).json({ message: 'userId and contentId are required' });
     }
+
+    const mysqlDb = mysql();
 
     // Check if exists
     const [existing]: any = await mysqlDb.execute(
@@ -262,6 +281,8 @@ export const toggleLike = async (req: Request, res: Response) => {
     if (!userId || !contentId) {
       return res.status(400).json({ message: 'userId and contentId are required' });
     }
+
+    const mysqlDb = mysql();
 
     const [existing]: any = await mysqlDb.execute(
       `SELECT id FROM user_likes WHERE user_id = ? AND content_id = ? LIMIT 1`,
@@ -310,6 +331,7 @@ export const toggleLike = async (req: Request, res: Response) => {
 export const getRecommendations = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
+    const mysqlDb = mysql();
 
     const [recRows]: any = await mysqlDb.execute(
       `SELECT items, algorithm_version, generated_at FROM recommendations WHERE user_id = ? ORDER BY generated_at DESC LIMIT 1`,

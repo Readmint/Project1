@@ -15,6 +15,8 @@ import {
   deleteAttachment,
   uploadAttachment,
   runPlagiarismCheck,
+  getAttachmentSignedDownloadUrl,
+  runSimilarityCheck,
 } from '../controllers/article.controller';
 
 import { authenticate } from '../middleware/auth';
@@ -174,13 +176,35 @@ router.patch(
 );
 
 
+
 //Plagrism checker
+
 router.post(
-  '/admin/articles/:articleId/plagiarism',
+  '/author/articles/:articleId/similarity',
+  authenticate,
+  param('articleId').isString().notEmpty().withMessage('articleId is required'),
+  runSimilarityCheck  // Make sure to import this from your controller
+);
+
+router.post(
+  '/articles/:articleId/plagiarism',
   authenticate,
   param('articleId').isString().notEmpty().withMessage('articleId is required'),
   runPlagiarismCheck
 );
+
+// Add this route near other article routes
+
+// add near other attachment routes in routes/article.route.ts
+
+router.get(
+  '/author/articles/:articleId/attachments/:attachmentId/signed-url',
+  authenticate,
+  param('articleId').isString().notEmpty().withMessage('articleId is required'),
+  param('attachmentId').isString().notEmpty().withMessage('attachmentId is required'),
+  getAttachmentSignedDownloadUrl
+);
+
 
 // Delete article (drafts by author, admin otherwise)
 router.delete(
