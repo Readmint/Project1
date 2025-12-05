@@ -7,23 +7,7 @@ import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-import {
-  LayoutDashboard,
-  Plus,
-  FileText,
-  CheckCircle2,
-  Clock3,
-  FilePenLine,
-  FileClock,
-  Search,
-  Filter,
-  Download,
-  BarChart3,
-  Eye,
-  Edit2,
-  Trash2,
-  RefreshCw,
-} from "lucide-react";
+import {LayoutDashboard, Plus, FileText, CheckCircle2, Clock3, FilePenLine, FileClock, Search, Filter, Download, BarChart3, Eye, Edit2, Trash2, RefreshCw,} from "lucide-react";
 
 type Status = "Published" | "In Review" | "Revise" | "Draft" | "Rejected";
 
