@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,385 +9,716 @@ import {
   User,
   Mail,
   MapPin,
-  FileText,
   Tag,
+  BarChart3,
+  Award,
+  Banknote,
+  Crown,
   Link2,
   CreditCard,
-  Crown,
   Edit,
   Upload,
-  Award,
-  BarChart3,
-  FileTextIcon,
-  Clock,
-  TrendingUp,
-  Layers,
+  FileText,
+  Eye,
 } from "lucide-react";
 
-/* ----------------------------------------------------
-   Mock Editor Profile (Replace with real backend later)
----------------------------------------------------- */
-const mockEditorProfile = {
-  id: "editor_001",
-  name: "Alicia Reed",
-  email: "alicia.reed@readmint.com",
-  role: "Senior Editor",
-  photo: "/default-avatar.png",
-  location: "New York, USA",
-  bio: "Senior editor specializing in technology, cybersecurity, and enterprise workflows.",
-  specializations: ["Technology", "Cybersecurity", "Startups"],
-  socialLinks: {
-    twitter: "https://twitter.com/aliciareed",
-    linkedin: "https://linkedin.com/in/aliciareed",
-    website: "https://aliciareed.me",
-  },
-  payout: {
-    method: "bank",
-    bankName: "Chase Bank",
-    accountHolder: "Alicia Reed",
-    accountNumber: "123456789",
-    ifsc: "CHASUS33XXX",
-    paypal: "alicia.paypal@readmint.com",
-    upi: "alicia@upi",
-    taxId: "TAXP12345Z",
-  },
-  stats: {
-    totalEdits: 248,
-    avgTime: "3.4 hours",
-    certificates: 5,
-    qualityScore: 94,
-    revisionCycles: 28,
-    assigned: 42,
-    completed: 38,
-    pending: 4,
-  },
-  joinedDate: "Jan 2023",
+type Stats = {
+  articles: number;
+  views: number;
+  certificates: number;
+  earnings: number;
+  monthlyEarnings?: number;
+  rank?: number;
 };
 
-/* ----------------------------------------------------
-   Component
----------------------------------------------------- */
+type Profile = {
+  id?: string;
+  email?: string;
+  role?: string;
+  name?: string;
+  photo?: string;
+  location?: string;
+  legalName?: string;
+  qualifications?: string;
+  specialty?: string;
+  tags?: string[];
+  socialLinks?: Record<string, string>;
+  payoutDetails?: Record<string, string>;
+  isVerified?: boolean;
+  joinedDate?: string | null;
+  stats?: Stats;
+  membership?: any;
+  resumeUrl?: string | null;
+  experience_months?: number;
+  fields?: string[]; // editor fields / interests
+};
 
-export default function EditorProfilePage() {
-  const [profile, setProfile] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
+
+/** Helper to read token consistently from localStorage */
+function getTokenFromStorage(): string | null {
+  try {
+    if (typeof window === "undefined") return null;
+    const tKeys = ["ACCESS_TOKEN", "token", "idToken", "accessToken"];
+    for (const k of tKeys) {
+      const t = localStorage.getItem(k);
+      if (t && t.trim()) return t.trim();
+    }
+    const userRaw = localStorage.getItem("user");
+    if (userRaw) {
+      try {
+        const u = JSON.parse(userRaw);
+        if (u?.token) return String(u.token);
+        if (u?.accessToken) return String(u.accessToken);
+      } catch {}
+    }
+    return null;
+  } catch (err) {
+    console.warn("getTokenFromStorage error", err);
+    return null;
+  }
+}
+
+/** Build headers for JSON requests; include Authorization only if token exists */
+const buildJsonHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  const token = getTokenFromStorage();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  else {
+    // fallback: x-user-id if available in localStorage.user
+    try {
+      const userRaw = localStorage.getItem("user");
+      if (userRaw) {
+        const u = JSON.parse(userRaw);
+        if (u?.id) headers["x-user-id"] = u.id;
+        else if (u?.uid) headers["x-user-id"] = u.uid;
+      }
+    } catch {}
+  }
+  return headers;
+};
+
+export default function AuthorProfilePage() {
+  const router = useRouter();
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [tab, setTab] = useState("info");
+  const [tab, setTab] = useState<"info" | "social" | "payout" | "membership">("info");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [unauthorized, setUnauthorized] = useState(false);
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const [resumeFileName, setResumeFileName] = useState<string | null>(null);
 
   useEffect(() => {
-    setTimeout(() => {
-      setProfile(mockEditorProfile);
-      setLoading(false);
-    }, 400);
+    fetchProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSave = () => {
-    setIsEditing(false);
-    console.log("Saved Profile:", profile);
+  const getAuthHeaders = (): Record<string, string> => buildJsonHeaders();
+
+  const fetchProfile = async () => {
+    setLoading(true);
+    setError(null);
+    setUnauthorized(false);
+
+    const headers = getAuthHeaders();
+
+    try {
+      const res = await fetch(`${API_BASE}/editor/profile`, {
+        method: "GET",
+        headers,
+        credentials: "include",
+      });
+
+      if (res.status === 401) {
+        setUnauthorized(true);
+        setProfile(null);
+        setError("Unauthorized. Please sign in.");
+        setLoading(false);
+        return;
+      }
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setError(body?.error || `Error fetching profile: ${res.statusText}`);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
+      const data = await res.json().catch(() => null);
+      if (data?.status === "success" && data.data) {
+        const p: Profile = {
+          id: data.data.user_id || data.data.user_id,
+          email: data.data.email,
+          role: data.data.role,
+          name: data.data.display_name || data.data.name,
+          photo: data.data.profile_photo_url || data.data.photo,
+          location: data.data.location,
+          legalName: data.data.legalName,
+          qualifications: data.data.qualifications,
+          specialty: data.data.specialty,
+          tags: data.data.tags || [],
+          socialLinks: data.data.socialLinks || {},
+          payoutDetails: data.data.payoutDetails || {},
+          isVerified: data.data.is_verified || false,
+          joinedDate: data.data.joined_date,
+          stats: data.data.stats || {
+            articles: 0,
+            views: 0,
+            certificates: 0,
+            earnings: 0,
+          },
+          membership: data.data.membership || null,
+          resumeUrl: data.data.resume_url || null,
+          experience_months: data.data.experience_months || 0,
+          fields: data.data.fields || [],
+        };
+        setProfile(p);
+        setResumeFileName(p.resumeUrl ? extractFileName(p.resumeUrl) : null);
+      } else {
+        setError("Unexpected response from server");
+        setProfile(null);
+      }
+    } catch (err: any) {
+      console.error("Error fetching profile:", err);
+      setError(err?.message || "Network error");
+      setProfile(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handlePhotoChange = (e: any) => {
+  const extractFileName = (url?: string | null) => {
+    if (!url) return null;
+    try {
+      const parts = url.split("/");
+      return parts[parts.length - 1].split("?")[0];
+    } catch {
+      return url;
+    }
+  };
+
+  const formatNumber = (n?: number) => {
+    if (n == null) return "-";
+    return typeof n === "number" && n >= 1000 ? `${Math.round(n / 1000)}K` : String(n);
+  };
+
+  const handleEditProfile = () => {
+    setIsEditing(true);
+    setTab("info");
+  };
+
+  /**
+   * Updated handleSaveProfile:
+   * - Build minimal payload with only non-empty fields
+   * - Convert experience_months to integer if present
+   * - Only include fields if they are non-empty (prevents accidental validation errors)
+   * - If server returns validation error object (body.errors), show it in UI
+   */
+  const handleSaveProfile = async () => {
+    if (!profile) return;
+    setSaving(true);
+    setError(null);
+
+    try {
+      // Build a minimal payload: send only keys that are present and non-empty
+      const updates: any = {};
+
+      const pushIf = (key: string, val: any) => {
+        if (val === undefined || val === null) return;
+        if (typeof val === "string") {
+          if (val.trim() === "") return;
+          updates[key] = val.trim();
+        } else if (Array.isArray(val)) {
+          if (val.length === 0) return;
+          updates[key] = val;
+        } else if (typeof val === "number") {
+          // include numbers (could be 0)
+          updates[key] = Number(val);
+        } else {
+          updates[key] = val;
+        }
+      };
+
+      pushIf("display_name", profile.name);
+      pushIf("email", profile.email);
+      pushIf("location", profile.location);
+      pushIf("legalName", profile.legalName);
+      pushIf("qualifications", profile.qualifications);
+      pushIf("specialty", profile.specialty);
+
+      // fields: ensure it's an array if provided
+      if (profile.fields !== undefined && profile.fields !== null) {
+        if (Array.isArray(profile.fields)) {
+          if (profile.fields.length > 0) updates["fields"] = profile.fields;
+        } else if (typeof profile.fields === "string") {
+          const arr = (profile.fields as string)
+            .split(",")
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+          if (arr.length > 0) updates["fields"] = arr;
+        }
+      }
+
+      if (profile.experience_months !== undefined && profile.experience_months !== null) {
+        const num = Number(profile.experience_months);
+        if (!Number.isNaN(num)) updates["experience_months"] = Math.floor(num);
+      }
+
+      if (profile.resumeUrl) pushIf("resume_url", profile.resumeUrl);
+
+      // If updates is empty, nothing to save
+      if (Object.keys(updates).length === 0) {
+        setError("No changes to save.");
+        setSaving(false);
+        return;
+      }
+
+      const headers = getAuthHeaders();
+      const res = await fetch(`${API_BASE}/editor/profile`, {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify(updates),
+      });
+
+      const body = await res.json().catch(() => null);
+
+      if (res.status === 401) {
+        setUnauthorized(true);
+        setError("Unauthorized. Please sign in to update profile.");
+        setSaving(false);
+        return;
+      }
+
+      if (!res.ok) {
+        // If backend provides structured validation errors, surface them
+        if (body?.errors && typeof body.errors === "object") {
+          const parts: string[] = [];
+          for (const [k, v] of Object.entries(body.errors)) {
+            if (Array.isArray(v)) parts.push(`${k}: ${v.join(", ")}`);
+            else parts.push(`${k}: ${String(v)}`);
+          }
+          const msg = `Validation failed: ${parts.join(" ; ")}`;
+          console.warn("Profile save validation failed:", body);
+          setError(msg);
+          setSaving(false);
+          return;
+        }
+
+        // fallback: a message string from the server
+        const errMsg = body?.message || body?.error || `Failed to update profile (${res.status})`;
+        console.warn("Profile save failed response:", body);
+        setError(errMsg);
+        setSaving(false);
+        return;
+      }
+
+      // success
+      if (body?.status === "success") {
+        await fetchProfile();
+        setIsEditing(false);
+      } else {
+        if (body?.message) setError(body.message);
+        else setError("Failed to update profile: unexpected response");
+      }
+    } catch (err: any) {
+      console.error("Error saving profile:", err);
+      setError(err?.message || "Network error when saving");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0]) return;
-    const url = URL.createObjectURL(e.target.files[0]);
-    setProfile((p: any) => ({ ...p, photo: url }));
+    const file = e.target.files[0];
+
+    // client-side preview
+    const url = URL.createObjectURL(file);
+    setProfile((p) => (p ? { ...p, photo: url } : p));
+
+    try {
+      const token = getTokenFromStorage();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE}/author/profile/photo`, {
+        method: "PUT",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({ photoUrl: url }),
+      });
+
+      if (res.status === 401) {
+        setUnauthorized(true);
+        setError("Unauthorized. Please sign in to update photo.");
+        return;
+      }
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setError(body?.error || "Failed to update profile photo");
+        return;
+      }
+
+      const body = await res.json().catch(() => null);
+      if (body?.success && body.photoUrl) {
+        setProfile((p) => (p ? { ...p, photo: body.photoUrl } : p));
+      }
+    } catch (err) {
+      console.error("Error uploading photo:", err);
+      setError("Error uploading photo");
+    }
+  };
+
+  const handleResumeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.[0]) return;
+    const file = e.target.files[0];
+    setResumeFileName(file.name);
+    setUploadingResume(true);
+    setError(null);
+
+    try {
+      const token = getTokenFromStorage();
+      const form = new FormData();
+      form.append("resume", file);
+
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE}/editor/profile/resume`, {
+        method: "PUT",
+        headers,
+        credentials: "include",
+        body: form,
+      });
+
+      if (res.status === 401) {
+        setUnauthorized(true);
+        setError("Unauthorized. Please sign in to upload resume.");
+        setUploadingResume(false);
+        return;
+      }
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setError(body?.message || "Failed to upload resume");
+        setUploadingResume(false);
+        return;
+      }
+
+      const body = await res.json().catch(() => null);
+      if (body?.status === "success" && body.data?.resume_url) {
+        setProfile((p) => (p ? { ...p, resumeUrl: body.data.resume_url } : p));
+      } else {
+        setError("Unexpected response from server");
+      }
+    } catch (err: any) {
+      console.error("Error uploading resume:", err);
+      setError(err?.message || "Network error when uploading resume");
+    } finally {
+      setUploadingResume(false);
+    }
+  };
+
+  const updateField = (field: keyof Profile, value: any) => {
+    setProfile((prev) => (prev ? { ...prev, [field]: value } : prev));
   };
 
   if (loading) {
-    return <div className="p-6 animate-pulse text-slate-600">Loading...</div>;
+    return (
+      <div className="p-4">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 w-1/3 bg-slate-200 rounded" />
+          <div className="h-48 bg-white rounded shadow" />
+        </div>
+      </div>
+    );
   }
 
-  /* ----------------------------------------------------
-        MAIN UI
-  ---------------------------------------------------- */
-
   return (
-    <div className="min-h-screen p-6 max-w-5xl mx-auto text-slate-800 dark:text-slate-100">
-
-      {/* HEADER */}
-      <div className="flex justify-between items-center mb-6">
+    <div className="space-y-7 p-3 md:p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
+      >
         <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <User className="text-indigo-600" /> Editor Profile
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <User className="h-6 w-6 text-indigo-600" /> Editor Profile
           </h1>
-          <p className="text-[10px] text-slate-500">Manage your editorial identity & account</p>
+          <p className="text-sm text-slate-500">
+            Manage your public profile and account settings
+          </p>
         </div>
 
         {!isEditing ? (
           <Button
+            onClick={handleEditProfile}
             className="bg-indigo-600 text-white rounded-full px-4 flex items-center gap-2"
-            onClick={() => setIsEditing(true)}
           >
-            <Edit size={14} /> Edit
+            <Edit className="h-4 w-4" /> Edit Profile
           </Button>
         ) : (
           <div className="flex gap-2">
             <Button
-              className="bg-green-600 text-white rounded-full px-3 text-xs"
-              onClick={handleSave}
+              onClick={handleSaveProfile}
+              className="bg-green-600 text-white rounded-full px-4 flex items-center gap-2"
+              disabled={saving}
             >
-              Save
+              💾 {saving ? "Saving..." : "Save Profile"}
             </Button>
             <Button
               variant="ghost"
-              className="text-xs"
-              onClick={() => setIsEditing(false)}
+              onClick={() => {
+                setIsEditing(false);
+                fetchProfile();
+              }}
             >
               Cancel
             </Button>
           </div>
         )}
+      </motion.div>
+
+      {error && (
+        <div className="text-sm text-rose-600 bg-rose-50 border border-rose-100 p-3 rounded">
+          {error}
+        </div>
+      )}
+
+      <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}>
+        <Card className="rounded-2xl border">
+          <CardContent className="p-4 flex flex-col sm:flex-row items-center sm:items-start gap-4">
+            <div className="relative">
+              <img
+                src={profile?.photo || "/author.png"}
+                alt="Editor"
+                className="h-16 w-16 sm:h-20 sm:w-20 rounded-full object-cover border-2 border-indigo-500/40"
+              />
+              {isEditing && (
+                <label className="absolute bottom-0 right-0 bg-indigo-600 text-white p-1 rounded-full cursor-pointer">
+                  <Upload size={12} />
+                  <input type="file" className="hidden" onChange={handlePhotoChange} />
+                </label>
+              )}
+            </div>
+
+            <div className="flex-1 text-center sm:text-left space-y-1">
+              <h2 className="font-semibold text-lg">{profile?.name || "Unknown"}</h2>
+              <div className="flex flex-col sm:flex-row gap-2 text-xs sm:text-sm text-slate-600">
+                <span className="flex items-center gap-1">
+                  <Mail className="h-3 w-3" /> {profile?.email || "-"}
+                </span>
+                <span className="flex items-center gap-1">
+                  <MapPin className="h-3 w-3" /> {profile?.location || "-"}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard icon={<FileText className="h-5 w-5" />} label="Articles Published" value={profile?.stats?.articles ?? 0} />
+        <StatCard icon={<Eye className="h-5 w-5" />} label="Total Views" value={formatNumber(profile?.stats?.views)} />
+        <StatCard icon={<Award className="h-5 w-5" />} label="Certificates" value={profile?.stats?.certificates ?? 0} />
+        <StatCard icon={<Banknote className="h-5 w-5" />} label="Earnings" value={`$${formatNumber(profile?.stats?.earnings as any as number)}`} />
       </div>
 
-      {/* PROFILE CARD */}
-      <Card className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm mb-8">
-        <CardContent className="p-5 flex items-center gap-6">
-
-          {/* IMAGE */}
-          <div className="relative">
-            <img
-              src={profile.photo}
-              className="h-20 w-20 rounded-full object-cover border"
-            />
-
-            {isEditing && (
-              <label className="absolute bottom-0 right-0 bg-indigo-600 text-white p-1 rounded-full cursor-pointer">
-                <Upload size={12} />
-                <input type="file" className="hidden" onChange={handlePhotoChange} />
-              </label>
-            )}
-          </div>
-
-          {/* TEXT */}
-          <div className="flex-1 space-y-1">
-            <p className="font-semibold text-lg">{profile.name}</p>
-            <p className="text-[10px] flex gap-1 items-center text-slate-500">
-              <Mail size={12}/> {profile.email}
-            </p>
-            <p className="text-[10px] flex gap-1 items-center text-slate-500">
-              <MapPin size={12}/> {profile.location}
-            </p>
-            <p className="text-[10px] text-indigo-500">{profile.role}</p>
-            <p className="text-[10px] text-slate-400">Joined: {profile.joinedDate}</p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* CAROUSEL MENU (Author-style) */}
-      <div className="flex overflow-x-auto gap-6 pb-3 border-b mb-6 text-sm hide-scrollbar">
-        <CarouselTab label="Personal Info" active={tab === "info"} icon={<User size={14} />} onClick={() => setTab("info")} />
-        <CarouselTab label="Social Links" active={tab === "social"} icon={<Link2 size={14} />} onClick={() => setTab("social")} />
-        <CarouselTab label="Payout Details" active={tab === "payout"} icon={<CreditCard size={14} />} onClick={() => setTab("payout")} />
-        <CarouselTab label="Membership" active={tab === "membership"} icon={<Crown size={14} />} onClick={() => setTab("membership")} />
+      <div className="flex flex-wrap border-b gap-4 text-sm justify-center sm:justify-start">
+        <TabBtn active={tab === "info"} onClick={() => setTab("info")} icon={<User size={14} />}>
+          Personal Info
+        </TabBtn>
+        <TabBtn active={tab === "social"} onClick={() => setTab("social")} icon={<Link2 size={14} />}>
+          Social Links
+        </TabBtn>
+        <TabBtn active={tab === "payout"} onClick={() => setTab("payout")} icon={<CreditCard size={14} />}>
+          Payout Details
+        </TabBtn>
+        <TabBtn active={tab === "membership"} onClick={() => setTab("membership")} icon={<Crown size={14} />}>
+          Membership
+        </TabBtn>
       </div>
 
-      {/* TABS CONTENT */}
-      {tab === "info" && <InfoSection profile={profile} isEditing={isEditing} setProfile={setProfile} />}
-      {tab === "social" && <SocialSection profile={profile} isEditing={isEditing} setProfile={setProfile} />}
-      {tab === "payout" && <PayoutSection profile={profile} isEditing={isEditing} setProfile={setProfile} />}
-      {tab === "membership" && <MembershipSection profile={profile} />}
+      {tab === "info" && (
+        <PersonalInfoSection
+          profile={profile ?? ({} as Profile)}
+          isEditing={isEditing}
+          onChange={(f, v) => updateField(f as any, v)}
+          onSave={handleSaveProfile}
+          onResumeChange={handleResumeChange}
+          uploadingResume={uploadingResume}
+          resumeFileName={resumeFileName}
+        />
+      )}
+      {tab === "social" && <SocialLinksSection profile={profile ?? {}} isEditing={isEditing} onChange={(k, v) => {
+        setProfile((p) => (p ? { ...p, socialLinks: { ...p.socialLinks, [k]: v } } : p));
+      }} onSave={handleSaveProfile} />}
+      {tab === "payout" && <PayoutSection profile={profile ?? {}} isEditing={isEditing} onChange={(k, v) => {
+        setProfile((p) => (p ? { ...p, payoutDetails: { ...p.payoutDetails, [k]: v } } : p));
+      }} onSave={handleSaveProfile} />}
+      {tab === "membership" && <MembershipSection formatNumber={formatNumber} membership={profile?.membership} />}
 
+      {unauthorized && (
+        <div className="text-xs text-slate-600 mt-2">
+          You are not signed in — some actions (edit/save) require signing in.
+        </div>
+      )}
     </div>
   );
 }
 
-/* ----------------------------------------------------
-   COMPONENTS
----------------------------------------------------- */
+/* ---------- small subcomponents below ---------- */
 
-function CarouselTab({ label, active, icon, onClick }: any) {
+function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
   return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-1 pb-2 whitespace-nowrap ${
-        active ? "text-indigo-600 border-b-2 border-indigo-600 font-medium" : "text-slate-500"
-      }`}
-    >
-      {icon} {label}
+    <motion.div whileHover={{ y: -2 }}>
+      <Card className="rounded-2xl border">
+        <CardContent className="p-4 flex justify-between items-center">
+          <div className="text-right flex-1">
+            <p className="text-[10px] text-slate-500">{label}</p>
+            <p className="text-lg sm:text-xl font-semibold">{value}</p>
+          </div>
+          <div className="ml-2 p-2 rounded-full bg-indigo-50 text-indigo-600">{icon}</div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+function TabBtn({ active, onClick, icon, children }: { active: boolean; onClick: () => void; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} className={`flex items-center gap-1 pb-1 ${active ? "border-b-2 border-indigo-600 font-medium" : "text-slate-600"}`}>
+      {icon} {children}
     </button>
   );
 }
 
-function InfoSection({ profile, isEditing, setProfile }: any) {
+function Field({ icon, label, value, editable = false, onChange }: { icon: React.ReactNode; label: string; value: string | any; editable?: boolean; onChange?: (value: string) => void; }) {
   return (
-    <Card className="rounded-xl border bg-white dark:bg-slate-800 mb-10">
-      <CardContent className="p-5 space-y-4">
-        <h3 className="text-sm font-semibold flex gap-1 items-center mb-3">
-          <User size={14}/> Personal Information
-        </h3>
-
-        <Field label="Display Name" value={profile.name} editable={isEditing}
-          onChange={(v: string) => setProfile((p: any) => ({ ...p, name: v }))} />
-
-        <Field label="Email Address" value={profile.email} editable={false} />
-
-        <Field label="Location" value={profile.location} editable={isEditing}
-          onChange={(v: string) => setProfile((p: any) => ({ ...p, location: v }))} />
-
-        {/* BIO */}
-        <div>
-          <label className="text-xs text-slate-500 flex gap-1 items-center mb-1">
-            <FileTextIcon size={12}/> Bio
-          </label>
-          <textarea
-            className="w-full rounded-xl border bg-slate-100 dark:bg-slate-900 text-xs p-3"
-            disabled={!isEditing}
-            value={profile.bio}
-            rows={4}
-            onChange={e => setProfile((p: any) => ({ ...p, bio: e.target.value }))}
-          />
-        </div>
-
-        {/* SPECIALIZATIONS */}
-        <div>
-          <label className="text-xs text-slate-500 flex gap-1 items-center">
-            <Tag size={12}/> Specializations
-          </label>
-
-          {isEditing ? (
-            <input
-              className="border rounded-lg p-2 text-xs bg-slate-100 dark:bg-slate-900 mt-1"
-              value={profile.specializations.join(", ")}
-              onChange={(e) =>
-                setProfile((p: any) => ({
-                  ...p,
-                  specializations: e.target.value.split(",").map((s) => s.trim()),
-                }))
-              }
-            />
-          ) : (
-            <div className="mt-1 flex gap-2 flex-wrap">
-              {profile.specializations.map((s: string, i: number) => (
-                <span key={i} className="px-2 py-1 text-[10px] bg-indigo-100 text-indigo-700 rounded-full">
-                  {s}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SocialSection({ profile, isEditing, setProfile }: any) {
-  return (
-    <Card className="rounded-xl border bg-white dark:bg-slate-800 mb-10">
-      <CardContent className="p-5 space-y-4">
-        <h3 className="text-sm font-semibold flex gap-1 items-center mb-2">
-          <Link2 size={14}/> Social Links
-        </h3>
-
-        {["twitter", "linkedin", "website"].map((key) => (
-          <Field
-            key={key}
-            label={key.charAt(0).toUpperCase() + key.slice(1)}
-            value={profile.socialLinks[key]}
-            editable={isEditing}
-            onChange={(v: string) =>
-              setProfile((p: any) => ({
-                ...p,
-                socialLinks: { ...p.socialLinks, [key]: v },
-              }))
-            }
-          />
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function PayoutSection({ profile, isEditing, setProfile }: any) {
-  const payout = profile.payout;
-
-  return (
-    <Card className="rounded-xl border bg-white dark:bg-slate-800 mb-10">
-      <CardContent className="p-5 space-y-4">
-        <h3 className="text-sm font-semibold flex gap-1 items-center mb-3">
-          <CreditCard size={14}/> Payment & Payout Details
-        </h3>
-
-        {/* Payment Method */}
-        <Field label="Preferred Method" value={payout.method} editable={isEditing}
-          onChange={(v: string) => setProfile((p: any) => ({ ...p, payout: { ...payout, method: v } }))} />
-
-        {/* BANK DETAILS */}
-        {(payout.method === "bank" || isEditing) && (
-          <>
-            <Field label="Bank Name" value={payout.bankName} editable={isEditing}
-              onChange={(v: string) => setProfile((p: any) => ({ ...p, payout: { ...payout, bankName: v } }))} />
-
-            <Field label="Account Holder" value={payout.accountHolder} editable={isEditing}
-              onChange={(v: string) => setProfile((p: any) => ({ ...p, payout: { ...payout, accountHolder: v } }))} />
-
-            <Field label="Account Number" value={payout.accountNumber} editable={isEditing}
-              onChange={(v: string) => setProfile((p: any) => ({ ...p, payout: { ...payout, accountNumber: v } }))} />
-
-            <Field label="IFSC / SWIFT" value={payout.ifsc} editable={isEditing}
-              onChange={(v: string) => setProfile((p: any) => ({ ...p, payout: { ...payout, ifsc: v } }))} />
-          </>
-        )}
-
-        {/* PAYPAL */}
-        {(payout.method === "paypal" || isEditing) && (
-          <Field label="PayPal Email" value={payout.paypal} editable={isEditing}
-            onChange={(v: string) => setProfile((p: any) => ({ ...p, payout: { ...payout, paypal: v } }))} />
-        )}
-
-        {/* UPI */}
-        {(payout.method === "upi" || isEditing) && (
-          <Field label="UPI ID" value={payout.upi} editable={isEditing}
-            onChange={(v: string) => setProfile((p: any) => ({ ...p, payout: { ...payout, upi: v } }))} />
-        )}
-
-        {/* TAX ID */}
-        <Field label="Tax ID / PAN" value={payout.taxId} editable={isEditing}
-          onChange={(v: string) => setProfile((p: any) => ({ ...p, payout: { ...payout, taxId: v } }))} />
-      </CardContent>
-    </Card>
-  );
-}
-
-function MembershipSection({ profile }: any) {
-  return (
-    <Card className="rounded-xl border bg-indigo-50 dark:bg-indigo-900/30 mb-10">
-      <CardContent className="p-5 space-y-3 text-center">
-        <h3 className="text-sm font-semibold flex justify-center gap-1 items-center">
-          <Crown size={14}/> Editor Premium Status
-        </h3>
-
-        <p className="text-xs text-slate-600 dark:text-slate-300">
-          Premium editor benefits activated automatically based on performance.
-        </p>
-
-        <ul className="text-[11px] space-y-1 text-left mx-auto w-fit">
-          <li>✨ Priority assignment queue</li>
-          <li>📊 Advanced editing analytics</li>
-          <li>🎓 Certificate eligibility</li>
-          <li>🚀 Faster review cycles</li>
-        </ul>
-
-        <Button className="rounded-full px-4 text-xs bg-indigo-600 text-white mt-2">
-          View Achievements
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function Field({ label, value, editable, onChange }: any) {
-  return (
-    <div className="flex flex-col text-xs">
-      <label className="text-slate-500 text-[11px] mb-1">{label}</label>
-
+    <div className="flex items-center gap-2 text-xs sm:text-sm">
+      <span className="text-indigo-600">{icon}</span>
+      <label className="w-32 text-left font-medium text-slate-600 text-xs">{label}</label>
       {editable ? (
-        <input
-          value={value || ""}
-          onChange={(e) => onChange(e.target.value)}
-          className="border rounded-lg p-2 bg-slate-100 dark:bg-slate-900"
-        />
+        <input className="flex-1 border px-3 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-900" value={value ?? ""} onChange={e => onChange?.(e.target.value)} />
       ) : (
-        <p className="text-slate-300 dark:text-slate-200 text-xs">{value || "-"}</p>
+        <span className="text-slate-800 text-xs">{value ?? "-"}</span>
       )}
     </div>
+  );
+}
+
+function PersonalInfoSection({ profile, isEditing, onChange, onSave, onResumeChange, uploadingResume, resumeFileName }:
+  { profile: Profile; isEditing: boolean; onChange: (field: string, value: any) => void; onSave: () => void; onResumeChange?: (e: React.ChangeEvent<HTMLInputElement>) => void; uploadingResume?: boolean; resumeFileName?: string | null }) {
+  return (
+    <Card className="rounded-2xl border">
+      <CardContent className="p-5 grid gap-4">
+        <h3 className="font-semibold text-base flex items-center gap-2"><User className="h-4 w-4 text-indigo-600" /> Personal Information</h3>
+
+        <Field icon={<User size={14} />} label="Display Name" value={profile?.name || ""} editable={isEditing} onChange={v => onChange("name", v)} />
+        <Field icon={<User size={14} />} label="Legal Name" value={profile?.legalName || ""} editable={isEditing} onChange={v => onChange("legalName", v)} />
+        <Field icon={<Mail size={14} />} label="Email Address" value={profile?.email || ""} editable={isEditing}onChange={(v) => onChange("email", v)} />
+        <Field icon={<MapPin size={14} />} label="Location" value={profile?.location || ""} editable={isEditing} onChange={v => onChange("location", v)} />
+        <Field icon={<Tag size={14} />} label="Specialty" value={profile?.specialty || ""} editable={isEditing} onChange={v => onChange("specialty", v)} />
+
+        {/* fields (comma separated) */}
+        <div className="grid sm:grid-cols-2 gap-2">
+          <div>
+            <p className="text-xs font-medium text-slate-500 flex items-center gap-1"><BarChart3 size={12} /> Experience (months)</p>
+            <input type="number" min={0} className="w-full border px-3 py-2 rounded-xl text-xs" value={profile?.experience_months ?? 0} disabled={!isEditing} onChange={e => onChange("experience_months", Number(e.target.value))} />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-500 flex items-center gap-1"><Tag size={12} /> Editor Fields (comma separated)</p>
+            <input className="w-full border px-3 py-2 rounded-xl text-xs" value={(profile?.fields || []).join(", ")} disabled={!isEditing} onChange={e => onChange("fields", e.target.value.split(",").map(s => s.trim()).filter(Boolean))} />
+          </div>
+        </div>
+
+        {/* Resume */}
+        <div>
+          <p className="text-xs font-medium text-slate-500 flex items-center gap-1"><FileText size={12} /> Resume</p>
+          <div className="flex items-center gap-2">
+            {profile.resumeUrl ? (
+              <a href={profile.resumeUrl} target="_blank" rel="noreferrer" className="text-xs underline">
+                {resumeFileName ?? "View uploaded resume"}
+              </a>
+            ) : (
+              <span className="text-xs text-slate-600">No resume uploaded</span>
+            )}
+            {isEditing && (
+              <label className="ml-auto inline-flex items-center gap-2 cursor-pointer bg-indigo-600 text-white px-3 py-1 rounded-full text-xs">
+                <Upload size={12} /> {uploadingResume ? "Uploading..." : "Upload Resume"}
+                <input type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={onResumeChange} />
+              </label>
+            )}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-1">Supported: PDF, DOC, DOCX — maximum size depends on backend limits.</p>
+        </div>
+
+        {isEditing && <Button onClick={onSave} className="w-fit mx-auto text-xs rounded-full bg-indigo-600 text-white px-4">Save Changes</Button>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SocialLinksSection({ profile, isEditing, onChange, onSave }: { profile: Profile; isEditing: boolean; onChange: (key: string, value: string) => void; onSave: () => void; }) {
+  return (
+    <Card className="rounded-2xl border">
+      <CardContent className="p-4 grid gap-3">
+        <h3 className="font-semibold text-center flex items-center justify-center gap-1">🌐 Social & Portfolio Links</h3>
+        <input placeholder="Twitter URL" className="border px-3 py-2 rounded-xl text-xs" value={profile.socialLinks?.twitter || ""} disabled={!isEditing} onChange={e => onChange("twitter", e.target.value)} />
+        <input placeholder="LinkedIn URL" className="border px-3 py-2 rounded-xl text-xs" value={profile.socialLinks?.linkedin || ""} disabled={!isEditing} onChange={e => onChange("linkedin", e.target.value)} />
+        <input placeholder="Portfolio Website" className="border px-3 py-2 rounded-xl text-xs" value={profile.socialLinks?.website || ""} disabled={!isEditing} onChange={e => onChange("website", e.target.value)} />
+        {isEditing && <Button onClick={onSave} className="w-fit mx-auto mt-3 text-xs rounded-full bg-indigo-600 text-white">Save Links</Button>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PayoutSection({ profile, isEditing, onChange, onSave }: { profile: Profile; isEditing: boolean; onChange: (key: string, value: string) => void; onSave: () => void; }) {
+  return (
+    <Card className="rounded-2xl border">
+      <CardContent className="p-4 grid gap-3">
+        <h3 className="font-semibold text-center">💳 Payout Details</h3>
+        <input placeholder="Bank Name" className="border px-3 py-2 rounded-xl text-xs" value={profile.payoutDetails?.bankName || ""} disabled={!isEditing} onChange={e => onChange("bankName", e.target.value)} />
+        <input placeholder="Account Holder" className="border px-3 py-2 rounded-xl text-xs" value={profile.payoutDetails?.accountHolder || ""} disabled={!isEditing} onChange={e => onChange("accountHolder", e.target.value)} />
+        <input placeholder="Account Number" className="border px-3 py-2 rounded-xl text-xs" value={profile.payoutDetails?.accountNumber || ""} disabled={!isEditing} onChange={e => onChange("accountNumber", e.target.value)} />
+        <input placeholder="IFSC/SWIFT Code" className="border px-3 py-2 rounded-xl text-xs" value={profile.payoutDetails?.ifsc || ""} disabled={!isEditing} onChange={e => onChange("ifsc", e.target.value)} />
+        {isEditing && <Button onClick={onSave} className="w-fit mx-auto text-xs rounded-full bg-emerald-600 text-white px-4 mt-2">Save Payout Info</Button>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MembershipSection({ formatNumber, membership }: { formatNumber: (n?: number) => string; membership: any }) {
+  const price = membership?.priceMonthly ?? 19.99;
+  const renew = membership?.endDate ?? "N/A";
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <Card className="rounded-2xl border bg-indigo-50 dark:bg-indigo-900/30">
+        <CardContent className="p-4 grid gap-3 text-center">
+          <h3 className="font-semibold flex justify-center items-center gap-1"><Crown size={16} className="text-indigo-600" /> Premium Author Plan</h3>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <Card className="rounded-xl p-3 border"><p className="text-xl font-semibold">${price}</p><p className="text-[10px] text-slate-500">Monthly Price</p></Card>
+            <Card className="rounded-xl p-3 border"><p className="text-sm font-semibold">{renew}</p><p className="text-[10px] text-slate-500">Renewal Date</p></Card>
+          </div>
+          <ul className="text-[10px] space-y-1">
+            <li>✨ Unlimited article submissions</li>
+            <li>🚀 Priority review queue</li>
+            <li>📊 Advanced analytics</li>
+            <li>🎓 Certificate eligibility</li>
+          </ul>
+          <div className="flex gap-2 justify-center">
+            <Button variant="outline" size="sm" className="text-[10px] rounded-full">Change Plan</Button>
+            <Button size="sm" className="bg-rose-600 text-white text-[10px] rounded-full">Cancel Subscription</Button>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
   );
 }

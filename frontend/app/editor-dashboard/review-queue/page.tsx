@@ -1,3 +1,4 @@
+// app/editor/review-queue/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -20,6 +21,7 @@ import {
   CheckCircle2,
   Search,
   Sparkles,
+  CheckSquare as CheckSquareIcon,
 } from "lucide-react";
 
 /* --------------------------------------------------------------
@@ -285,7 +287,7 @@ export default function ReviewQueuePage() {
                       variant="outline"
                       className="text-[10px] px-3 py-1.5 rounded-full bg-white dark:bg-slate-900 border"
                     >
-                      <CheckSquare size={11} /> QC Check
+                      <CheckSquareIcon size={11} /> QC Check
                     </Button>
 
                     <Button

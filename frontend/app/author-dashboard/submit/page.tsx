@@ -155,13 +155,36 @@ export default function SubmitArticlePage() {
     fetchCategories();
   }, []);
 
-  const getToken = () => localStorage.getItem("token") || "";
+  /**
+   * Safe getToken(): checks several keys that your app uses in different places.
+   * Returns null if none found.
+   */
+  const getToken = () => {
+    try {
+      if (typeof window === "undefined") return null;
+      // check common keys you used in different pages
+      const k1 = localStorage.getItem("ACCESS_TOKEN");
+      if (k1 && k1.trim()) return k1.trim();
+      const k2 = localStorage.getItem("token");
+      if (k2 && k2.trim()) return k2.trim();
+      const k3 = localStorage.getItem("idToken");
+      if (k3 && k3.trim()) return k3.trim();
+      return null;
+    } catch (err) {
+      console.warn("getToken error", err);
+      return null;
+    }
+  };
 
   const fetchCategories = async () => {
     try {
       setIsLoadingCategories(true);
+      const token = getToken();
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+
       const res = await fetch(`${API_ROOT}/article/categories`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
+        headers,
       });
       if (!res.ok) {
         setStatusMsg("⚠️ Could not load categories");
@@ -226,12 +249,13 @@ export default function SubmitArticlePage() {
 
   // Create article (we will create as draft first, then finalize)
   const createArticleOnServer = async (payload: any) => {
+    const token = getToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
     const res = await fetch(`${API_ROOT}/article/author/articles`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`,
-      },
+      headers,
       body: JSON.stringify(payload),
     });
     const body = await (async () => {
@@ -257,11 +281,13 @@ export default function SubmitArticlePage() {
   const uploadFileToServer = async (file: File, articleIdParam: string) => {
     const form = new FormData();
     form.append("file", file);
+    const token = getToken();
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+
     const res = await fetch(`${API_ROOT}/article/author/articles/${encodeURIComponent(articleIdParam)}/attachments`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
-      },
+      headers,
       body: form,
     });
 
@@ -280,12 +306,13 @@ export default function SubmitArticlePage() {
 
   // Finalize (patch status to submitted)
   const finalizeSubmission = async (articleIdParam: string) => {
+    const token = getToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
     const res = await fetch(`${API_ROOT}/article/author/articles/${encodeURIComponent(articleIdParam)}/status`, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`,
-      },
+      headers,
       body: JSON.stringify({ status: "submitted" }),
     });
     if (!res.ok) {
@@ -317,11 +344,13 @@ export default function SubmitArticlePage() {
       if (typeof similarityThreshold !== "undefined") params.append("threshold", String(similarityThreshold));
       if (typeof similarityTopN !== "undefined") params.append("top", String(similarityTopN));
 
+      const token = getToken();
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+
       const res = await fetch(`${API_ROOT}/article/author/articles/${encodeURIComponent(aid)}/similarity?${params.toString()}`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
-        },
+        headers,
       });
 
       const body = await (async () => {
@@ -373,12 +402,15 @@ export default function SubmitArticlePage() {
     setPlagiarismReportUrl(null);
 
     try {
+      const token = getToken();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
       const res = await fetch(`${API_ROOT}/article/articles/${encodeURIComponent(articleId)}/plagiarism`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken()}`,
-        },
+        headers,
         body: JSON.stringify({ language: plagLanguage }),
       });
 

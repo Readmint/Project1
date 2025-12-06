@@ -3,6 +3,7 @@
 import Sidebar from "@/components/editor-dashboard/Sidebar";
 import TopNavbar from "@/components/editor-dashboard/TopNavbar";
 import { useState } from "react";
+import ChatbotAuthor from "@/components/author-dashboard/chatbotAuthor";
 
 export default function EditorDashboardLayout({ children }: { children: React.ReactNode }) {
   const sidebarWidth = 256; // w-64 = 256px
@@ -44,6 +45,10 @@ export default function EditorDashboardLayout({ children }: { children: React.Re
 
       {/* ✅ ensures nothing visually hits footer too early */}
       <div className="h-2"></div>
+      <ChatbotAuthor 
+              // No config prop needed - the component handles everything internally
+              className="z-50"
+            />
 
     </div>
   );

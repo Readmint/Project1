@@ -18,6 +18,7 @@ import subscriptionRoutes from './routes/subscription.routes';
 import authorRoutes from './routes/author.routes';
 import articleRoutes from './routes/article.routes';
 import readerRoutes from './routes/reader.routes';
+import editorRoutes from './routes/editor.routes';
 import { setupSwagger } from './config/swagger';
 
 dotenv.config();
@@ -52,6 +53,7 @@ app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/author', authorRoutes);
 app.use('/api/article', articleRoutes);
 app.use('/api/reader',readerRoutes);
+app.use('/api/editor', editorRoutes);
 
 /* ------------------------------- Health Check ---------------------------------- */
 app.get('/api/health-check', (req, res) => {

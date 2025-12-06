@@ -1,4 +1,4 @@
-// database.ts
+// src/config/database.ts
 import admin from 'firebase-admin';
 import mysql from 'mysql2/promise';
 import { logger } from '../utils/logger';
@@ -8,7 +8,7 @@ let firestoreDb: any = null;
 
 export const connectDatabase = async (): Promise<void> => {
   try {
-    // Connect to Firebase Firestore (for authentication)
+    // Connect to Firebase Firestore (for authentication / storage bucket)
     if (process.env.FIREBASE_PROJECT_ID) {
       console.log('🔄 Initializing Firebase Firestore...');
       const serviceAccount = {
@@ -19,14 +19,13 @@ export const connectDatabase = async (): Promise<void> => {
 
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
-        storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`
+        storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`,
       });
 
       firestoreDb = admin.firestore();
       logger.info('Connected to Firebase Firestore');
       console.log('✅ Connected to Firebase Firestore');
       console.log('📦 Storage bucket:', process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`);
-      
     }
 
     // Connect to MySQL (for app data)
@@ -41,18 +40,18 @@ export const connectDatabase = async (): Promise<void> => {
         user: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
         database: process.env.DB_NAME,
-        port: parseInt(process.env.DB_PORT || '3306'),
+        port: parseInt(process.env.DB_PORT || '3306', 10),
       });
 
       mysqlDb = connection;
       logger.info('Connected to MySQL database');
       console.log('✅ Connected to MySQL database');
-      
+
       // Test connection
       const [dbResult]: any = await mysqlDb.execute('SELECT DATABASE() as db_name');
-      console.log('📋 Current database:', dbResult[0].db_name);
-      
-      // Initialize tables
+      console.log('📋 Current database:', dbResult && dbResult[0] ? dbResult[0].db_name : '(unknown)');
+
+      // Initialize tables (creates all necessary tables including editor-related ones)
       await initializeTables();
     }
 
@@ -60,7 +59,6 @@ export const connectDatabase = async (): Promise<void> => {
     if (!firestoreDb && !mysqlDb) {
       throw new Error('No database configuration found');
     }
-
   } catch (error) {
     console.error('❌ Database connection failed:', error);
     logger.error('Database connection failed:', error);
@@ -70,6 +68,13 @@ export const connectDatabase = async (): Promise<void> => {
 
 const initializeTables = async (): Promise<void> => {
   console.log('🔄 Starting MySQL table initialization...');
+
+  /**
+   * Core tables
+   *
+   * NOTE: Some CREATE TABLE statements use UUID() or JSON functions
+   * which depend on your MySQL / MariaDB version. Adjust if necessary.
+   */
 
   const createUsersTable = `
     CREATE TABLE IF NOT EXISTS users (
@@ -84,55 +89,55 @@ const initializeTables = async (): Promise<void> => {
     )
   `;
 
-   const createAuthorsTable = `
-  CREATE TABLE IF NOT EXISTS authors (
-    id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    user_id VARCHAR(36) NOT NULL UNIQUE,
-    display_name VARCHAR(255),
-    profile_photo_url VARCHAR(500),
-    location VARCHAR(255),
-    bio TEXT,
-    legal_name VARCHAR(255),
-    qualifications TEXT,
-    specialty VARCHAR(255),
-    tags JSON,
-    social_links JSON,
-    payout_details JSON,
-    is_verified BOOLEAN DEFAULT FALSE,
-    joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    INDEX idx_user_id (user_id),
-    INDEX idx_display_name (display_name),
-    INDEX idx_specialty (specialty),
-    INDEX idx_is_verified (is_verified),
-    INDEX idx_joined_date (joined_date)
-  )
-`;
+  const createAuthorsTable = `
+    CREATE TABLE IF NOT EXISTS authors (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      user_id VARCHAR(36) NOT NULL UNIQUE,
+      display_name VARCHAR(255),
+      profile_photo_url VARCHAR(500),
+      location VARCHAR(255),
+      bio TEXT,
+      legal_name VARCHAR(255),
+      qualifications TEXT,
+      specialty VARCHAR(255),
+      tags JSON,
+      social_links JSON,
+      payout_details JSON,
+      is_verified BOOLEAN DEFAULT FALSE,
+      joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_user_id (user_id),
+      INDEX idx_display_name (display_name),
+      INDEX idx_specialty (specialty),
+      INDEX idx_is_verified (is_verified),
+      INDEX idx_joined_date (joined_date)
+    )
+  `;
 
-const createAuthorStatsTable = `
-  CREATE TABLE IF NOT EXISTS author_stats (
-    id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    author_id VARCHAR(36) NOT NULL UNIQUE,
-    articles_published INT DEFAULT 0,
-    total_views INT DEFAULT 0,
-    certificates_earned INT DEFAULT 0,
-    total_earnings DECIMAL(10,2) DEFAULT 0.00,
-    monthly_earnings DECIMAL(10,2) DEFAULT 0.00,
-    author_rank INT DEFAULT 0,
-    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (author_id) REFERENCES authors(id) ON DELETE CASCADE,
-    INDEX idx_author_id (author_id),
-    INDEX idx_rank (author_rank),
-    INDEX idx_total_earnings (total_earnings DESC),
-    INDEX idx_articles_published (articles_published DESC),
-    INDEX idx_last_updated (last_updated DESC)
-  )
-`;
+  const createAuthorStatsTable = `
+    CREATE TABLE IF NOT EXISTS author_stats (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      author_id VARCHAR(36) NOT NULL UNIQUE,
+      articles_published INT DEFAULT 0,
+      total_views INT DEFAULT 0,
+      certificates_earned INT DEFAULT 0,
+      total_earnings DECIMAL(10,2) DEFAULT 0.00,
+      monthly_earnings DECIMAL(10,2) DEFAULT 0.00,
+      author_rank INT DEFAULT 0,
+      last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (author_id) REFERENCES authors(id) ON DELETE CASCADE,
+      INDEX idx_author_id (author_id),
+      INDEX idx_rank (author_rank),
+      INDEX idx_total_earnings (total_earnings DESC),
+      INDEX idx_articles_published (articles_published DESC),
+      INDEX idx_last_updated (last_updated DESC)
+    )
+  `;
 
   const createCategoriesTable = `
     CREATE TABLE IF NOT EXISTS categories (
-      category_id VARCHAR(36) PRIMARY KEY  DEFAULT (UUID()),
+      category_id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
       name VARCHAR(255) NOT NULL,
       description TEXT,
       slug VARCHAR(255) UNIQUE,
@@ -141,7 +146,6 @@ const createAuthorStatsTable = `
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_is_active (is_active),
       INDEX idx_slug (slug)
-
     )
   `;
 
@@ -150,7 +154,7 @@ const createAuthorStatsTable = `
       id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
       title VARCHAR(500) NOT NULL,
       author_id VARCHAR(36) NOT NULL,
-      category_id VARCHAR(36) ,
+      category_id VARCHAR(36),
       content LONGTEXT,
       status ENUM('draft', 'submitted', 'under_review', 'changes_requested', 'approved', 'published', 'rejected') DEFAULT 'draft',
       featured BOOLEAN DEFAULT FALSE,
@@ -184,23 +188,23 @@ const createAuthorStatsTable = `
       INDEX idx_uploaded_by (uploaded_by)
     )
   `;
-   const createPlagiarismReportsTable = `
-  CREATE TABLE IF NOT EXISTS plagiarism_reports (
-    id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    article_id VARCHAR(36) NOT NULL,
-    run_by VARCHAR(36),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    similarity_summary JSON NULL,
-    report_storage_path VARCHAR(1000),
-    report_public_url VARCHAR(2000),
-    status ENUM('pending','completed','failed') DEFAULT 'completed',
-    notes TEXT,
-    FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE,
-    INDEX idx_article_id_plag (article_id),
-    INDEX idx_run_by (run_by)
-  )
-`;
 
+  const createPlagiarismReportsTable = `
+    CREATE TABLE IF NOT EXISTS plagiarism_reports (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      article_id VARCHAR(36) NOT NULL,
+      run_by VARCHAR(36),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      similarity_summary JSON NULL,
+      report_storage_path VARCHAR(1000),
+      report_public_url VARCHAR(2000),
+      status ENUM('pending','completed','failed') DEFAULT 'completed',
+      notes TEXT,
+      FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE,
+      INDEX idx_article_id_plag (article_id),
+      INDEX idx_run_by (run_by)
+    )
+  `;
 
   const createWorkflowEventsTable = `
     CREATE TABLE IF NOT EXISTS workflow_events (
@@ -246,7 +250,6 @@ const createAuthorStatsTable = `
     )
   `;
 
-  // NEW: Payment Orders Table for PayU
   const createPaymentOrdersTable = `
     CREATE TABLE IF NOT EXISTS payment_orders (
       id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -277,7 +280,6 @@ const createAuthorStatsTable = `
     )
   `;
 
-  // NEW: User Subscriptions Table
   const createUserSubscriptionsTable = `
     CREATE TABLE IF NOT EXISTS user_subscriptions (
       id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -298,7 +300,6 @@ const createAuthorStatsTable = `
     )
   `;
 
-  // NEW: Payment Transactions Log Table
   const createPaymentTransactionsTable = `
     CREATE TABLE IF NOT EXISTS payment_transactions (
       id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -321,9 +322,6 @@ const createAuthorStatsTable = `
     )
   `;
 
-  // -------------------------
-  // NEW: Reader-related tables
-  // -------------------------
   const createReadersTable = `
     CREATE TABLE IF NOT EXISTS readers (
       id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -401,7 +399,83 @@ const createAuthorStatsTable = `
     )
   `;
 
+  // -------------------------
+  // Editor-related tables
+  // -------------------------
+  const createEditorsTable = `
+    CREATE TABLE IF NOT EXISTS editors (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      user_id VARCHAR(36) NOT NULL UNIQUE,
+      display_name VARCHAR(255),
+      profile_photo_url VARCHAR(1000),
+      resume_url VARCHAR(2000),
+      resume_name VARCHAR(512),
+      fields JSON,
+      experience_months INT DEFAULT 0,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_editor_user (user_id),
+      INDEX idx_is_active_editor (is_active)
+    )
+  `;
+
+  const createEditorAssignmentsTable = `
+    CREATE TABLE IF NOT EXISTS editor_assignments (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      editor_id VARCHAR(36) NOT NULL,
+      article_id VARCHAR(36) NOT NULL,
+      assigned_by VARCHAR(36),
+      assigned_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      due_date TIMESTAMP NULL,
+      priority ENUM('High','Medium','Mid','Low') DEFAULT 'Medium',
+      status ENUM('assigned','in_progress','completed','cancelled') DEFAULT 'assigned',
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (editor_id) REFERENCES editors(id) ON DELETE CASCADE,
+      FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE,
+      INDEX idx_editor_assignment (editor_id),
+      INDEX idx_article_assignment (article_id),
+      INDEX idx_status_assignment (status)
+    )
+  `;
+
+   const createEditorActivityTable = `
+    CREATE TABLE IF NOT EXISTS editor_activity (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      editor_id VARCHAR(36) NULL,
+      article_id VARCHAR(36) NULL,
+      action VARCHAR(100) NOT NULL,
+      action_detail JSON,
+      ip_address VARCHAR(50),
+      user_agent VARCHAR(1000),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (editor_id) REFERENCES editors(id) ON DELETE SET NULL,
+      FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE SET NULL,
+      INDEX idx_editor_activity (editor_id),
+      INDEX idx_article_activity (article_id)
+    )
+  `;
+
+  const createVersionsTable = `
+    CREATE TABLE IF NOT EXISTS versions (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      article_id VARCHAR(36) NOT NULL,
+      editor_id VARCHAR(36) NULL,
+      title VARCHAR(500),
+      content LONGTEXT,
+      meta JSON,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      restored_from VARCHAR(36) NULL,
+      INDEX idx_version_article (article_id),
+      INDEX idx_version_editor (editor_id)
+    )
+  `;
+
   try {
+    // Core
     console.log('🔄 Creating users table...');
     await mysqlDb.execute(createUsersTable);
     console.log('✅ Users table created');
@@ -430,7 +504,6 @@ const createAuthorStatsTable = `
     await mysqlDb.execute(createPlagiarismReportsTable);
     console.log('✅ Plagiarism reports table created');
 
-
     console.log('🔄 Creating workflow_events table...');
     await mysqlDb.execute(createWorkflowEventsTable);
     console.log('✅ Workflow events table created');
@@ -455,7 +528,7 @@ const createAuthorStatsTable = `
     await mysqlDb.execute(createPaymentTransactionsTable);
     console.log('✅ Payment transactions table created');
 
-    // Reader-related creations
+    // Reader-related
     console.log('🔄 Creating readers table...');
     await mysqlDb.execute(createReadersTable);
     console.log('✅ Readers table created');
@@ -476,6 +549,24 @@ const createAuthorStatsTable = `
     await mysqlDb.execute(createRecommendationsTable);
     console.log('✅ Recommendations table created');
 
+    // Editor-related
+    console.log('🔄 Creating editors table...');
+    await mysqlDb.execute(createEditorsTable);
+    console.log('✅ Editors table created');
+
+    console.log('🔄 Creating editor_assignments table...');
+    await mysqlDb.execute(createEditorAssignmentsTable);
+    console.log('✅ Editor assignments table created');
+
+    console.log('🔄 Creating editor_activity table...');
+    await mysqlDb.execute(createEditorActivityTable);
+    console.log('✅ Editor activity table created');
+
+    // Versions
+    console.log('🔄 Creating versions table...');
+    await mysqlDb.execute(createVersionsTable);
+    console.log('✅ Versions table created');
+
     // Insert default subscription plans if table is empty
     await seedDefaultPlans();
 
@@ -490,17 +581,18 @@ const createAuthorStatsTable = `
   }
 };
 
-// NEW: Seed default subscription plans
+/**
+ * Seed default subscription plans (idempotent)
+ */
 const seedDefaultPlans = async (): Promise<void> => {
   try {
     console.log('🌱 Checking for default subscription plans...');
-    
-    // Check if plans already exist
+
     const [existingPlans]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM subscription_plans');
-    
-    if (existingPlans[0].count === 0) {
+
+    if (existingPlans && existingPlans[0] && existingPlans[0].count === 0) {
       console.log('🌱 Seeding default subscription plans...');
-      
+
       const defaultPlans = [
         {
           name: 'Free Plan',
@@ -511,9 +603,9 @@ const seedDefaultPlans = async (): Promise<void> => {
             'Limited reading access',
             'Basic content',
             'Ad-supported',
-            'Community access'
+            'Community access',
           ]),
-          duration: 'monthly'
+          duration: 'monthly',
         },
         {
           name: 'Standard Plan',
@@ -526,9 +618,9 @@ const seedDefaultPlans = async (): Promise<void> => {
             'Offline access',
             'Unlimited bookmarks',
             'Download for offline reading',
-            'Email support'
+            'Email support',
           ]),
-          duration: 'monthly'
+          duration: 'monthly',
         },
         {
           name: 'Premium Plan',
@@ -542,10 +634,10 @@ const seedDefaultPlans = async (): Promise<void> => {
             'Early access',
             'Priority support',
             'Certificate of achievements',
-            'Monthly webinars'
+            'Monthly webinars',
           ]),
-          duration: 'monthly'
-        }
+          duration: 'monthly',
+        },
       ];
 
       for (const plan of defaultPlans) {
@@ -555,14 +647,13 @@ const seedDefaultPlans = async (): Promise<void> => {
           [plan.name, plan.description, plan.price_monthly, plan.price_yearly, plan.features, plan.duration]
         );
       }
-      
+
       console.log('✅ Default subscription plans seeded');
-      
-      // Verify seeding
+
       const [plansCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM subscription_plans');
-      console.log(`📊 Total subscription plans: ${plansCount[0].count}`);
+      console.log(`📊 Total subscription plans: ${plansCount && plansCount[0] ? plansCount[0].count : 0}`);
     } else {
-      console.log(`📊 Subscription plans already exist (${existingPlans[0].count} plans found)`);
+      console.log(`📊 Subscription plans already exist (${existingPlans && existingPlans[0] ? existingPlans[0].count : 'unknown'} plans found)`);
     }
   } catch (error) {
     console.error('❌ Error seeding default plans:', error);
@@ -573,16 +664,14 @@ const seedDefaultPlans = async (): Promise<void> => {
 const verifyTableCreation = async (): Promise<void> => {
   try {
     console.log('🔍 Verifying MySQL table creation...');
-    const [tables]: any = await mysqlDb.execute(`
-      SELECT TABLE_NAME 
-      FROM information_schema.tables 
-      WHERE table_schema = ?
-    `, [process.env.DB_NAME]);
+    const [tables]: any = await mysqlDb.execute(
+      `SELECT TABLE_NAME FROM information_schema.tables WHERE table_schema = ?`,
+      [process.env.DB_NAME]
+    );
 
-    const tableNames = tables.map((t: any) => t.TABLE_NAME);
+    const tableNames = (tables || []).map((t: any) => t.TABLE_NAME);
     console.log('📋 MySQL tables found:', tableNames);
 
-    // Updated expected tables list (includes newly added tables)
     const expectedTables = [
       'users',
       'authors',
@@ -597,25 +686,28 @@ const verifyTableCreation = async (): Promise<void> => {
       'payment_orders',
       'user_subscriptions',
       'payment_transactions',
-      // Reader related
       'readers',
       'reading_progress',
       'user_bookmarks',
       'user_likes',
-      'recommendations'
+      'recommendations',
+      'editors',
+      'editor_assignments',
+      'editor_activity',
+      'versions',
     ];
-    
-    const createdTables = expectedTables.filter(table => tableNames.includes(table));
-    
+
+    const createdTables = expectedTables.filter((table) => tableNames.includes(table));
+
     console.log('📊 Table creation status:');
-    expectedTables.forEach(table => {
+    expectedTables.forEach((table) => {
       if (tableNames.includes(table)) {
         console.log(`   ✅ ${table}`);
       } else {
         console.log(`   ❌ ${table} (missing)`);
       }
     });
-    
+
     if (createdTables.length === expectedTables.length) {
       console.log('✅ All MySQL tables created successfully');
     } else {
@@ -626,7 +718,9 @@ const verifyTableCreation = async (): Promise<void> => {
   }
 };
 
-// Export both databases
+/**
+ * Export helpers used elsewhere in the project
+ */
 export const getMySQLDatabase = (): any => {
   if (!mysqlDb) {
     throw new Error('MySQL database not initialized');
@@ -643,34 +737,38 @@ export const getFirestoreDatabase = (): any => {
 
 // Main getDatabase function - defaults to MySQL for your existing code
 export const getDatabase = (): any => {
-  // Return MySQL by default (for your existing auth controller)
   if (mysqlDb) {
     return mysqlDb;
   }
   throw new Error('No database initialized');
 };
 
-// Add a function to check both database statuses
+/**
+ * Health / status helpers
+ */
 export const checkDatabaseStatus = async (): Promise<any> => {
   const status: any = {};
 
   try {
     if (mysqlDb) {
       const [result]: any = await mysqlDb.execute('SELECT 1 as test');
-      status.mysql = { connected: true, test: result[0].test };
-      
-      // Check table counts
-      const [usersCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM users');
-      const [plansCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM subscription_plans');
-      const [ordersCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM payment_orders');
-      const [subscriptionsCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM user_subscriptions');
-      
-      status.mysql.table_counts = {
-        users: usersCount[0].count,
-        subscription_plans: plansCount[0].count,
-        payment_orders: ordersCount[0].count,
-        user_subscriptions: subscriptionsCount[0].count
-      };
+      status.mysql = { connected: true, test: result && result[0] ? result[0].test : 0 };
+
+      try {
+        const [usersCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM users');
+        const [plansCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM subscription_plans');
+        const [ordersCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM payment_orders');
+        const [subscriptionsCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM user_subscriptions');
+
+        status.mysql.table_counts = {
+          users: usersCount && usersCount[0] ? usersCount[0].count : 0,
+          subscription_plans: plansCount && plansCount[0] ? plansCount[0].count : 0,
+          payment_orders: ordersCount && ordersCount[0] ? ordersCount[0].count : 0,
+          user_subscriptions: subscriptionsCount && subscriptionsCount[0] ? subscriptionsCount[0].count : 0,
+        };
+      } catch (innerErr) {
+        logger.warn('checkDatabaseStatus: failed to fetch counts', innerErr);
+      }
     } else {
       status.mysql = { connected: false };
     }
@@ -680,7 +778,7 @@ export const checkDatabaseStatus = async (): Promise<any> => {
 
   try {
     if (firestoreDb) {
-      // Simple Firestore test
+      // simple read test
       await firestoreDb.collection('test').limit(1).get();
       status.firestore = { connected: true };
     } else {
@@ -693,48 +791,42 @@ export const checkDatabaseStatus = async (): Promise<any> => {
   return status;
 };
 
-// NEW: Function to get database schema info
+/**
+ * Schema introspection helper
+ */
 export const getDatabaseSchema = async (): Promise<any> => {
   if (!mysqlDb) {
     throw new Error('MySQL database not initialized');
   }
 
   try {
-    const [tables]: any = await mysqlDb.execute(`
-      SELECT 
-        TABLE_NAME,
-        TABLE_ROWS,
-        DATA_LENGTH,
-        INDEX_LENGTH,
-        CREATE_TIME,
-        UPDATE_TIME
-      FROM information_schema.tables 
-      WHERE table_schema = ?
-      ORDER BY TABLE_NAME
-    `, [process.env.DB_NAME]);
+    const [tables]: any = await mysqlDb.execute(
+      `SELECT TABLE_NAME, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME
+       FROM information_schema.tables
+       WHERE table_schema = ?
+       ORDER BY TABLE_NAME`,
+      [process.env.DB_NAME]
+    );
 
-    const schemaInfo = [];
-    
-    for (const table of tables) {
-      const [columns]: any = await mysqlDb.execute(`
-        SELECT 
-          COLUMN_NAME,
-          DATA_TYPE,
-          IS_NULLABLE,
-          COLUMN_DEFAULT,
-          COLUMN_KEY,
-          EXTRA
-        FROM information_schema.columns 
-        WHERE table_schema = ? AND table_name = ?
-        ORDER BY ORDINAL_POSITION
-      `, [process.env.DB_NAME, table.TABLE_NAME]);
+    const schemaInfo: any[] = [];
+
+    for (const table of tables || []) {
+      const [columns]: any = await mysqlDb.execute(
+        `SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY, EXTRA
+         FROM information_schema.columns
+         WHERE table_schema = ? AND table_name = ?
+         ORDER BY ORDINAL_POSITION`,
+        [process.env.DB_NAME, table.TABLE_NAME]
+      );
 
       schemaInfo.push({
         table_name: table.TABLE_NAME,
         table_rows: table.TABLE_ROWS,
         data_length: table.DATA_LENGTH,
         index_length: table.INDEX_LENGTH,
-        columns: columns
+        create_time: table.CREATE_TIME,
+        update_time: table.UPDATE_TIME,
+        columns: columns || [],
       });
     }
 

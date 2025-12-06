@@ -1,3 +1,4 @@
+// app/editor/preview/[id]/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -9,7 +10,7 @@ export default function EditorPreviewPage() {
   const [article, setArticle] = useState<ArticlePreviewData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Replace with real backend later
+  // Replace with real backend later — mock for now
   useEffect(() => {
     setTimeout(() => {
       setArticle({

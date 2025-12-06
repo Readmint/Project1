@@ -1,3 +1,4 @@
+// src/app/(your-path)/login/page.tsx  (use your original path; file contents below)
 "use client";
 
 import Link from "next/link";
@@ -9,6 +10,34 @@ import Image from "next/image";
 import { postJSON } from "@/lib/api";
 import { signInWithGoogle } from "@/lib/firebaseClient";
 import { useRouter } from "next/navigation";
+
+/**
+ * Helper: robust token extractor from various backend shapes
+ */
+function extractToken(resp: any): string | undefined {
+  return (
+    resp?.data?.token ||
+    resp?.data?.accessToken ||
+    resp?.token ||
+    resp?.accessToken ||
+    resp?.data?.idToken ||
+    undefined
+  );
+}
+
+/**
+ * Helper: decode JWT payload (unsafe client-side decode only for UI use)
+ */
+function decodeJwt(token?: string) {
+  if (!token) return null;
+  try {
+    const payload = token.split(".")[1];
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(json);
+  } catch (e) {
+    return null;
+  }
+}
 
 export default function Login() {
   const router = useRouter();
@@ -50,8 +79,10 @@ export default function Login() {
       router.push("/author-dashboard");
     } else if (role === "reader") {
       router.push("/reader-dashboard");
+    } else if (role === "editor") {
+      router.push("/editor-dashboard");
     } else {
-      // fallback for other roles (reviewer, editor, content_manager, admin, etc.)
+      // fallback for other roles (reviewer, content_manager, admin, etc.)
       router.push("/");
     }
   };
@@ -62,19 +93,51 @@ export default function Login() {
 
     setIsLoading(true);
     try {
+      // Send only email/password (do not include idToken: undefined)
       const res = await postJSON("/auth/login", { email, password });
-      const token = res.data.token;
-      const user = res.data.user;
 
-      // store app JWT
-      if (token) localStorage.setItem("token", token);
-      // store user data
-      if (user) localStorage.setItem("user", JSON.stringify(user));
+      // Try to extract token from many possible shapes
+      const token = extractToken(res);
 
-      // Redirect based on user role (author / reader / others)
-      redirectByRole(user);
+      // Save token to localStorage under ACCESS_TOKEN (consistent)
+      if (token) {
+        try {
+          localStorage.setItem("ACCESS_TOKEN", token);
+        } catch (err) {
+          console.warn("Could not write token to localStorage", err);
+        }
+      }
+
+      // Server might return a user object too
+      let user = res?.data?.user || res?.user || null;
+
+      // If server didn't return user, derive basic user object from token payload
+      if (!user && token) {
+        const payload = decodeJwt(token);
+        user = {
+          id: payload?.sub || payload?.uid || payload?.userId,
+          email: payload?.email,
+          role: payload?.role || payload?.roles || payload?.roleName,
+        };
+      }
+
+      if (user) {
+        try {
+          localStorage.setItem("user", JSON.stringify(user));
+        } catch (err) {
+          console.warn("Could not write user to localStorage", err);
+        }
+      }
+
+      // Redirect using user info if available, else to homepage
+      if (user) redirectByRole(user);
+      else router.push("/");
     } catch (err: any) {
-      const message = err?.data?.message || "Login failed";
+      console.error("Login error:", err);
+      const message =
+        (err && err.data && err.data.message) ||
+        err?.message ||
+        "Login failed";
       setErrors((prev) => ({ ...prev, password: message }));
     } finally {
       setIsLoading(false);
@@ -101,7 +164,11 @@ export default function Login() {
       };
 
       // Store Firebase-only user data in localStorage (temporary)
-      localStorage.setItem("user", JSON.stringify(userData));
+      try {
+        localStorage.setItem("user", JSON.stringify(userData));
+      } catch (err) {
+        console.warn("localStorage write failed", err);
+      }
 
       // Try to read role from Firebase ID token claims (custom claims)
       try {
@@ -112,13 +179,22 @@ export default function Login() {
         if (claimRole) {
           // If role available in claims, create a richer user object and redirect
           const finalUser = { ...userData, role: claimRole };
-          localStorage.setItem("user", JSON.stringify(finalUser));
+          try {
+            localStorage.setItem("user", JSON.stringify(finalUser));
+          } catch (err) {
+            console.warn("could not persist finalUser", err);
+          }
 
           // Optionally store idToken as app token (if you want)
           const idToken = idTokenResult?.token;
-          if (idToken) localStorage.setItem("token", idToken);
+          if (idToken) {
+            try {
+              localStorage.setItem("ACCESS_TOKEN", idToken);
+            } catch (err) {
+              console.warn("Could not write idToken to localStorage", err);
+            }
+          }
 
-          // Redirect by role (author/reader/others)
           redirectByRole(finalUser);
           return;
         }
@@ -138,12 +214,22 @@ export default function Login() {
         });
 
         // Store app token if backend returns one
-        if (res.data?.token) {
-          localStorage.setItem("token", res.data.token);
+        const token = extractToken(res);
+        if (token) {
+          try {
+            localStorage.setItem("ACCESS_TOKEN", token);
+          } catch (err) {
+            console.warn("Could not persist ACCESS_TOKEN", err);
+          }
         }
-        const backendUser = res.data?.user;
+
+        const backendUser = res?.data?.user || res?.user;
         if (backendUser) {
-          localStorage.setItem("user", JSON.stringify(backendUser));
+          try {
+            localStorage.setItem("user", JSON.stringify(backendUser));
+          } catch (err) {
+            console.warn("Could not persist backendUser", err);
+          }
           redirectByRole(backendUser);
           return; // we already redirected
         }
