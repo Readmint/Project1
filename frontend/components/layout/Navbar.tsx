@@ -166,7 +166,7 @@ export default function Navbar() {
       case 'admin':
         return "/admin-dashboard";
       default:
-        return "/dashboard"; // For readers
+        return "/reader-dashboard"; // For readers
     }
   };
 
@@ -186,7 +186,7 @@ export default function Navbar() {
       case 'admin':
         return "/admin-dashboard/profile";
       default:
-        return "/profile"; // For readers
+        return "/reader-dashboard/profile"; // For readers
     }
   };
 

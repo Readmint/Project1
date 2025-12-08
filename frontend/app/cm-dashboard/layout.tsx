@@ -1,6 +1,6 @@
 "use client";
 
-import Sidebar from "@/components/editor-dashboard/Sidebar";
+import Sidebar from "@/components/content-manager/Sidebar";
 import TopNavbar from "@/components/editor-dashboard/TopNavbar";
 import { useState } from "react";
 import ChatbotAuthor from "@/components/author-dashboard/chatbotAuthor";
