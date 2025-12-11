@@ -106,17 +106,32 @@
 }
 
 .bubble-bg::before {
+  will-change: transform, opacity;
+  
   content: "";
-  position: fixed; 
+  position: fixed; /* changed from absolute → fixed */
   inset: 0;
-  z-index: -9999;     /* SUPER behind */
-  pointer-events: none;
+  z-index: -1; /* ensures it stays behind EVERYTHING */
+
+  pointer-events: none; /* ensures no scroll blocking */
 
   background-image:
-    radial-gradient(circle at 20% 25%, rgba(212, 164, 72, 0.12), transparent 50%),
-    radial-gradient(circle at 80% 15%, rgba(89, 96, 217, 0.15), transparent 55%),
+    radial-gradient(circle at 20% 25%, rgba(212, 164, 72, 0.20), transparent 50%),
+    radial-gradient(circle at 80% 15%, rgba(89, 96, 217, 0.18), transparent 55%),
     radial-gradient(circle at 50% 90%, rgba(89, 96, 217, 0.10), transparent 60%);
-
+  
   animation: auroraFlow 18s ease-in-out infinite;
-  opacity: 1;
+  opacity: 0.85;
+}
+
+@keyframes auroraFlow {
+  0% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-25px) scale(1.03);
+  }
+  100% {
+    transform: translateY(0px) scale(1);
+  }
 }

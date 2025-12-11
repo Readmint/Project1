@@ -42,7 +42,7 @@ export default function Page() {
   const router = useRouter();
 
   return (
-    <main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
+    <main className="w-full px-6 py-6 space-y-6">
       {/* HEADER */}
       <header>
         <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-white">

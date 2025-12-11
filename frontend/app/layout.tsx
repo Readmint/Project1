@@ -6,7 +6,7 @@ import Footer from "@/components/layout/Footer";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="bubble-bg" suppressHydrationWarning>
       <body className="bubble-bg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors">
         <Navbar />
         {children}
