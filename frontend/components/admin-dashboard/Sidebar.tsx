@@ -1,4 +1,3 @@
-// components/admin-dashboard/Sidebar.tsx
 "use client";
 
 import Link from "next/link";
@@ -30,12 +29,21 @@ export default function Sidebar() {
 
       <div className="space-y-1">
         {nav.map((item) => {
-          const active = pathname === item.href || pathname?.startsWith(item.href + "/");
+          const isHome = item.href === "/admin-dashboard";
+
+          const active = isHome
+            ? pathname === "/admin-dashboard" // ONLY highlight on exact match
+            : pathname === item.href || pathname.startsWith(item.href + "/");
+
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`block px-3 py-2 rounded-lg transition-all ${active ? "bg-muted text-primary font-medium" : "hover:bg-muted text-foreground"}`}
+              className={`block px-3 py-2 rounded-lg transition-all ${
+                active
+                  ? "bg-muted text-primary font-medium"
+                  : "hover:bg-muted text-foreground"
+              }`}
             >
               {item.name}
             </Link>
@@ -44,7 +52,9 @@ export default function Sidebar() {
       </div>
 
       <div className="mt-6 pt-4 border-t border-border">
-        <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted">Support</button>
+        <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted">
+          Support
+        </button>
       </div>
     </nav>
   );
