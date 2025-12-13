@@ -1,35 +1,26 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import {
-  LogOut as LogOutIcon,
-  LayoutDashboard,
-  BookMarked,
-  Library,
-  Award,
-  Menu,
-  X,
-  Settings,
-  User,
-  CreditCard,
-} from "lucide-react";
 import LogoutConfirmation from "../LogoutConfirmation";
 
-const navItems = [
-  { label: "Dashboard", path: "/reader-dashboard", icon: LayoutDashboard },
-  { label: "My Library", path: "/reader-dashboard/library", icon: Library },
-  { label: "Bookmarks", path: "/reader-dashboard/bookmarks", icon: BookMarked },
-  { label: "Certificates", path: "/reader-dashboard/certificates", icon: Award },
-  { label: "Billing & Orders", path: "/reader-dashboard/billing", icon: CreditCard }, // ✅ NEW
-  { label: "Profile", path: "/reader-dashboard/profile", icon: User },
-  { label: "Settings", path: "/reader-dashboard/settings", icon: Settings },
+/* -----------------------------------------------------------
+   READER NAV STRUCTURE — CONTENT UNCHANGED
+----------------------------------------------------------- */
+
+const nav = [
+  { name: "Dashboard", href: "/reader-dashboard" },
+  { name: "My Library", href: "/reader-dashboard/library" },
+  { name: "Bookmarks", href: "/reader-dashboard/bookmarks" },
+  { name: "Certificates", href: "/reader-dashboard/certificates" },
+  { name: "Billing & Orders", href: "/reader-dashboard/billing" },
+  { name: "Profile", href: "/reader-dashboard/profile" },
+  { name: "Settings", href: "/reader-dashboard/settings" },
 ];
 
 export default function Sidebar() {
-  const router = useRouter();
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const handleLogout = async () => {
@@ -40,20 +31,24 @@ export default function Sidebar() {
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && key.startsWith("reader_")) keysToRemove.push(key);
+        if (key && key.startsWith("reader_")) {
+          keysToRemove.push(key);
+        }
       }
       keysToRemove.forEach((k) => localStorage.removeItem(k));
 
       window.dispatchEvent(new Event("readerLogout"));
       window.location.href = "/";
-    } catch (err) {
+    } catch {
       window.location.href = "/";
     }
   };
 
   useEffect(() => {
     const handleStorageChange = () => {
-      if (!localStorage.getItem("user")) window.location.href = "/";
+      if (!localStorage.getItem("user")) {
+        window.location.href = "/";
+      }
     };
 
     const handleReaderLogout = () => {
@@ -71,83 +66,58 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile Toggle */}
-      <button
-        onClick={() => setOpen(true)}
-        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-indigo-600 text-white rounded-lg shadow"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
-
-      {/* Mobile Overlay */}
-      {open && (
-        <div
-          className="fixed inset-0 bg-black/50 z-30 md:hidden"
-          onClick={() => setOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <aside
-        className={`
-          hidden md:flex flex-col w-64 bg-white dark:bg-slate-900
-          border-r border-slate-200 dark:border-slate-700 shadow-lg
-          sticky top-[80px] h-[calc(100vh-80px)] z-10
-        `}
-      >
-        <button
-          onClick={() => setOpen(false)}
-          className="md:hidden absolute top-4 right-4 text-slate-800 dark:text-white"
-        >
-          <X className="h-6 w-6" />
-        </button>
-
-        {/* Branding */}
-        <div className="p-6 pb-2">
-          <h2 className="text-2xl font-bold text-indigo-600">Reader Space</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Reader Dashboard</p>
+      <aside className="h-full p-5 flex flex-col border-r border-border">
+        {/* HEADER */}
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-foreground">
+            Reader Space
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Reading, bookmarks & subscriptions
+          </p>
         </div>
 
-        {/* Navigation */}
-        <nav className="p-6 space-y-1 flex-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = pathname === item.path;
+        {/* NAV */}
+        <nav className="flex-1 space-y-1">
+          {nav.map((item) => {
+            const isHome = item.href === "/reader-dashboard";
+            const active = isHome
+              ? pathname === item.href
+              : pathname === item.href ||
+                pathname.startsWith(item.href + "/");
 
             return (
-              <button
-                key={item.label}
-                onClick={() => {
-                  router.push(item.path);
-                  setOpen(false);
-                }}
-                className={`flex items-center gap-3 w-full text-left px-4 py-3 rounded-lg transition-all
-                ${
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`block px-3 py-2 rounded-lg transition-all ${
                   active
-                    ? "bg-indigo-600 text-white shadow"
-                    : "text-slate-700 dark:text-white hover:bg-indigo-50 dark:hover:bg-slate-800"
+                    ? "bg-muted text-primary font-medium"
+                    : "text-foreground hover:bg-muted"
                 }`}
               >
-                <Icon className="h-5 w-5" />
-                <span className="text-sm font-medium">{item.label}</span>
-              </button>
+                {item.name}
+              </Link>
             );
           })}
         </nav>
 
-        {/* Logout */}
-        <div className="p-6 border-t border-slate-200 dark:border-slate-700">
+        {/* FOOTER ACTIONS */}
+        <div className="pt-4 mt-6 border-t border-border space-y-2">
+          <button className="w-full text-left px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-all">
+            Reader Guidelines
+          </button>
+
           <button
             onClick={() => setShowLogoutConfirm(true)}
-            className="flex items-center gap-3 w-full text-left px-4 py-3 rounded-lg bg-red-600 text-white hover:bg-red-700"
+            className="w-full text-left px-3 py-2 rounded-lg text-sm text-destructive hover:bg-destructive/10 transition-all"
           >
-            <LogOutIcon className="h-5 w-5" />
-            <span className="text-sm font-medium">Log Out</span>
+            Logout
           </button>
         </div>
       </aside>
 
-      {/* Logout Modal */}
+      {/* LOGOUT CONFIRMATION */}
       {showLogoutConfirm && (
         <LogoutConfirmation
           onConfirm={handleLogout}
