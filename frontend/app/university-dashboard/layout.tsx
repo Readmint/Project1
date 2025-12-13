@@ -1,11 +1,11 @@
 // app/admin-dashboard/layout.tsx
 "use client";
 
-import Sidebar from "@/components/admin-dashboard/Sidebar";
-import TopNavbar from "@/components/admin-dashboard/TopNavbar";
+import Sidebar from "@/components/university-dashboard/Sidebar";
+import TopNavbar from "@/components/university-dashboard/TopNavbar";
 import { ReactNode } from "react";
 
-export default function AdminDashboardLayout({ children }: { children: ReactNode }) {
+export default function UniversityDashboardLayout({ children }: { children: ReactNode }) {
   const sidebarWidth = 256;
 
   return (
