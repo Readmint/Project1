@@ -349,6 +349,7 @@ export default function Signup() {
                 <option value="reader">Reader</option>
                 <option value="author">Author</option>
                 <option value="editor">Editor</option>
+                <option value="content_manager">Content Manager </option>
                 <option value="reviewer">Reviewer</option>
               </select>
             </div>

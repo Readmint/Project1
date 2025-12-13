@@ -442,7 +442,40 @@ const initializeTables = async (): Promise<void> => {
     )
   `;
 
-   const createEditorActivityTable = `
+  const createNotificationsTable = `
+    CREATE TABLE IF NOT EXISTS notifications (
+        id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        user_id VARCHAR(36) NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        title VARCHAR(255),
+        message TEXT,
+        is_read BOOLEAN DEFAULT FALSE,
+        link VARCHAR(500),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        INDEX idx_notif_user (user_id),
+        INDEX idx_notif_read (is_read)
+    )
+  `;
+
+  const createCommunicationsTable = `
+    CREATE TABLE IF NOT EXISTS communications (
+        id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        sender_id VARCHAR(36),
+        receiver_id VARCHAR(36),
+        message TEXT,
+        type ENUM('assignment', 'message', 'alert', 'system') DEFAULT 'message',
+        entity_type VARCHAR(50),
+        entity_id VARCHAR(36),
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_comm_sender (sender_id),
+        INDEX idx_comm_receiver (receiver_id),
+        INDEX idx_comm_entity (entity_type, entity_id)
+    )
+  `;
+
+  const createEditorActivityTable = `
     CREATE TABLE IF NOT EXISTS editor_activity (
       id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
       editor_id VARCHAR(36) NULL,
@@ -471,6 +504,25 @@ const initializeTables = async (): Promise<void> => {
       restored_from VARCHAR(36) NULL,
       INDEX idx_version_article (article_id),
       INDEX idx_version_editor (editor_id)
+    )
+  `;
+
+  const createReviewerAssignmentsTable = `
+    CREATE TABLE IF NOT EXISTS reviewer_assignments (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      reviewer_id VARCHAR(36) NOT NULL,
+      article_id VARCHAR(36) NOT NULL,
+      assigned_by VARCHAR(36),
+      assigned_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      due_date TIMESTAMP NULL,
+      status ENUM('assigned','in_progress','completed','declined','cancelled') DEFAULT 'assigned',
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE,
+      INDEX idx_reviewer_assignment (reviewer_id),
+      INDEX idx_article_rev_assignment (article_id),
+      INDEX idx_status_rev_assignment (status)
     )
   `;
 
@@ -562,10 +614,22 @@ const initializeTables = async (): Promise<void> => {
     await mysqlDb.execute(createEditorActivityTable);
     console.log('✅ Editor activity table created');
 
+    console.log('🔄 Creating notifications table...');
+    await mysqlDb.execute(createNotificationsTable);
+    console.log('✅ Notifications table created');
+
+    console.log('🔄 Creating communications table...');
+    await mysqlDb.execute(createCommunicationsTable);
+    console.log('✅ Communications table created');
+
     // Versions
     console.log('🔄 Creating versions table...');
     await mysqlDb.execute(createVersionsTable);
     console.log('✅ Versions table created');
+
+    console.log('🔄 Creating reviewer_assignments table...');
+    await mysqlDb.execute(createReviewerAssignmentsTable);
+    console.log('✅ Reviewer assignments table created');
 
     // Insert default subscription plans if table is empty
     await seedDefaultPlans();
@@ -695,6 +759,9 @@ const verifyTableCreation = async (): Promise<void> => {
       'editor_assignments',
       'editor_activity',
       'versions',
+      'reviewer_assignments',
+      'notifications',
+      'communications',
     ];
 
     const createdTables = expectedTables.filter((table) => tableNames.includes(table));
@@ -717,6 +784,8 @@ const verifyTableCreation = async (): Promise<void> => {
     console.error('❌ Error verifying MySQL tables:', error);
   }
 };
+
+
 
 /**
  * Export helpers used elsewhere in the project

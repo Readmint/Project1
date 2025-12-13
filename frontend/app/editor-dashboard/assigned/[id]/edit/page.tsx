@@ -10,8 +10,8 @@ import { PenTool, Download, Archive } from 'lucide-react';
 import { getJSON, postJSON, ApiError } from '@/lib/api';
 
 // Dynamic import of ReactQuill (no SSR)
-const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
-import 'react-quill/dist/quill.snow.css';
+const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false });
+import 'react-quill-new/dist/quill.snow.css';
 
 type Attachment = {
   id: string;
@@ -98,7 +98,7 @@ export default function EditorAssignedEditPage() {
     if (!articleId) return;
     setSaving(true);
     try {
-      await postJSON(`/editor/articles/${encodeURIComponent(articleId)}/draft`, {
+      await postJSON(`/editor/articles/${encodeURIComponent(articleId)}/save`, {
         content,
         metaTitle,
         metaDescription,
@@ -181,7 +181,7 @@ export default function EditorAssignedEditPage() {
 
   const openVersion = async (v: Version) => {
     try {
-      const resp = await getJSON(`/editor/articles/versions/${encodeURIComponent(v.id)}`);
+      const resp = await getJSON(`/editor/version/${encodeURIComponent(v.id)}`);
       if (resp && resp.status === 'success' && resp.data) {
         setSelectedVersionContent(resp.data.content || resp.data.meta || '');
         setSelectedVersionTitle(resp.data.title || v.title || '');
@@ -257,7 +257,7 @@ export default function EditorAssignedEditPage() {
                       ['clean']
                     ]
                   }} formats={[
-                    'header','font','size','bold','italic','underline','strike','blockquote','list','bullet','indent','link','image','video','color','background','align','code-block','script'
+                    'header', 'font', 'size', 'bold', 'italic', 'underline', 'strike', 'blockquote', 'list', 'bullet', 'indent', 'link', 'image', 'video', 'color', 'background', 'align', 'code-block', 'script'
                   ]} />
                 </div>
 
@@ -291,7 +291,7 @@ export default function EditorAssignedEditPage() {
                     <div key={att.id} className="flex items-center justify-between p-2 rounded border">
                       <div>
                         <div className="text-sm font-medium">{att.filename}</div>
-                        <div className="text-xs text-slate-500">{att.mime_type || ''} • {att.size_bytes ? `${Math.round(att.size_bytes/1024)} KB` : ''}</div>
+                        <div className="text-xs text-slate-500">{att.mime_type || ''} • {att.size_bytes ? `${Math.round(att.size_bytes / 1024)} KB` : ''}</div>
                       </div>
                       <div className="flex items-center gap-2">
                         <Button size="sm" onClick={() => openAttachment(att)} className="px-2 py-1">
@@ -309,7 +309,7 @@ export default function EditorAssignedEditPage() {
               <CardContent>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold">Versions</h3>
-                  <div className="text-xs text-slate-500 flex items-center gap-1"><Archive size={12}/> {versions.length}</div>
+                  <div className="text-xs text-slate-500 flex items-center gap-1"><Archive size={12} /> {versions.length}</div>
                 </div>
 
                 <div className="space-y-2">

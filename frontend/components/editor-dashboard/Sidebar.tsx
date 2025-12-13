@@ -1,37 +1,55 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  FileEdit,
+  ClipboardList,
+  GitBranch,
+  BarChart2,
+  MessageCircle,
+  User,
+  Award,
+  Settings,
+  LogOut,
+  Menu,
+  BookText
+} from "lucide-react";
+
 import LogoutConfirmation from "../LogoutConfirmation";
 
 /* -----------------------------------------------------------
-   EDITOR NAV STRUCTURE — CONTENT UNCHANGED
+   EDITOR NAV STRUCTURE
 ----------------------------------------------------------- */
 
 const navGroups = [
   {
     label: "Workspace",
     items: [
-      { name: "Dashboard", href: "/editor-dashboard" },
-      { name: "Assigned Articles", href: "/editor-dashboard/assigned" },
-      { name: "Review Queue", href: "/editor-dashboard/review-queue" },
-      { name: "Version History", href: "/editor-dashboard/version-history" },
-      { name: "Analytics", href: "/editor-dashboard/analytics" },
+      { label: "Dashboard", path: "/editor-dashboard", icon: LayoutDashboard },
+      { label: "Assigned Articles", path: "/editor-dashboard/assigned", icon: FileEdit },
+      { label: "Review Queue", path: "/editor-dashboard/review-queue", icon: ClipboardList },
+      { label: "Version History", path: "/editor-dashboard/version-history", icon: GitBranch },
+      { label: "Analytics", path: "/editor-dashboard/analytics", icon: BarChart2 },
+      { label: "Communications", path: "/editor-dashboard/communications", icon: MessageCircle },
     ],
   },
   {
     label: "Profile & Tools",
     items: [
-      { name: "Profile", href: "/editor-dashboard/profile" },
-      { name: "Certificates", href: "/editor-dashboard/certificates" },
-      { name: "Settings", href: "/editor-dashboard/settings" },
+      { label: "Profile", path: "/editor-dashboard/profile", icon: User },
+      { label: "Certificates", path: "/editor-dashboard/certificates", icon: Award },
+      { label: "Guidelines", path: "/editor-dashboard/guidelines", icon: BookText },
+      { label: "Settings", path: "/editor-dashboard/settings", icon: Settings },
     ],
   },
 ];
 
 export default function Sidebar() {
+  const router = useRouter();
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const handleLogout = () => {
@@ -63,66 +81,87 @@ export default function Sidebar() {
 
   return (
     <>
-      <aside className="h-full p-5 flex flex-col border-r border-border">
-        {/* HEADER */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-foreground">
-            Editorial Space — Editor
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Article review & version control
+      {/* Mobile Toggle */}
+      <button
+        onClick={() => setOpen(true)}
+        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-indigo-600 text-white rounded-lg shadow"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      {/* Mobile Overlay */}
+      {open && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={() => setOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className="hidden md:flex flex-col w-64 bg-white dark:bg-slate-900 
+  border-r border-slate-200 dark:border-slate-700 shadow-lg
+  sticky top-[80px] h-[calc(100vh-80px)] overflow-y-auto scrollbar-thin z-10"
+      >
+
+        {/* Branding */}
+        <div className="p-6 pb-2">
+          <h2 className="text-2xl font-bold text-indigo-600">ReadMint</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Editor Dashboard
           </p>
         </div>
 
-        {/* NAV */}
-        <nav className="flex-1 space-y-6">
+        {/* Navigation */}
+        <nav className="p-6 space-y-6 flex-1">
           {navGroups.map((group) => (
-            <div key={group.label} className="space-y-1">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground px-3 mb-1">
+            <div key={group.label}>
+              <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-2 pl-4">
                 {group.label}
               </p>
 
               {group.items.map((item) => {
-                const isHome = item.href === "/editor-dashboard";
+                const Icon = item.icon;
+                const isHome = item.path === "/editor-dashboard";
                 const active = isHome
-                  ? pathname === item.href
-                  : pathname === item.href ||
-                    pathname.startsWith(item.href + "/");
+                  ? pathname === item.path
+                  : pathname === item.path || pathname.startsWith(item.path + "/");
 
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`block px-3 py-2 rounded-lg transition-all ${
-                      active
-                        ? "bg-muted text-primary font-medium"
-                        : "text-foreground hover:bg-muted"
-                    }`}
+                  <button
+                    key={item.label}
+                    onClick={() => {
+                      router.push(item.path);
+                      setOpen(false);
+                    }}
+                    className={`flex items-center gap-3 w-full text-left px-4 py-3 rounded-lg transition-all
+                      ${active
+                        ? "bg-indigo-600 text-white shadow"
+                        : "text-slate-700 dark:text-white hover:bg-indigo-50 dark:hover:bg-slate-800"
+                      }`}
                   >
-                    {item.name}
-                  </Link>
+                    <Icon className="h-5 w-5" />
+                    <span className="text-sm font-medium">{item.label}</span>
+                  </button>
                 );
               })}
             </div>
           ))}
         </nav>
 
-        {/* FOOTER ACTIONS */}
-        <div className="pt-4 mt-6 border-t border-border space-y-2">
-          <button className="w-full text-left px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-all">
-            Editor Guidelines
-          </button>
-
+        {/* Logout */}
+        <div className="p-6 border-t border-slate-200 dark:border-slate-700">
           <button
             onClick={() => setShowLogoutConfirm(true)}
-            className="w-full text-left px-3 py-2 rounded-lg text-sm text-destructive hover:bg-destructive/10 transition-all"
+            className="flex items-center gap-3 w-full px-4 py-3 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-all"
           >
-            Logout
+            <LogOut className="h-5 w-5" />
+            <span className="text-sm font-medium">Log Out</span>
           </button>
         </div>
       </aside>
 
-      {/* LOGOUT CONFIRMATION */}
+      {/* Confirm Logout */}
       {showLogoutConfirm && (
         <LogoutConfirmation
           onConfirm={handleLogout}

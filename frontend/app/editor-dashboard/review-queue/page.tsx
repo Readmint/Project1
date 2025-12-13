@@ -1,7 +1,7 @@
 // app/editor/review-queue/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
@@ -143,6 +143,7 @@ const reviewQueue: ReviewQueueArticle[] = [
    BADGES
 -------------------------------------------------------------- */
 
+
 const priorityBadge: Record<Priority, string> = {
   High: "bg-red-100 text-red-600 px-3 py-1 rounded-full text-[10px]",
   Medium: "bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[10px]",
@@ -150,23 +151,29 @@ const priorityBadge: Record<Priority, string> = {
   Low: "bg-slate-200 text-black dark:bg-slate-700 dark:text-white px-3 py-1 rounded-full text-[10px]",
 };
 
-const statusBadge: Record<ReviewStatus, string> = {
-  "In Progress":
-    "bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full text-[10px]",
-  "Pending Review":
-    "bg-orange-100 text-orange-600 px-3 py-1 rounded-full text-[10px]",
-  "Completed Review":
-    "bg-green-100 text-green-600 px-3 py-1 rounded-full text-[10px]",
-  "Needs Revision":
-    "bg-red-200 text-red-700 px-3 py-1 rounded-full text-[10px]",
+const statusBadge: Record<string, string> = {
+  "In Progress": "bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full text-[10px]",
+  "Pending Review": "bg-orange-100 text-orange-600 px-3 py-1 rounded-full text-[10px]",
+  "Completed Review": "bg-green-100 text-green-600 px-3 py-1 rounded-full text-[10px]",
+  "Needs Revision": "bg-red-200 text-red-700 px-3 py-1 rounded-full text-[10px]",
+  "under_review": "bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-[10px]",
+  "approved": "bg-green-100 text-green-600 px-3 py-1 rounded-full text-[10px]",
+  "changes_requested": "bg-orange-100 text-orange-600 px-3 py-1 rounded-full text-[10px]",
+  "completed": "bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-[10px]",
 };
+
 
 /* --------------------------------------------------------------
    PAGE START
 -------------------------------------------------------------- */
 
+import { getJSON } from "@/lib/api";
+
 export default function ReviewQueuePage() {
   const router = useRouter();
+
+  const [reviewQueue, setReviewQueue] = useState<ReviewQueueArticle[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [selected, setSelected] = useState<ReviewQueueArticle | null>(null);
   const [editorNote, setEditorNote] = useState("");
@@ -178,8 +185,54 @@ export default function ReviewQueuePage() {
   const [confirmApprove, setConfirmApprove] = useState(false);
   const [confirmSendToCM, setConfirmSendToCM] = useState(false);
 
+  useEffect(() => {
+    fetchQueue();
+  }, []);
+
+  const fetchQueue = async () => {
+    try {
+      const res = await getJSON("/editor/submitted");
+      if (res.status === 'success') {
+        // Map backend to frontend model
+        const mapped = res.data.map((item: any) => ({
+          id: item.article_id, // utilize article_id for navigation/actions
+          title: item.title,
+          category: item.category || 'Uncategorized',
+          assignedDate: new Date(item.assigned_date).toLocaleDateString(),
+          dueDate: item.due_date ? new Date(item.due_date).toLocaleDateString() : 'No Deadline',
+          priority: item.priority || 'Medium',
+          status: item.article_status || 'under_review',
+          progress: 100, // completed
+          feedback: { // Mock empty feedback as backend doesn't serve it yet here
+            reviewer: "Pending",
+            comments: [],
+            highlighted: [],
+            notes: "Pending review feedback",
+            errors: []
+          },
+          qc: { // Mock QC
+            wordCount: 0,
+            readabilityScore: 0,
+            formattingValid: true,
+            plagiarismResult: "Pending scan",
+            categoryAligned: true,
+            visualStandardCheck: true,
+            adsFreeMedia: true,
+            copyrightSafeMedia: true,
+          }
+        }));
+        setReviewQueue(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to fetch review queue", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const qcArticle =
     qcPanel !== null ? reviewQueue.find((a) => a.id === qcPanel) : null;
+
 
   const closeModal = () => {
     setSelected(null);

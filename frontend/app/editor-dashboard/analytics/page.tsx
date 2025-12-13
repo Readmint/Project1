@@ -4,8 +4,9 @@
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { BarChart2, Clock, FileCheck2, RefreshCw, Layers, TrendingUp, Calendar, Tag } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { getJSON } from "@/lib/api";
 
 type CategoryStats = {
   category: string;
@@ -14,22 +15,46 @@ type CategoryStats = {
   qualityScore: number;
 };
 
-const mockOverview = {
-  totalEdits: 342,
-  avgTurnaround: "7.4 hours",
-  revisionCycles: 128,
-  qualityScore: 92,
+type OverviewStats = {
+  totalEdits: number;
+  avgTurnaround: string;
+  revisionCycles: number;
+  qualityScore: number;
 };
-
-const mockCategoryStats: CategoryStats[] = [
-  { category: "Technology", edits: 141, avgTime: "6.2 hr", qualityScore: 95 },
-  { category: "Environment", edits: 78, avgTime: "7.9 hr", qualityScore: 88 },
-  { category: "Lifestyle", edits: 64, avgTime: "8.4 hr", qualityScore: 90 },
-  { category: "Business", edits: 59, avgTime: "6.8 hr", qualityScore: 93 },
-];
 
 export default function AnalyticsPage() {
   const [selected, setSelected] = useState<CategoryStats | null>(null);
+  const [overview, setOverview] = useState<OverviewStats | null>(null);
+  const [categoryStats, setCategoryStats] = useState<CategoryStats[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchAnalytics() {
+      try {
+        const res = await getJSON("/editor/analytics");
+        if (res.status === 'success' && res.data) {
+          setOverview(res.data.overview);
+          setCategoryStats(res.data.categoryStats || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch analytics:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchAnalytics();
+  }, []);
+
+  if (loading) {
+    return <div className="p-8 text-center text-slate-500">Loading analytics...</div>;
+  }
+
+  const overviewData = overview || {
+    totalEdits: 0,
+    avgTurnaround: "0 hr",
+    revisionCycles: 0,
+    qualityScore: 0
+  };
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-6 max-w-6xl mx-auto">
@@ -46,28 +71,28 @@ export default function AnalyticsPage() {
 
       {/* Overview Grid */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        
+
         <AnalyticsCard
           title="Total Edits Completed"
-          value={mockOverview.totalEdits.toString()}
+          value={overviewData.totalEdits.toString()}
           icon={<FileCheck2 size={20} className="text-green-600" />}
         />
 
         <AnalyticsCard
           title="Avg Turnaround Time"
-          value={mockOverview.avgTurnaround}
+          value={overviewData.avgTurnaround}
           icon={<Clock size={20} className="text-indigo-600" />}
         />
 
         <AnalyticsCard
           title="Revision Cycles"
-          value={mockOverview.revisionCycles.toString()}
+          value={overviewData.revisionCycles.toString()}
           icon={<RefreshCw size={20} className="text-orange-600" />}
         />
 
         <AnalyticsCard
-          title="Quality Score"
-          value={mockOverview.qualityScore + "%"}
+          title="Quality Score (Est.)"
+          value={overviewData.qualityScore + "%"}
           icon={<BarChart2 size={20} className="text-blue-600" />}
         />
       </div>
@@ -78,34 +103,40 @@ export default function AnalyticsPage() {
       </h2>
 
       {/* Category Stats Grid */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        {mockCategoryStats.map((cat, i) => (
-          <motion.div
-            key={i}
-            whileHover={{ scale: 1.02 }}
-            onClick={() => setSelected(cat)}
-          >
-            <Card className="rounded-xl bg-white dark:bg-slate-800 border shadow-sm cursor-pointer">
-              <CardContent className="p-5">
-                <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
-                  <Tag size={10} /> {cat.category}
-                </p>
-
-                <h3 className="font-semibold text-sm mb-2">{cat.edits} Edits</h3>
-
-                <div className="text-[10px] space-y-1 text-slate-600 dark:text-slate-300">
-                  <p className="flex items-center gap-1">
-                    <Clock size={11} /> Avg Time: {cat.avgTime}
+      {categoryStats.length === 0 ? (
+        <div className="p-8 text-center bg-slate-50 dark:bg-slate-800 rounded-xl mb-8 border border-dashed text-slate-500 text-sm">
+          No stats available yet. Complete some assignments to see data here.
+        </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+          {categoryStats.map((cat, i) => (
+            <motion.div
+              key={i}
+              whileHover={{ scale: 1.02 }}
+              onClick={() => setSelected(cat)}
+            >
+              <Card className="rounded-xl bg-white dark:bg-slate-800 border shadow-sm cursor-pointer">
+                <CardContent className="p-5">
+                  <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
+                    <Tag size={10} /> {cat.category}
                   </p>
-                  <p className="flex items-center gap-1">
-                    <TrendingUp size={11} /> Quality Score: {cat.qualityScore}%
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
-      </div>
+
+                  <h3 className="font-semibold text-sm mb-2">{cat.edits} Edits</h3>
+
+                  <div className="text-[10px] space-y-1 text-slate-600 dark:text-slate-300">
+                    <p className="flex items-center gap-1">
+                      <Clock size={11} /> Avg Time: {cat.avgTime}
+                    </p>
+                    <p className="flex items-center gap-1">
+                      <TrendingUp size={11} /> Quality Score: {cat.qualityScore}%
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+      )}
 
       {/* Trend Box */}
       <Card className="rounded-xl bg-indigo-50 dark:bg-slate-800/50 border border-indigo-200 dark:border-slate-700 p-6 mb-8">

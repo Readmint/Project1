@@ -16,9 +16,11 @@ import featuredRoutes from './routes/featured.routes';
 import contentRoutes from './routes/content.routes';
 import subscriptionRoutes from './routes/subscription.routes';
 import authorRoutes from './routes/author.routes';
+import contentManagerRoutes from './routes/contentManager.routes';
 import articleRoutes from './routes/article.routes';
 import readerRoutes from './routes/reader.routes';
 import editorRoutes from './routes/editor.routes';
+import reviewerRoutes from './routes/reviewer.routes';
 import { setupSwagger } from './config/swagger';
 
 dotenv.config();
@@ -46,14 +48,18 @@ app.use(express.urlencoded({ extended: true }));
 setupSwagger(app);
 
 /* ----------------------------------- Routes ------------------------------------ */
+// Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/featured', featuredRoutes);
-app.use('/api/content', contentRoutes);
+app.use('/api/articles', articleRoutes);
+app.use('/api/authors', authorRoutes);
+app.use('/api/editors', editorRoutes);
 app.use('/api/subscription', subscriptionRoutes);
-app.use('/api/author', authorRoutes);
+app.use('/api/content', contentRoutes);
+app.use('/api/content-manager', contentManagerRoutes);
 app.use('/api/article', articleRoutes);
-app.use('/api/reader',readerRoutes);
+app.use('/api/reader', readerRoutes);
 app.use('/api/editor', editorRoutes);
+app.use('/api/reviewer', reviewerRoutes);
 
 /* ------------------------------- Health Check ---------------------------------- */
 app.get('/api/health-check', (req, res) => {

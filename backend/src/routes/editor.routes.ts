@@ -5,6 +5,7 @@ import {
   getEditorProfile,
   saveEditorProfile,
   getAssignedForEditor,
+  getSubmittedForEditor,
   getArticleForEdit,
   saveDraft,
   finalizeEditing,
@@ -13,7 +14,11 @@ import {
   getVersions,
   getVersionById,
   restoreVersion,
-  uploadEditorResume, // new
+  uploadEditorResume,
+  getEditorAnalytics,
+  getCommunications,
+  getContentManagers,
+  sendMessage,
 } from '../controllers/editor.controller';
 import { authenticate } from '../middleware/auth';
 
@@ -77,6 +82,7 @@ router.put('/profile/resume', uploadEditorResume);
 
 // Assignments
 router.get('/assigned', getAssignedForEditor);
+router.get('/submitted', getSubmittedForEditor);
 
 // Article editing
 router.get('/articles/:id', getArticleForEdit);
@@ -84,6 +90,14 @@ router.post('/articles/:id/save', saveDraftValidation, saveDraft);
 router.post('/articles/:id/finalize', finalizeValidation, finalizeEditing);
 router.post('/articles/:id/request-changes', requestChangesValidation, requestAuthorChanges);
 router.post('/articles/:id/approve', approveValidation, approveForPublishing);
+
+// Analytics
+router.get('/analytics', getEditorAnalytics);
+
+// Communications
+router.get('/communications', getCommunications);
+router.get('/content-managers', getContentManagers);
+router.post('/send-message', sendMessage);
 
 // Versions
 router.get('/articles/:id/versions', versionsValidation, getVersions);

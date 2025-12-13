@@ -1,7 +1,8 @@
 // app/editor/version-history/page.tsx
 "use client";
 
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,224 +11,290 @@ import {
   Clock,
   FileDiff,
   User,
-  ArrowLeftCircle,
-  ArrowRightCircle,
-  CheckCircle2,
   XCircle,
   Layers,
   Eye,
-  Download,
   RefreshCw,
   Search,
+  ChevronDown
 } from "lucide-react";
+import { getJSON, postJSON } from "@/lib/api";
+import { useRouter } from "next/navigation";
 
+// Types matching backend response
 type VersionEntry = {
-  id: number;
+  id: string; // UUID from backend
   editor: string;
   timestamp: string;
-  status: "Draft Saved" | "Final Edit" | "Author Revision" | "Reviewer Edit" | "Auto-Save";
-  changes: string[];
-  diffSummary: {
-    added: number;
-    removed: number;
-    modified: number;
-  };
+  status: string; // we'll map or use raw
+  note?: string;
+  title: string;
 };
 
-const mockHistory: VersionEntry[] = [
-  {
-    id: 15,
-    editor: "Alex Morgan",
-    timestamp: "Dec 02, 2025 – 05:42 PM",
-    status: "Final Edit",
-    changes: [
-      "Polished conclusion section",
-      "Rewrote introduction for clarity",
-      "Fixed formatting issues",
-    ],
-    diffSummary: { added: 32, removed: 11, modified: 14 },
-  },
-  {
-    id: 14,
-    editor: "Jamie Lee",
-    timestamp: "Dec 02, 2025 – 03:21 PM",
-    status: "Reviewer Edit",
-    changes: ["Added citation", "Highlighted coherence issues"],
-    diffSummary: { added: 9, removed: 3, modified: 4 },
-  },
-  {
-    id: 13,
-    editor: "Author",
-    timestamp: "Dec 01, 2025 – 08:10 PM",
-    status: "Author Revision",
-    changes: ["Updated stats", "Expanded section 2"],
-    diffSummary: { added: 22, removed: 2, modified: 8 },
-  },
-  {
-    id: 12,
-    editor: "System",
-    timestamp: "Dec 01, 2025 – 07:49 PM",
-    status: "Auto-Save",
-    changes: ["Auto-backup created"],
-    diffSummary: { added: 0, removed: 0, modified: 1 },
-  },
-];
-
-const statusBadge: Record<VersionEntry["status"], string> = {
-  "Final Edit": "bg-green-100 text-green-600 px-2 py-1 rounded-full text-[9px]",
-  "Reviewer Edit": "bg-indigo-100 text-indigo-600 px-2 py-1 rounded-full text-[9px]",
-  "Author Revision": "bg-yellow-100 text-yellow-600 px-2 py-1 rounded-full text-[9px]",
-  "Draft Saved": "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-white px-2 py-1 rounded-full text-[9px]",
-  "Auto-Save": "bg-blue-100 text-blue-600 px-2 py-1 rounded-full text-[9px]",
+type ArticleOption = {
+  id: number;
+  title: string;
 };
 
 export default function VersionHistoryPage() {
-  const [selected, setSelected] = useState<VersionEntry | null>(null);
+  const router = useRouter();
+
+  // State
+  const [articles, setArticles] = useState<ArticleOption[]>([]);
+  const [selectedArticleId, setSelectedArticleId] = useState<number | null>(null);
+
+  const [versions, setVersions] = useState<VersionEntry[]>([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+
+  const [selectedVersion, setSelectedVersion] = useState<VersionEntry | null>(null);
   const [search, setSearch] = useState("");
+
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // 1. Fetch Assigned Articles for selection dropdown
+  useEffect(() => {
+    async function fetchArticles() {
+      try {
+        const res = await getJSON("/editor/assigned");
+        if (res.status === 'success') {
+          const opts = res.data.map((a: any) => ({ id: a.article_id, title: a.title }));
+          setArticles(opts);
+          if (opts.length > 0) setSelectedArticleId(opts[0].id);
+        }
+      } catch (e) {
+        console.error("Failed to fetch articles", e);
+      }
+    }
+    fetchArticles();
+  }, []);
+
+  // 2. Fetch Versions when article selected
+  useEffect(() => {
+    if (!selectedArticleId) return;
+    fetchVersions(selectedArticleId);
+  }, [selectedArticleId, refreshKey]);
+
+  const fetchVersions = async (artId: number) => {
+    setLoadingVersions(true);
+    try {
+      const res = await getJSON(`/editor/articles/${artId}/versions`);
+      if (res.status === 'success') {
+        const mapped: VersionEntry[] = res.data.map((v: any) => ({
+          id: v.id,
+          editor: v.editor_name || "Unknown Editor",
+          timestamp: new Date(v.created_at).toLocaleString(),
+          status: "Saved Version", // default as backend doesn't store distinct status per version yet
+          note: v.note,
+          title: v.title
+        }));
+        setVersions(mapped);
+      } else {
+        setVersions([]);
+      }
+    } catch (e) {
+      console.error("Failed to fetch versions", e);
+      setVersions([]);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
+  // 3. Restore Handler
+  const handleRestore = async () => {
+    if (!selectedVersion) return;
+    if (!confirm("Are you sure you want to restore this version? This will become the new current content.")) return;
+
+    try {
+      const res = await postJSON(`/editor/version/${selectedVersion.id}/restore`, {});
+      if (res.status === 'success') {
+        alert("Version restored successfully!");
+        setSelectedVersion(null);
+        setRefreshKey(p => p + 1); // refresh list
+      }
+    } catch (e: any) {
+      alert("Failed to restore: " + (e.message || "Unknown error"));
+    }
+  };
+
+  const currentArticleTitle = articles.find(a => a.id === selectedArticleId)?.title || "Select Article";
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-6 max-w-5xl mx-auto">
 
-      {/* Title */}
-      <div className="flex items-center gap-2 mb-6">
-        <History size={22} className="text-indigo-600" />
-        <h1 className="text-xl font-bold">Version History</h1>
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <History size={24} className="text-indigo-600" />
+            <h1 className="text-2xl font-bold">Version History</h1>
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            View and restore previous edits.
+          </p>
+        </div>
+
+        {/* Article Selector */}
+        <div className="relative w-full md:w-64">
+          <select
+            className="w-full appearance-none bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 pr-8 text-sm outline-none focus:ring-2 ring-indigo-500"
+            value={selectedArticleId || ""}
+            onChange={(e) => setSelectedArticleId(Number(e.target.value))}
+          >
+            {articles.length === 0 && <option value="">No assignments</option>}
+            {articles.map(a => (
+              <option key={a.id} value={a.id}>{truncate(a.title, 30)}</option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-3 top-3 text-slate-400 pointer-events-none" size={16} />
+        </div>
       </div>
 
-      <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-6">
-        Track previous edits, reviewer changes, author revisions, and automatic backups.
-      </p>
+      <div className="flex flex-col lg:flex-row gap-8">
 
-      {/* Search Bar */}
-      <div className="relative mb-6 max-w-sm">
-        <input
-          placeholder="Search versions, editors, or status..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-slate-100 dark:bg-slate-800 pl-8 py-2 border border-slate-300 dark:border-slate-700 rounded-xl text-[10px] outline-none focus:border-indigo-600"
-        />
-        <Search size={12} className="absolute left-2.5 top-2.5 text-slate-500" />
+        {/* Sidebar / List */}
+        <div className="flex-1">
+          {/* Search */}
+          <div className="relative mb-6">
+            <input
+              placeholder="Search by editor or note..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-white dark:bg-slate-800 pl-9 py-2 border border-slate-200 dark:border-slate-700 rounded-full text-sm outline-none focus:border-indigo-600 shadow-sm"
+            />
+            <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+          </div>
+
+          {loadingVersions ? (
+            <div className="text-center py-10 text-slate-500">Loading versions...</div>
+          ) : versions.length === 0 ? (
+            <div className="text-center py-10 text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed">
+              No version history found for this article.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {versions
+                .filter(v =>
+                  v.editor.toLowerCase().includes(search.toLowerCase()) ||
+                  (v.note || "").toLowerCase().includes(search.toLowerCase())
+                )
+                .map((v) => (
+                  <motion.div
+                    key={v.id}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex gap-4 items-start group"
+                  >
+                    {/* Timeline Line */}
+                    <div className="flex flex-col items-center pt-2">
+                      <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 ring-4 ring-indigo-50 dark:ring-indigo-900/30"></div>
+                      <div className="w-[1px] h-full bg-slate-200 dark:bg-slate-800 group-last:hidden min-h-[50px]"></div>
+                    </div>
+
+                    <Card
+                      onClick={() => setSelectedVersion(v)}
+                      className={`flex-1 border shadow-none hover:shadow-md transition-all cursor-pointer ${selectedVersion?.id === v.id ? 'ring-2 ring-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/10' : 'bg-white dark:bg-slate-800'}`}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="bg-indigo-100 dark:bg-indigo-900/50 p-1.5 rounded-full text-indigo-600">
+                              <User size={12} />
+                            </div>
+                            <span className="font-medium text-sm">{v.editor}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded-full">{v.timestamp}</span>
+                        </div>
+
+                        {v.note && (
+                          <div className="text-xs text-slate-600 dark:text-slate-300 italic mb-2 relative pl-3 border-l-2 border-slate-300">
+                            "{v.note}"
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-2 mt-3">
+                          <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+                            version ID: {v.id.slice(0, 8)}...
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+            </div>
+          )}
+        </div>
+
       </div>
 
-      {/* Version Timeline List */}
-      <div className="space-y-4">
-        {mockHistory
-          .filter(
-            (v) =>
-              v.editor.toLowerCase().includes(search.toLowerCase()) ||
-              v.status.toLowerCase().includes(search.toLowerCase())
-          )
-          .map((v) => (
-            <motion.div
-              key={v.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex gap-4 items-start"
-            >
-              {/* Timeline indicator */}
-              <div className="flex flex-col items-center">
-                <div className="w-3 h-3 rounded-full bg-indigo-600"></div>
-                <div className="w-[2px] h-16 bg-slate-300 dark:bg-slate-700"></div>
-              </div>
-
-              {/* Card */}
-              <Card
-                className="flex-1 border bg-white dark:bg-slate-800 shadow-sm rounded-xl cursor-pointer"
-                onClick={() => setSelected(v)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex justify-between items-center">
-                    <h2 className="font-bold text-sm flex items-center gap-1">
-                      <User size={12} /> {v.editor}
-                    </h2>
-                    <span className={statusBadge[v.status]}>{v.status}</span>
-                  </div>
-
-                  <p className="flex items-center gap-1 text-[10px] mt-1 text-slate-500 dark:text-slate-400">
-                    <Clock size={10} /> {v.timestamp}
-                  </p>
-
-                  <div className="text-[10px] mt-3 space-y-1">
-                    {v.changes.map((c, i) => (
-                      <p key={i} className="flex items-center gap-1">
-                        <CheckCircle2 size={10} className="text-green-600" /> {c}
-                      </p>
-                    ))}
-                  </div>
-
-                  {/* Diff summary */}
-                  <div className="flex gap-3 mt-3 text-[10px]">
-                    <span className="text-green-600">+{v.diffSummary.added} added</span>
-                    <span className="text-red-600">-{v.diffSummary.removed} removed</span>
-                    <span className="text-indigo-600">{v.diffSummary.modified} modified</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-      </div>
-
-      {/* View / Compare Modal */}
+      {/* Detail Modal */}
       <AnimatePresence>
-        {selected && (
+        {selectedVersion && (
           <motion.div
             className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center p-4 z-50"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            onClick={() => setSelectedVersion(null)}
           >
             <motion.div
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.95 }}
-              className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-lg w-full shadow-xl border border-slate-300 dark:border-slate-700"
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 dark:border-slate-800"
             >
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-lg flex items-center gap-1">
-                  <FileDiff size={16} /> Version {selected.id}
-                </h3>
-                <Button variant="ghost" onClick={() => setSelected(null)}>
-                  <XCircle size={18} />
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="font-bold text-lg flex items-center gap-2">
+                    <FileDiff size={18} className="text-indigo-600" /> Version Details
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">ID: {selectedVersion.id}</p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setSelectedVersion(null)} className="rounded-full hover:bg-slate-100">
+                  <XCircle size={20} className="text-slate-400" />
                 </Button>
               </div>
 
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-3">
-                Edited by <strong>{selected.editor}</strong> on {selected.timestamp}
-              </p>
+              <div className="space-y-4 mb-8">
+                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl">
+                  <div className="flex gap-3 items-center">
+                    <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-700 flex items-center justify-center text-indigo-600 shadow-sm border">
+                      <User size={18} />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Editor</p>
+                      <p className="font-medium text-sm">{selectedVersion.editor}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500">Date</p>
+                    <p className="font-medium text-sm">{selectedVersion.timestamp}</p>
+                  </div>
+                </div>
 
-              <div className="bg-slate-50 dark:bg-slate-900 rounded-xl p-3 text-[10px] mb-3">
-                <p className={statusBadge[selected.status] + " inline-block mb-2"}>{selected.status}</p>
-
-                <h4 className="font-semibold text-indigo-600 mb-1 flex items-center gap-1">
-                  <Layers size={11} /> Changes
-                </h4>
-
-                <ul className="list-disc pl-4 space-y-1">
-                  {selected.changes.map((c, i) => (
-                    <li key={i}>{c}</li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Diff Summary */}
-              <div className="flex gap-3 mb-4 text-[10px]">
-                <span className="text-green-600">+{selected.diffSummary.added} added</span>
-                <span className="text-red-600">-{selected.diffSummary.removed} removed</span>
-                <span className="text-indigo-600">{selected.diffSummary.modified} modified</span>
+                {selectedVersion.note && (
+                  <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-800 dark:text-indigo-200 rounded-xl text-sm border border-indigo-100 dark:border-indigo-800/50">
+                    <p className="flex items-center gap-2 mb-1 text-xs font-bold uppercase tracking-wide opacity-70"><Layers size={10} /> Change Note</p>
+                    {selectedVersion.note}
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-2 justify-end">
-                <Button className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
-                  <Eye size={12} /> View Full Diff
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  variant="outline"
+                  className="rounded-xl h-12"
+                  disabled // Diff not implemented yet
+                >
+                  <Eye size={16} className="mr-2" /> View Diff
                 </Button>
 
-                <Button className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
-                  <RefreshCw size={12} /> Restore Version
-                </Button>
-
-                <Button className="bg-slate-700 hover:bg-slate-800 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
-                  <Download size={12} /> Export Diff
+                <Button
+                  onClick={handleRestore}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-12 shadow-lg shadow-indigo-200 dark:shadow-none"
+                >
+                  <RefreshCw size={16} className="mr-2" /> Restore Version
                 </Button>
               </div>
             </motion.div>
@@ -237,3 +304,8 @@ export default function VersionHistoryPage() {
     </div>
   );
 }
+
+function truncate(str: string, n: number) {
+  return (str.length > n) ? str.slice(0, n - 1) + '...' : str;
+}
+

@@ -50,12 +50,22 @@ const resetPasswordValidation = [
   body('newPassword').isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
 ];
 
+// Verification validation
+const verifyEmailValidation = [
+  body('email').isEmail().normalizeEmail(),
+  body('otp').notEmpty().withMessage('OTP is required')
+];
+
+const sendVerificationValidation = [
+  body('email').isEmail().normalizeEmail()
+];
+
 // Routes
 router.post('/register', registerValidation, register);
 router.post('/login', loginValidation, login);
-router.post('/send-verification', sendVerificationEmail);
-router.post('/verify-email', verifyEmail);
-router.post('/resend-verification', resendVerification);
+router.post('/send-verification', sendVerificationValidation, sendVerificationEmail);
+router.post('/verify-email', verifyEmailValidation, verifyEmail);
+router.post('/resend-verification', sendVerificationValidation, resendVerification);
 
 // OAuth route: accepts { idToken, provider } from frontend (Firebase ID token)
 router.post('/oauth', oauthValidation, oauth);

@@ -6,7 +6,7 @@ import { ArrowLeft, Eye, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export type ArticlePreviewData = {
-  id: number;
+  id: string | number;
   title: string;
   author?: string;
   category?: string;

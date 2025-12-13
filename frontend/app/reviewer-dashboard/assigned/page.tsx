@@ -1,226 +1,110 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-
-const INITIAL_REVIEWS = [
-  {
-    id: 1,
-    title: "AI in Healthcare",
-    author: "Jane Doe",
-    category: "Technology",
-    submissionDate: "2025-12-01",
-    deadline: "2025-12-15",
-    priority: "High",
-    status: "Pending",
-  },
-  {
-    id: 2,
-    title: "Climate Change Policy",
-    author: "John Smith",
-    category: "Environment",
-    submissionDate: "2025-11-28",
-    deadline: "2025-12-10",
-    priority: "Normal",
-    status: "Under Review",
-  },
-  {
-    id: 3,
-    title: "Startup Funding Trends",
-    author: "Emily Chen",
-    category: "Business",
-    submissionDate: "2025-11-25",
-    deadline: "2025-12-05",
-    priority: "Urgent",
-    status: "Pending",
-  },
-];
+import { useState, useEffect } from "react";
+import { getJSON } from "@/lib/api";
+import {
+  CheckCircle,
+  Clock,
+  FileText,
+  Calendar,
+  ArrowRight,
+  Search
+} from "lucide-react";
+import Link from 'next/link';
 
 export default function AssignedReviewsPage() {
-  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
-  const [reviews, setReviews] = useState(INITIAL_REVIEWS);
+  useEffect(() => {
+    fetchAssignments();
+  }, []);
 
-  const [filters, setFilters] = useState({
-    category: "All",
-    priority: "All",
-    status: "All",
-  });
-
-  const updateStatus = (id: number, status: string) => {
-    setReviews((prev) =>
-      prev.map((review) =>
-        review.id === id ? { ...review, status } : review
-      )
-    );
+  const fetchAssignments = async () => {
+    try {
+      const res = await getJSON('/reviewer/assignments');
+      if (res.data) setReviews(res.data);
+    } catch (e) {
+      console.error("Failed to fetch assignments", e);
+      // Fallback for demo if backend not fully wired with auth yet
+      // setReviews([]); 
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const filteredReviews = reviews.filter((review) => {
-    return (
-      (filters.category === "All" || review.category === filters.category) &&
-      (filters.priority === "All" || review.priority === filters.priority) &&
-      (filters.status === "All" || review.status === filters.status)
-    );
-  });
+  const filtered = reviews.filter(r =>
+    r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.author.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-10 space-y-8">
-      {/* HEADER */}
-      <section className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">
-          Assigned Reviews
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Submissions assigned for evaluation and final decision
-        </p>
-      </section>
-
-      {/* FILTERS */}
-      <section className="grid md:grid-cols-4 gap-4">
-        <select
-          className="border border-border rounded-md p-2 bg-background"
-          value={filters.category}
-          onChange={(e) =>
-            setFilters({ ...filters, category: e.target.value })
-          }
-        >
-          <option>All</option>
-          <option>Technology</option>
-          <option>Environment</option>
-          <option>Business</option>
-        </select>
-
-        <select
-          className="border border-border rounded-md p-2 bg-background"
-          value={filters.priority}
-          onChange={(e) =>
-            setFilters({ ...filters, priority: e.target.value })
-          }
-        >
-          <option>All</option>
-          <option>Normal</option>
-          <option>High</option>
-          <option>Urgent</option>
-        </select>
-
-        <select
-          className="border border-border rounded-md p-2 bg-background"
-          value={filters.status}
-          onChange={(e) =>
-            setFilters({ ...filters, status: e.target.value })
-          }
-        >
-          <option>All</option>
-          <option>Pending</option>
-          <option>Under Review</option>
-          <option>Returned</option>
-          <option>Submitted</option>
-        </select>
-      </section>
-
-      {/* TABLE */}
-      <section className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-muted/50">
-              <tr className="text-sm text-muted-foreground">
-                <th className="text-left px-4 py-3 font-medium">Title</th>
-                <th className="text-left px-4 py-3 font-medium">Author</th>
-                <th className="text-left px-4 py-3 font-medium">Category</th>
-                <th className="text-left px-4 py-3 font-medium">Submitted</th>
-                <th className="text-left px-4 py-3 font-medium">Deadline</th>
-                <th className="text-left px-4 py-3 font-medium">Priority</th>
-                <th className="text-left px-4 py-3 font-medium">Status</th>
-                <th className="text-left px-4 py-3 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredReviews.map((review) => (
-                <tr
-                  key={review.id}
-                  className="border-t border-border hover:bg-muted/30 transition-colors"
-                >
-                  <td className="px-4 py-4 font-medium text-foreground">
-                    {review.title}
-                  </td>
-                  <td className="px-4 py-4 text-muted-foreground text-sm">
-                    {review.author}
-                  </td>
-                  <td className="px-4 py-4 text-muted-foreground text-sm">
-                    {review.category}
-                  </td>
-                  <td className="px-4 py-4 text-muted-foreground text-sm">
-                    {review.submissionDate}
-                  </td>
-                  <td className="px-4 py-4 text-muted-foreground text-sm">
-                    {review.deadline}
-                  </td>
-                  <td className="px-4 py-4 text-sm">
-                    <span
-                      className={
-                        review.priority === "Urgent"
-                          ? "text-destructive font-medium"
-                          : review.priority === "High"
-                          ? "text-primary font-medium"
-                          : "text-muted-foreground"
-                      }
-                    >
-                      {review.priority}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 text-sm text-muted-foreground">
-                    {review.status}
-                  </td>
-
-                  {/* ACTIONS */}
-                  <td className="px-4 py-4">
-                    <div className="flex flex-col gap-1.5 min-w-[110px]">
-                      <button
-                        onClick={() =>
-                          router.push(`/reviewer/submissions/${review.id}`)
-                        }
-                        className="text-xs text-left text-primary hover:underline font-medium"
-                      >
-                        Open
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          updateStatus(review.id, "Under Review")
-                        }
-                        disabled={review.status === "Under Review"}
-                        className="text-xs text-left hover:underline disabled:opacity-50"
-                      >
-                        Under Review
-                      </button>
-
-                      <button
-                        onClick={() => updateStatus(review.id, "Returned")}
-                        className="text-xs text-left hover:underline text-warning"
-                      >
-                        Return
-                      </button>
-
-                      <button
-                        onClick={() => updateStatus(review.id, "Submitted")}
-                        className="text-xs text-left hover:underline text-success"
-                      >
-                        Submit
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {filteredReviews.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-10">
-              No submissions match the selected filters.
-            </p>
-          )}
+    <div className="p-6 space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Assigned Reviews</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm">Manage and complete your content evaluations.</p>
         </div>
-      </section>
+
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search assignments..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 pr-4 py-2 border rounded-lg text-sm bg-white dark:bg-slate-800 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none w-full md:w-64"
+          />
+          <Search className="absolute left-3 top-2.5 text-slate-400 h-4 w-4" />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-20 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-300">
+          <FileText className="mx-auto h-12 w-12 text-slate-300 mb-3" />
+          <p className="text-slate-500">No pending reviews found.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          {filtered.map((review) => (
+            <div key={review.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5 hover:shadow-md transition-shadow flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider
+                            ${review.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}
+                        `}>
+                    {review.status}
+                  </span>
+                  <span className="text-xs text-slate-400 flex items-center gap-1">
+                    <Clock size={12} /> Due: {review.dueDate}
+                  </span>
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1 group-hover:text-indigo-600 transition-colors">
+                  {review.title}
+                </h3>
+                <div className="flex items-center gap-4 text-sm text-slate-500">
+                  <span className="flex items-center gap-1"><FileText size={14} /> {review.category}</span>
+                  <span>•</span>
+                  <span>By {review.author}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <Link
+                  href={`/reviewer-dashboard/workspace?id=${review.articleId}`}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg flex items-center gap-2 transition-colors w-full md:w-auto justify-center"
+                >
+                  Start Review <ArrowRight size={16} />
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

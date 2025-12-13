@@ -1,4 +1,3 @@
-// app/author-dashboard/articles/[id]/preview/page.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -37,13 +36,11 @@ type Review = {
   created_at?: string;
 };
 
-const BASE_API =
-  (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:5000/api");
-/**
- * NOTE: Use BASE_API + "/article" for article routes because your server mounts:
- *    app.use('/api/article', articleRoutes)
- * So full endpoint becomes: `${BASE_API}/article/author/articles/:id`
- */
+// Normalize NEXT_PUBLIC_API_BASE to API_ROOT (works with values like "http://localhost:5000" or ".../api")
+const rawApi = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
+const API_BASE = rawApi.endsWith("/api") ? rawApi.replace(/\/api$/, "") : rawApi;
+const API_ROOT = `${API_BASE}/api`.replace(/\/+$/, "");
+// Use endpoints like: `${API_ROOT}/article/author/articles/:id`
 
 export default function ArticlePreviewPage(): JSX.Element {
   const params = useParams() as { id?: string };
@@ -66,7 +63,21 @@ export default function ArticlePreviewPage(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const getToken = () => (typeof window !== "undefined" ? localStorage.getItem("token") || "" : "");
+  // Robust getToken: checks several keys your app may use
+  const getToken = (): string | null => {
+    try {
+      if (typeof window === "undefined") return null;
+      const keys = ["ACCESS_TOKEN", "token", "idToken"];
+      for (const k of keys) {
+        const v = localStorage.getItem(k);
+        if (v && v.trim()) return v.trim();
+      }
+      return null;
+    } catch (err) {
+      console.warn("getToken error", err);
+      return null;
+    }
+  };
 
   const fetchArticle = async (articleId: string) => {
     setLoading(true);
@@ -79,7 +90,7 @@ export default function ArticlePreviewPage(): JSX.Element {
         return;
       }
 
-      const url = `${BASE_API}/article/author/articles/${encodeURIComponent(articleId)}`;
+      const url = `${API_ROOT}/article/author/articles/${encodeURIComponent(articleId)}`;
       console.log("Fetching article preview from", url);
       const res = await fetch(url, {
         method: "GET",
@@ -147,8 +158,8 @@ export default function ArticlePreviewPage(): JSX.Element {
     }
 
     try {
-      // NOTE: endpoint path uses BASE_API + "/article" because routes are mounted at /api/article
-      const signedUrlEndpoint = `${BASE_API}/article/author/articles/${encodeURIComponent(
+      // endpoint uses API_ROOT + "/article" because routes are mounted at /api/article
+      const signedUrlEndpoint = `${API_ROOT}/article/author/articles/${encodeURIComponent(
         id
       )}/attachments/${encodeURIComponent(att.id)}/signed-url`;
 
@@ -165,7 +176,6 @@ export default function ArticlePreviewPage(): JSX.Element {
       }
 
       if (!res.ok) {
-        // common case: "Access token required" or permission denied
         const msg = body?.message || `Failed to get download URL (${res.status})`;
         alert(msg);
         console.warn("Failed to get signed url:", res.status, body);
@@ -246,9 +256,7 @@ export default function ArticlePreviewPage(): JSX.Element {
                 >
                   Open
                 </button>
-                <div className="text-[11px] text-slate-400">
-                  {att.size_bytes ? `${(att.size_bytes / 1024).toFixed(1)} KB` : ""}
-                </div>
+                <div className="text-[11px] text-slate-400">{att.size_bytes ? `${(att.size_bytes / 1024).toFixed(1)} KB` : ""}</div>
               </div>
             </li>
           ))}

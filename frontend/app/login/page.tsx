@@ -81,7 +81,15 @@ export default function Login() {
       router.push("/reader-dashboard");
     } else if (role === "editor") {
       router.push("/editor-dashboard");
-    } else {
+    } else if (role === "editor") {
+      router.push("/editor-dashboard");
+    } else if (role === "content manager" || role === "content_manager") {
+      router.push("/cm-dashboard");
+    }
+    else if (role === "reviewer") {
+      router.push("/reviewer-dashboard");
+    }
+    else {
       // fallback for other roles (reviewer, content_manager, admin, etc.)
       router.push("/");
     }
@@ -282,9 +290,8 @@ export default function Login() {
               <Input
                 type="email"
                 placeholder="you@example.com"
-                className={`w-full h-9 text-sm bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border ${
-                  errors.email ? "border-red-500" : "border-slate-300 dark:border-slate-600"
-                } text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500`}
+                className={`w-full h-9 text-sm bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border ${errors.email ? "border-red-500" : "border-slate-300 dark:border-slate-600"
+                  } text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500`}
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
@@ -302,9 +309,8 @@ export default function Login() {
                 <Input
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
-                  className={`w-full h-9 text-sm pr-10 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border ${
-                    errors.password ? "border-red-500" : "border-slate-300 dark:border-slate-600"
-                  } text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500`}
+                  className={`w-full h-9 text-sm pr-10 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border ${errors.password ? "border-red-500" : "border-slate-300 dark:border-slate-600"
+                    } text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500`}
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);

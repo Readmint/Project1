@@ -4,31 +4,46 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ArticlePreview, { ArticlePreviewData } from "@/components/articles/ArticlePreview";
+import { getJSON } from "@/lib/api";
 
 export default function EditorPreviewPage() {
+
   const { id } = useParams();
   const [article, setArticle] = useState<ArticlePreviewData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Replace with real backend later — mock for now
   useEffect(() => {
-    setTimeout(() => {
-      setArticle({
-        id: Number(id),
-        title: "The Rise of Quantum Computing in 2026",
-        author: "John Carter",
-        category: "Technology",
-        coverImage: "/sample-cover.jpg",
-        content: `
-          <h2>Introduction</h2>
-          <p>Quantum computing continues to evolve…</p>
-          <p>The future is closer than ever.</p>
-        `,
-        lastEdited: "Feb 15, 2026",
-      });
-      setLoading(false);
-    }, 400);
+    fetchArticle();
   }, [id]);
+
+  const fetchArticle = async () => {
+    try {
+      if (!id) return;
+      // Fetch using the editor endpoint (requires assignment)
+      const res = await getJSON(`/editor/articles/${id}`);
+      if (res.status === 'success' && res.data && res.data.article) {
+        const a = res.data.article;
+        setArticle({
+          id: a.id, // ID is UUID string 
+          // If backend uses UUID, I should check ArticlePreviewData definition. 
+          // If it expects number, I might need to cast or mock ID if UUID. 
+          // For now I'll cast, but likely type mismatch if UUID. 
+          // Actually, I should probably check ArticlePreviewData type in component.
+          title: a.title,
+          author: a.author_name || "Unknown",
+          category: "General", // api doesn't return category name joined yet in getArticleForEdit? I'll check.
+          coverImage: a.metadata?.coverImage || "/images/placeholder.jpg",
+          content: a.content || "",
+          lastEdited: new Date(a.updated_at || a.created_at).toLocaleDateString(),
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch article preview", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   return <ArticlePreview article={article} loading={loading} />;
 }

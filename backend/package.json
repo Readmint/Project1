@@ -1,7 +1,9 @@
 {
   "dependencies": {
+    "@types/string-similarity": "^4.0.2",
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.3",
+    "cheerio": "^1.1.2",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "crypto-js": "^4.2.0",
@@ -10,6 +12,7 @@
     "express-rate-limit": "^8.2.1",
     "express-validator": "^7.3.1",
     "firebase-admin": "^13.6.0",
+    "google-sr": "^6.0.0",
     "helmet": "^8.1.0",
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
@@ -21,6 +24,7 @@
     "node-fetch": "^2.7.0",
     "nodemailer": "^7.0.11",
     "pdf-parse": "^2.4.5",
+    "string-similarity": "^4.0.4",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "typescript": "^5.9.3",
@@ -44,7 +48,7 @@
     "ts-node": "^10.9.2"
   },
   "scripts": {
-    "dev": "ts-node src/server.ts",
+    "dev": "nodemon src/server.ts",
     "start": "node dist/server.js",
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"

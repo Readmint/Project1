@@ -20,6 +20,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { ActionModal } from "@/components/ui/action-modal";
+import Link from "next/link";
+import { getJSON, postJSON } from "@/lib/api";
+import { useEffect } from "react";
 
 interface Submission {
   id: string;
@@ -35,17 +38,23 @@ export default function SubmissionsPage() {
   const router = useRouter();
 
   // STATEFUL SUBMISSIONS (so we can update statuses)
-  const [submissions, setSubmissions] = useState<Submission[]>([
-    {
-      id: "RM-1024",
-      title: "The Future of Quantum Computing",
-      author: "Aarav Mehta",
-      category: "Science",
-      date: "2025-12-06",
-      status: "Under Review",
-      priority: "High",
-    },
-  ]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchSubmissions();
+  }, []);
+
+  const fetchSubmissions = async () => {
+    try {
+      const res = await getJSON('/content-manager/submissions');
+      setSubmissions(res.data);
+    } catch (err) {
+      console.error('Failed to fetch submissions', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // MODAL STATE ONLY FOR sendback & approve
   const [modal, setModal] = useState<{
@@ -137,7 +146,7 @@ export default function SubmissionsPage() {
                 <td className="py-2 px-3">{sub.author}</td>
                 <td className="py-2 px-3">{sub.category}</td>
                 <td className="py-2 px-3">{sub.date}</td>
-                <td className="py-2 px-3">{sub.status}</td>
+                <td className="py-2 px-3">{getStatusBadge(sub.status)}</td>
                 <td className="py-2 px-3">{sub.priority}</td>
 
                 <td className="py-2 px-3 flex gap-2">
@@ -228,5 +237,35 @@ export default function SubmissionsPage() {
         </ActionModal>
       )}
     </main>
+  );
+}
+
+function getStatusBadge(status: string) {
+  const styles: Record<string, string> = {
+    submitted: "bg-yellow-100 text-yellow-700 border-yellow-200",
+    under_review: "bg-blue-100 text-blue-700 border-blue-200",
+    changes_requested: "bg-orange-100 text-orange-700 border-orange-200",
+    approved: "bg-green-100 text-green-700 border-green-200",
+    published: "bg-purple-100 text-purple-700 border-purple-200",
+    rejected: "bg-red-100 text-red-700 border-red-200",
+  };
+
+  const labels: Record<string, string> = {
+    submitted: "Pending",
+    under_review: "Under Review",
+    changes_requested: "Changes Requested",
+    approved: "Approved",
+    published: "Published",
+    rejected: "Rejected",
+  };
+
+  const normalized = status.toLowerCase();
+  const style = styles[normalized] || "bg-slate-100 text-slate-700 border-slate-200";
+  const label = labels[normalized] || status;
+
+  return (
+    <span className={`px-2 py-1 rounded-md text-xs border ${style} whitespace-nowrap`}>
+      {label}
+    </span>
   );
 }

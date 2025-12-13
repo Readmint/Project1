@@ -20,6 +20,7 @@ import {
   Upload,
   FileText,
   Eye,
+  XCircle,
 } from "lucide-react";
 
 type Stats = {
@@ -70,7 +71,7 @@ function getTokenFromStorage(): string | null {
         const u = JSON.parse(userRaw);
         if (u?.token) return String(u.token);
         if (u?.accessToken) return String(u.accessToken);
-      } catch {}
+      } catch { }
     }
     return null;
   } catch (err) {
@@ -95,7 +96,7 @@ const buildJsonHeaders = (): Record<string, string> => {
         if (u?.id) headers["x-user-id"] = u.id;
         else if (u?.uid) headers["x-user-id"] = u.uid;
       }
-    } catch {}
+    } catch { }
   }
   return headers;
 };
@@ -600,6 +601,57 @@ function TabBtn({ active, onClick, icon, children }: { active: boolean; onClick:
   );
 }
 
+function TagInput({ label, tags, disabled, onChange }: { label: string | React.ReactNode, tags: string[], disabled: boolean, onChange: (tags: string[]) => void }) {
+  const [input, setInput] = useState("");
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addTag();
+    } else if (e.key === 'Backspace' && !input && tags.length > 0) {
+      removeTag(tags.length - 1);
+    }
+  };
+
+  const addTag = () => {
+    const trimmed = input.trim();
+    if (trimmed && !tags.includes(trimmed)) {
+      onChange([...tags, trimmed]);
+      setInput("");
+    }
+  };
+
+  const removeTag = (index: number) => {
+    onChange(tags.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div>
+      <p className="text-xs font-medium text-slate-500 mb-1">{label}</p>
+      <div className={`w-full border rounded-xl px-2 py-2 text-xs flex flex-wrap gap-2 ${disabled ? "bg-slate-50 opacity-70" : "bg-white"}`}>
+        {tags.map((tag, i) => (
+          <span key={i} className="flex items-center gap-1 bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full">
+            {tag}
+            {!disabled && (
+              <button onClick={() => removeTag(i)} className="hover:text-indigo-900"><XCircle size={12} /></button>
+            )}
+          </span>
+        ))}
+        {!disabled && (
+          <input
+            className="flex-1 outline-none min-w-[80px] bg-transparent"
+            placeholder={tags.length === 0 ? "Type & press Enter..." : ""}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={addTag}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Field({ icon, label, value, editable = false, onChange }: { icon: React.ReactNode; label: string; value: string | any; editable?: boolean; onChange?: (value: string) => void; }) {
   return (
     <div className="flex items-center gap-2 text-xs sm:text-sm">
@@ -623,7 +675,7 @@ function PersonalInfoSection({ profile, isEditing, onChange, onSave, onResumeCha
 
         <Field icon={<User size={14} />} label="Display Name" value={profile?.name || ""} editable={isEditing} onChange={v => onChange("name", v)} />
         <Field icon={<User size={14} />} label="Legal Name" value={profile?.legalName || ""} editable={isEditing} onChange={v => onChange("legalName", v)} />
-        <Field icon={<Mail size={14} />} label="Email Address" value={profile?.email || ""} editable={isEditing}onChange={(v) => onChange("email", v)} />
+        <Field icon={<Mail size={14} />} label="Email Address" value={profile?.email || ""} editable={isEditing} onChange={(v) => onChange("email", v)} />
         <Field icon={<MapPin size={14} />} label="Location" value={profile?.location || ""} editable={isEditing} onChange={v => onChange("location", v)} />
         <Field icon={<Tag size={14} />} label="Specialty" value={profile?.specialty || ""} editable={isEditing} onChange={v => onChange("specialty", v)} />
 
@@ -634,8 +686,12 @@ function PersonalInfoSection({ profile, isEditing, onChange, onSave, onResumeCha
             <input type="number" min={0} className="w-full border px-3 py-2 rounded-xl text-xs" value={profile?.experience_months ?? 0} disabled={!isEditing} onChange={e => onChange("experience_months", Number(e.target.value))} />
           </div>
           <div>
-            <p className="text-xs font-medium text-slate-500 flex items-center gap-1"><Tag size={12} /> Editor Fields (comma separated)</p>
-            <input className="w-full border px-3 py-2 rounded-xl text-xs" value={(profile?.fields || []).join(", ")} disabled={!isEditing} onChange={e => onChange("fields", e.target.value.split(",").map(s => s.trim()).filter(Boolean))} />
+            <TagInput
+              label={<span className="flex items-center gap-1"><Tag size={12} /> Expertise Fields</span>}
+              tags={profile?.fields || []}
+              disabled={!isEditing}
+              onChange={(newTags) => onChange("fields", newTags)}
+            />
           </div>
         </div>
 
@@ -662,7 +718,7 @@ function PersonalInfoSection({ profile, isEditing, onChange, onSave, onResumeCha
 
         {isEditing && <Button onClick={onSave} className="w-fit mx-auto text-xs rounded-full bg-indigo-600 text-white px-4">Save Changes</Button>}
       </CardContent>
-    </Card>
+    </Card >
   );
 }
 

@@ -11,47 +11,34 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
-const reviewerList = ["Arjun Patel", "Meera Nair", "Dev Sharma", "Karen Liu"];
-
-// Initial submissions with new fields
-const initialSubmissions: Array<{
-  id: string;
-  title: string;
-  category: string;
-  status: string;
-  deadline: string;
-  assignedReviewer: string | null;
-}> = [
-  {
-    id: "RM-1024",
-    title: "Quantum Computing Advances",
-    category: "Science",
-    status: "Pending Reviewer",
-    deadline: "",
-    assignedReviewer: null,
-  },
-  {
-    id: "RM-1022",
-    title: "AI in Small Businesses",
-    category: "Business",
-    status: "Reviewer Declined",
-    deadline: "",
-    assignedReviewer: null,
-  },
-  {
-    id: "RM-1017",
-    title: "Healthy Habits for Remote Work",
-    category: "Lifestyle",
-    status: "Awaiting Acceptance",
-    deadline: "",
-    assignedReviewer: null,
-  },
-];
+import { getJSON, postJSON } from "@/lib/api";
+import { useEffect } from "react";
 
 export default function ReviewerAssignments() {
   const [selectedReviewer, setSelectedReviewer] = useState("Select Reviewer");
+  const [reviewers, setReviewers] = useState<string[]>([]);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [submissions, setSubmissions] = useState(initialSubmissions);
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [reviewersRes, submissionsRes] = await Promise.all([
+        getJSON('/content-manager/reviewers'),
+        getJSON('/content-manager/submissions')
+      ]);
+      setReviewers(reviewersRes.data);
+      setSubmissions(submissionsRes.data);
+    } catch (error) {
+      console.error('Failed to fetch data', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Handle deadline update
   const updateDeadline = (id: string, value: string) => {
@@ -63,23 +50,35 @@ export default function ReviewerAssignments() {
   };
 
   // Handle reviewer assignment + status update
-  const handleAssignReviewer = (id: string) => {
+  const handleAssignReviewer = async (id: string, deadline: string) => {
     if (selectedReviewer === "Select Reviewer") {
       alert("Please select a reviewer first.");
       return;
     }
 
-    setSubmissions((prev) =>
-      prev.map((sub) =>
-        sub.id === id
-          ? {
+    try {
+      await postJSON('/content-manager/assign-reviewer', {
+        submissionId: id,
+        reviewerName: selectedReviewer,
+        deadline
+      });
+
+      setSubmissions((prev) =>
+        prev.map((sub) =>
+          sub.id === id
+            ? {
               ...sub,
               assignedReviewer: selectedReviewer,
               status: "Reviewer Assigned",
             }
-          : sub
-      )
-    );
+            : sub
+        )
+      );
+      alert("Reviewer assigned successfully!");
+    } catch (error) {
+      console.error('Failed to assign reviewer', error);
+      alert("Failed to assign reviewer");
+    }
   };
 
   return (
@@ -101,9 +100,9 @@ export default function ReviewerAssignments() {
           <DropdownMenuContent>
             <DropdownMenuLabel>Available Reviewers</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {reviewerList.map((r) => (
-              <DropdownMenuItem key={r} onClick={() => setSelectedReviewer(r)}>
-                {r}
+            {reviewers.map((r: any) => (
+              <DropdownMenuItem key={r.user_id} onClick={() => setSelectedReviewer(r.name)}>
+                {r.name}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -134,11 +133,10 @@ export default function ReviewerAssignments() {
 
                 <td className="py-2 px-3">
                   <span
-                    className={`px-2 py-1 rounded-md text-xs ${
-                      sub.status === "Reviewer Assigned"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-yellow-100 text-yellow-700"
-                    }`}
+                    className={`px-2 py-1 rounded-md text-xs ${sub.status === "Reviewer Assigned"
+                      ? "bg-green-100 text-green-700"
+                      : "bg-yellow-100 text-yellow-700"
+                      }`}
                   >
                     {sub.status}
                   </span>
@@ -148,7 +146,7 @@ export default function ReviewerAssignments() {
                 <td className="py-2 px-3">
                   <input
                     type="date"
-                    value={sub.deadline}
+                    value={sub.deadline || ""}
                     onChange={(e) => updateDeadline(sub.id, e.target.value)}
                     className="rounded border dark:bg-slate-800 px-2 py-1 text-xs"
                   />
@@ -159,7 +157,7 @@ export default function ReviewerAssignments() {
                   {!sub.assignedReviewer ? (
                     <button
                       className="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded-lg"
-                      onClick={() => handleAssignReviewer(sub.id)}
+                      onClick={() => handleAssignReviewer(sub.id, sub.deadline)}
                     >
                       Assign Reviewer
                     </button>

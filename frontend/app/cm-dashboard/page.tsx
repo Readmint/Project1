@@ -15,31 +15,56 @@ import {
 } from "lucide-react";
 import React from "react";
 
-const stats = [
-  { label: "Total Submissions", value: 128, description: "All-time submissions", icon: ClipboardList },
-  { label: "Pending Assignments", value: 14, description: "Awaiting reviewer/editor assignment", icon: Users },
-  { label: "Under Review", value: 23, description: "Actively being reviewed", icon: Clock },
-  { label: "Changes Requested", value: 9, description: "Awaiting author changes", icon: RefreshCw },
-  { label: "Editor Queue", value: 11, description: "Waiting for editing", icon: FileEdit },
-  { label: "Ready to Publish", value: 18, description: "Cleared by QC", icon: CheckCircle2 },
-  { label: "Published", value: 342, description: "Live articles", icon: Layers },
-  { label: "Upcoming Publications", value: 7, description: "Scheduled items", icon: CalendarDays },
+// Initial empty states, will be populated by API
+const initialStats = [
+  { label: "Total Submissions", value: 0, description: "All-time submissions", icon: ClipboardList },
+  { label: "Pending Assignments", value: 0, description: "Awaiting reviewer/editor assignment", icon: Users },
+  { label: "Under Review", value: 0, description: "Actively being reviewed", icon: Clock },
+  { label: "Changes Requested", value: 0, description: "Awaiting author changes", icon: RefreshCw },
+  { label: "Editor Queue", value: 0, description: "Waiting for editing", icon: FileEdit },
+  { label: "Ready to Publish", value: 0, description: "Cleared by QC", icon: CheckCircle2 },
+  { label: "Published", value: 0, description: "Live articles", icon: Layers },
+  // { label: "Upcoming Publications", value: 0, description: "Scheduled items", icon: CalendarDays },
 ];
 
-const recentSubmissions = [
-  { id: "RM-1024", title: "The Future of Quantum Computing", author: "Aarav Mehta", date: "2025-12-06", status: "Under Review", priority: "High" },
-  { id: "RM-1023", title: "Mindful Living in a Busy World", author: "Sara Kapoor", date: "2025-12-05", status: "Editor Review", priority: "Normal" },
-  { id: "RM-1022", title: "AI in Small Businesses", author: "Rohan Gupta", date: "2025-12-05", status: "Changes Requested", priority: "Urgent" },
-];
-
-const upcomingPublications = [
-  { title: "Designing for Accessibility in 2026", date: "2025-12-10", time: "10:30 AM", visibility: "Featured" },
-  { title: "Startup Funding in Emerging Markets", date: "2025-12-11", time: "03:00 PM", visibility: "Premium" },
-  { title: "Healthy Habits for Remote Workers", date: "2025-12-12", time: "09:00 AM", visibility: "Free" },
-];
+import { getJSON } from "@/lib/api"; // Ensure getJSON is available
 
 export default function Page() {
   const router = useRouter();
+  const [statsData, setStatsData] = React.useState(initialStats);
+  const [recentSubmissions, setRecentSubmissions] = React.useState<any[]>([]);
+  const [upcomingPublications, setUpcomingPublications] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await getJSON("/content-manager/dashboard-stats");
+        if (res.status === "success") {
+          const { stats: apiStats, recentSubmissions: apiRecent, upcomingPublications: apiUpcoming } = res.data;
+
+          // Merge API values into our stats structure to keep icons
+          const mergedStats = initialStats.map(stat => {
+            const apiStat = apiStats.find((s: any) => s.label === stat.label);
+            return apiStat ? { ...stat, value: apiStat.value } : stat;
+          });
+
+          setStatsData(mergedStats);
+          setRecentSubmissions(apiRecent);
+          setUpcomingPublications(apiUpcoming);
+        }
+      } catch (error) {
+        console.error("Failed to fetch dashboard stats", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return <div className="p-10 text-center">Loading dashboard...</div>;
+  }
 
   return (
     <main className="w-full px-6 py-6 space-y-6">
@@ -55,7 +80,7 @@ export default function Page() {
 
       {/* STAT GRID */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => {
+        {statsData.map((stat) => {
           const Icon = stat.icon;
           return (
             <div key={stat.label} className="flex items-start gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 shadow-sm">
@@ -74,7 +99,7 @@ export default function Page() {
 
       {/* QUICK ACTIONS + WORKFLOW SNAPSHOT */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        
+
         {/* QUICK ACTIONS */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
@@ -139,7 +164,7 @@ export default function Page() {
 
       {/* RECENT SUBMISSIONS + UPCOMING PUBLICATIONS */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        
+
         {/* RECENT SUBMISSIONS */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm">
           <div className="flex justify-between items-center mb-3">

@@ -51,15 +51,17 @@ type Profile = {
   membership?: any;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
+// Normalize NEXT_PUBLIC_API_BASE to API_ROOT (works with values like "http://localhost:5000" or ".../api")
+// Falls back to "/api" when env not provided
+const rawApi = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
+const API_BASE = rawApi.endsWith("/api") ? rawApi.replace(/\/api$/, "") : rawApi;
+const API_ROOT = `${API_BASE || ""}/api`.replace(/\/+$/, ""); // e.g. "http://localhost:5000/api" or "/api"
 
 export default function AuthorProfilePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [tab, setTab] = useState<"info" | "social" | "payout" | "membership">(
-    "info"
-  );
+  const [tab, setTab] = useState<"info" | "social" | "payout" | "membership">("info");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,12 +72,28 @@ export default function AuthorProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Robust getToken(): checks multiple keys and trims
+  const getToken = (): string | null => {
+    try {
+      if (typeof window === "undefined") return null;
+      const keys = ["ACCESS_TOKEN", "token", "idToken"];
+      for (const k of keys) {
+        const v = localStorage.getItem(k);
+        if (v && v.trim()) return v.trim();
+      }
+      return null;
+    } catch (err) {
+      console.warn("getToken error", err);
+      return null;
+    }
+  };
+
   const getAuthHeaders = (): Record<string, string> => {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
     try {
-      const token = localStorage.getItem("token");
+      const token = getToken();
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
       } else {
@@ -105,7 +123,7 @@ export default function AuthorProfilePage() {
     const headers = getAuthHeaders();
 
     try {
-      const res = await fetch(`${API_BASE}/author/profile`, {
+      const res = await fetch(`${API_ROOT}/author/profile`, {
         method: "GET",
         headers,
         credentials: "include",
@@ -197,7 +215,7 @@ export default function AuthorProfilePage() {
 
     try {
       const headers = getAuthHeaders();
-      const res = await fetch(`${API_BASE}/author/profile`, {
+      const res = await fetch(`${API_ROOT}/author/profile`, {
         method: "PUT",
         headers,
         credentials: "include",
@@ -246,7 +264,7 @@ export default function AuthorProfilePage() {
     try {
       // Here we pretend we've uploaded and obtained 'url' - send to backend to store
       const headers = getAuthHeaders();
-      const res = await fetch(`${API_BASE}/author/profile/photo`, {
+      const res = await fetch(`${API_ROOT}/author/profile/photo`, {
         method: "PUT",
         headers,
         credentials: "include",
@@ -295,43 +313,24 @@ export default function AuthorProfilePage() {
   return (
     <div className="space-y-7 p-3 md:p-4">
       {/* HEADER */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
-      >
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <User className="h-6 w-6 text-indigo-600" /> Author Profile
           </h1>
-          <p className="text-sm text-slate-500">
-            Manage your public profile and account settings
-          </p>
+          <p className="text-sm text-slate-500">Manage your public profile and account settings</p>
         </div>
 
         {!isEditing ? (
-          <Button
-            onClick={handleEditProfile}
-            className="bg-indigo-600 text-white rounded-full px-4 flex items-center gap-2"
-          >
+          <Button onClick={handleEditProfile} className="bg-indigo-600 text-white rounded-full px-4 flex items-center gap-2">
             <Edit className="h-4 w-4" /> Edit Profile
           </Button>
         ) : (
           <div className="flex gap-2">
-            <Button
-              onClick={handleSaveProfile}
-              className="bg-green-600 text-white rounded-full px-4 flex items-center gap-2"
-              disabled={saving}
-            >
+            <Button onClick={handleSaveProfile} className="bg-green-600 text-white rounded-full px-4 flex items-center gap-2" disabled={saving}>
               💾 {saving ? "Saving..." : "Save Profile"}
             </Button>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setIsEditing(false);
-                fetchProfile();
-              }}
-            >
+            <Button variant="ghost" onClick={() => { setIsEditing(false); fetchProfile(); }}>
               Cancel
             </Button>
           </div>
@@ -350,11 +349,7 @@ export default function AuthorProfilePage() {
         <Card className="rounded-2xl border">
           <CardContent className="p-4 flex flex-col sm:flex-row items-center sm:items-start gap-4">
             <div className="relative">
-              <img
-                src={profile?.photo || "/author.png"}
-                alt="Author"
-                className="h-16 w-16 sm:h-20 sm:w-20 rounded-full object-cover border-2 border-indigo-500/40"
-              />
+              <img src={profile?.photo || "/author.png"} alt="Author" className="h-16 w-16 sm:h-20 sm:w-20 rounded-full object-cover border-2 border-indigo-500/40" />
               {isEditing && (
                 <label className="absolute bottom-0 right-0 bg-indigo-600 text-white p-1 rounded-full cursor-pointer">
                   <Upload size={12} />
@@ -388,43 +383,40 @@ export default function AuthorProfilePage() {
 
       {/* TAB SELECT */}
       <div className="flex flex-wrap border-b gap-4 text-sm justify-center sm:justify-start">
-        <TabBtn active={tab === "info"} onClick={() => setTab("info")} icon={<User size={14} />}>
-          Personal Info
-        </TabBtn>
-        <TabBtn active={tab === "social"} onClick={() => setTab("social")} icon={<Link2 size={14} />}>
-          Social Links
-        </TabBtn>
-        <TabBtn active={tab === "payout"} onClick={() => setTab("payout")} icon={<CreditCard size={14} />}>
-          Payout Details
-        </TabBtn>
-        <TabBtn active={tab === "membership"} onClick={() => setTab("membership")} icon={<Crown size={14} />}>
-          Membership
-        </TabBtn>
+        <TabBtn active={tab === "info"} onClick={() => setTab("info")} icon={<User size={14} />}>Personal Info</TabBtn>
+        <TabBtn active={tab === "social"} onClick={() => setTab("social")} icon={<Link2 size={14} />}>Social Links</TabBtn>
+        <TabBtn active={tab === "payout"} onClick={() => setTab("payout")} icon={<CreditCard size={14} />}>Payout Details</TabBtn>
+        <TabBtn active={tab === "membership"} onClick={() => setTab("membership")} icon={<Crown size={14} />}>Membership</TabBtn>
       </div>
 
       {/* TAB CONTENT */}
       {tab === "info" && (
-        <PersonalInfoSection
+        <PersonalInfoSection profile={profile ?? {}} isEditing={isEditing} onChange={(f, v) => updateField(f as any, v)} onSave={handleSaveProfile} />
+      )}
+      {tab === "social" && (
+        <SocialLinksSection
           profile={profile ?? {}}
           isEditing={isEditing}
-          onChange={(f, v) => updateField(f as any, v)}
+          onChange={(k, v) => {
+            setProfile((p) => (p ? { ...p, socialLinks: { ...p.socialLinks, [k]: v } } : p));
+          }}
           onSave={handleSaveProfile}
         />
       )}
-      {tab === "social" && <SocialLinksSection profile={profile ?? {}} isEditing={isEditing} onChange={(k, v) => {
-        setProfile((p) => (p ? { ...p, socialLinks: { ...p.socialLinks, [k]: v } } : p));
-      }} onSave={handleSaveProfile} />}
-      {tab === "payout" && <PayoutSection profile={profile ?? {}} isEditing={isEditing} onChange={(k, v) => {
-        setProfile((p) => (p ? { ...p, payoutDetails: { ...p.payoutDetails, [k]: v } } : p));
-      }} onSave={handleSaveProfile} />}
+      {tab === "payout" && (
+        <PayoutSection
+          profile={profile ?? {}}
+          isEditing={isEditing}
+          onChange={(k, v) => {
+            setProfile((p) => (p ? { ...p, payoutDetails: { ...p.payoutDetails, [k]: v } } : p));
+          }}
+          onSave={handleSaveProfile}
+        />
+      )}
       {tab === "membership" && <MembershipSection formatNumber={formatNumber} membership={profile?.membership} />}
 
       {/* Unauthorized hint */}
-      {unauthorized && (
-        <div className="text-xs text-slate-600 mt-2">
-          You are not signed in — some actions (edit/save) require signing in.
-        </div>
-      )}
+      {unauthorized && <div className="text-xs text-slate-600 mt-2">You are not signed in — some actions (edit/save) require signing in.</div>}
     </div>
   );
 }

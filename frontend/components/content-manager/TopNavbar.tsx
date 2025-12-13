@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Bell, Search, ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { getJSON } from "@/lib/api";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -20,9 +21,28 @@ export default function TopNavbar({
 }) {
   const [value, setValue] = useState("");
   const [scope, setScope] = useState("All");
+  const [notifications, setNotifications] = useState<any[]>([]);
   const router = useRouter();
 
   const searchScopes = ["All", "Articles", "Authors", "Reviewers"];
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await getJSON('/content-manager/notifications');
+      if (res.status === 'success') {
+        setNotifications(res.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch notifications", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    // Optional: Poll every 30s
+    // const interval = setInterval(fetchNotifications, 30000);
+    // return () => clearInterval(interval);
+  }, []);
 
   return (
     <nav
@@ -120,23 +140,26 @@ export default function TopNavbar({
           />
 
           {/* Notification Badge */}
-          <span
-            className="
-              absolute -top-1.5 -right-1.5 sm:-top-2 sm:-right-2
-              bg-destructive text-destructive-foreground
-              text-[9px] sm:text-xs rounded-full
-              px-1.5 py-0.5 shadow
-            "
-          >
-            5
-          </span>
+          {notifications.length > 0 && (
+            <span
+              className="
+                absolute -top-1.5 -right-1.5 sm:-top-2 sm:-right-2
+                bg-destructive text-destructive-foreground
+                text-[9px] sm:text-xs rounded-full
+                px-1.5 py-0.5 shadow
+                "
+            >
+              {notifications.filter(n => !n.is_read).length || notifications.length}
+            </span>
+          )}
         </DropdownMenuTrigger>
 
         <DropdownMenuContent
           align="end"
           className="
-            w-64 bg-card text-card-foreground
+            w-80 bg-card text-card-foreground
             shadow-xl border border-border
+            max-h-96 overflow-y-auto
           "
         >
           <DropdownMenuLabel className="font-semibold">
@@ -144,38 +167,33 @@ export default function TopNavbar({
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
 
-          <DropdownMenuItem
-            className="cursor-pointer hover:bg-muted hover:text-foreground"
-            onClick={() => router.push("/cm-dashboard/reviewer-assignments")}
-          >
-            New review assignment request
-          </DropdownMenuItem>
-
-          <DropdownMenuItem
-            className="cursor-pointer hover:bg-muted hover:text-foreground"
-            onClick={() => router.push("/cm-dashboard/editor-assignments")}
-          >
-            Editor finished editing a draft
-          </DropdownMenuItem>
-
-          <DropdownMenuItem
-            className="cursor-pointer hover:bg-muted hover:text-foreground"
-            onClick={() => router.push("/cm-dashboard/change-requests")}
-          >
-            Author submitted revisions
-          </DropdownMenuItem>
-
-          <DropdownMenuItem
-            className="cursor-pointer hover:bg-muted hover:text-foreground"
-            onClick={() => router.push("/cm-dashboard/scheduling")}
-          >
-            Upcoming scheduled publication
-          </DropdownMenuItem>
+          {notifications.length === 0 ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              No new notifications
+            </div>
+          ) : (
+            notifications.map((notif: any) => (
+              <DropdownMenuItem
+                key={notif.id}
+                className="cursor-pointer hover:bg-muted hover:text-foreground flex flex-col items-start gap-1 p-3 border-b last:border-0"
+                onClick={() => {
+                  if (notif.link) router.push(notif.link);
+                }}
+              >
+                <div className="font-medium text-sm">{notif.title}</div>
+                <div className="text-xs text-muted-foreground line-clamp-2">{notif.message}</div>
+                <div className="text-[10px] text-muted-foreground mt-1 text-right w-full">
+                  {new Date(notif.created_at).toLocaleString()}
+                </div>
+              </DropdownMenuItem>
+            ))
+          )}
 
           <DropdownMenuSeparator />
 
           <DropdownMenuItem
             className="text-primary text-center cursor-pointer hover:bg-muted/60"
+            onClick={() => router.push('/cm-dashboard/notifications')} // Optional page if you want
           >
             View All Notifications
           </DropdownMenuItem>

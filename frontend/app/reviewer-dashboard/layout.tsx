@@ -1,7 +1,7 @@
 "use client";
 
-import Sidebar from "@/components/reviewer-dashbaord/Sidebar";
-import TopNavbar from "@/components/reviewer-dashbaord/TopNavbar";
+import Sidebar from "@/components/reviewer-dashboard/Sidebar";
+import TopNavbar from "@/components/reviewer-dashboard/TopNavbar";
 import { useState, Dispatch, SetStateAction } from "react";
 import ChatbotAuthor from "@/components/author-dashboard/chatbotAuthor";
 
@@ -10,7 +10,7 @@ export default function ReviewerDashboardLayout({ children }: { children: React.
   const [search, setSearch] = useState("");
 
   return (
-    <div className="flex flex-col bg-white dark:bg-slate-900 text-slate-900 dark:text-white">      
+    <div className="flex flex-col bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
 
       {/* ✅ Sidebar + Content Row */}
       <div className="flex flex-1 relative">
@@ -45,10 +45,10 @@ export default function ReviewerDashboardLayout({ children }: { children: React.
 
       {/* ✅ ensures nothing visually hits footer too early */}
       <div className="h-2"></div>
-      <ChatbotAuthor 
-              // No config prop needed - the component handles everything internally
-              className="z-50"
-            />
+      <ChatbotAuthor
+        // No config prop needed - the component handles everything internally
+        className="z-50"
+      />
 
     </div>
   );
