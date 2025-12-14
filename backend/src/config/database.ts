@@ -622,6 +622,55 @@ const initializeTables = async (): Promise<void> => {
     await mysqlDb.execute(createCommunicationsTable);
     console.log('✅ Communications table created');
 
+    console.log('🔄 Creating admin_audit_logs table...');
+    await mysqlDb.execute(`
+      CREATE TABLE IF NOT EXISTS admin_audit_logs (
+        id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        admin_id VARCHAR(36) NOT NULL,
+        action VARCHAR(255) NOT NULL,
+        target_type VARCHAR(50),
+        target_id VARCHAR(36),
+        details JSON,
+        ip_address VARCHAR(45),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_admin_log (admin_id),
+        INDEX idx_action_log (action)
+      )
+    `);
+    console.log('✅ Admin audit logs table created');
+
+    console.log('🔄 Creating incidents table...');
+    await mysqlDb.execute(`
+      CREATE TABLE IF NOT EXISTS incidents (
+        id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        status ENUM('open', 'investigating', 'resolved', 'dismissed') DEFAULT 'open',
+        priority ENUM('low', 'medium', 'high', 'critical') DEFAULT 'medium',
+        submission_id VARCHAR(36),
+        reported_by VARCHAR(36),
+        assigned_to VARCHAR(36),
+        resolution_notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (submission_id) REFERENCES content(id) ON DELETE SET NULL,
+        INDEX idx_incident_status (status),
+        INDEX idx_incident_priority (priority)
+      )
+    `);
+    console.log('✅ Incidents table created');
+
+    console.log('🔄 Creating system_settings table...');
+    await mysqlDb.execute(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        setting_key VARCHAR(100) PRIMARY KEY,
+        setting_value JSON,
+        description VARCHAR(255),
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✅ System settings table created');
+
     // Versions
     console.log('🔄 Creating versions table...');
     await mysqlDb.execute(createVersionsTable);
@@ -762,7 +811,11 @@ const verifyTableCreation = async (): Promise<void> => {
       'reviewer_assignments',
       'notifications',
       'communications',
+      'incidents',
+      'admin_audit_logs',
+      'system_settings',
     ];
+
 
     const createdTables = expectedTables.filter((table) => tableNames.includes(table));
 

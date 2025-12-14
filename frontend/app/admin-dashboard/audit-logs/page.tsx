@@ -1,207 +1,128 @@
-// app/admin-dashboard/audit-logs/page.tsx
 "use client";
 
-/**
- * Audit Logs — SRS Section 5
- * Includes:
- * - Search (user, action, submission ID)
- * - Date range filters
- * - Export logs
- * - Scrollable, structured log table
- * - Shows: plagiarism scans, reviewer decisions, CM checks, editor approvals,
- *          admin overrides & takedowns.
- * 
- * UI rules:
- * - Opaque cards only: bg-card border border-border rounded-lg shadow-sm p-5
- * - Clean vertical rhythm: space-y-8 and space-y-6
- * - Muted headers, editorial typography
- * - Aurora only around layout (cards remain opaque)
- */
-
-import {
-  Search,
-  Calendar,
-  Download,
-  FileText,
-  ShieldCheck,
-  CircleDot,
-  ScanSearch,
-  UserCheck,
-  CheckCircle2,
-  Gavel,
-  Trash2,
-} from "lucide-react";
-
-// Dummy logs showing all SRS events
-const LOGS = [
-  {
-    ts: "2025-12-02 10:12",
-    user: "Reviewer A",
-    role: "Reviewer",
-    action: "Ran plagiarism scan",
-    target: "CNT-1001",
-    meta: "Similarity: 12%",
-    icon: ScanSearch,
-  },
-  {
-    ts: "2025-12-02 11:02",
-    user: "CM Priya",
-    role: "Content Manager",
-    action: "Verified plagiarism report",
-    target: "CNT-1001",
-    meta: "CM Verified: Yes",
-    icon: UserCheck,
-  },
-  {
-    ts: "2025-12-01 19:44",
-    user: "Editor X",
-    role: "Editor",
-    action: "Approved content",
-    target: "CNT-1003",
-    meta: "Status changed: Approved",
-    icon: CheckCircle2,
-  },
-  {
-    ts: "2025-12-01 17:12",
-    user: "Admin B",
-    role: "Admin",
-    action: "Forced re-scan",
-    target: "CNT-1002",
-    meta: "Reason: Reviewer skipped scan",
-    icon: FileText,
-  },
-  {
-    ts: "2025-12-01 16:50",
-    user: "Admin A",
-    role: "Admin",
-    action: "Overrode decision",
-    target: "CNT-1002",
-    meta: "Override: Rejected",
-    icon: Gavel,
-  },
-  {
-    ts: "2025-12-01 15:32",
-    user: "Admin A",
-    role: "Admin",
-    action: "Takedown published content",
-    target: "CNT-0483",
-    meta: "Removed for policy violation",
-    icon: Trash2,
-  },
-];
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { getJSON } from "@/lib/api";
+import AdminSidebar from "@/components/admin/AdminSidebar";
+import { Activity, Search, ClipboardList, Shield, User } from "lucide-react";
+import { toast } from "sonner";
 
 export default function AuditLogsPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<any>(null);
+
+  const fetchLogs = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("adminToken");
+      if (!token) {
+        router.push("/admin/login");
+        return;
+      }
+
+      const query = new URLSearchParams({
+        page: page.toString(),
+        limit: "25",
+      });
+
+      const res = await getJSON(`/admin/audit-logs?${query.toString()}`, token);
+      if (res.status === "success") {
+        setLogs(res.data.logs);
+        setPagination(res.data.pagination);
+      } else {
+        if (res.status === 401 || res.status === 403) router.push("/admin/login");
+        else toast.error("Failed to load logs");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("System error fetching logs");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogs();
+  }, [page]);
+
   return (
-    <div className="space-y-8">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
+      <main className="flex-1 p-8 overflow-y-auto">
 
-      {/* Header */}
-      <section>
-        <h2 className="text-xl font-semibold text-foreground">Audit Trail & Activity Logs</h2>
-        <p className="text-muted-foreground text-sm">
-          Tamper-evident logs for compliance. Search, filter, review, and export activity.
-        </p>
-      </section>
+        <header className="mb-8">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">System Audit Logs</h1>
+          <p className="text-slate-500 text-sm mt-1">Immutable record of all administrative actions.</p>
+        </header>
 
-      {/* Filters + Export */}
-      <div className="bg-card border border-border rounded-lg shadow-sm p-5 space-y-6">
-
-        {/* Filters row */}
-        <div className="grid md:grid-cols-4 gap-4">
-
-          {/* Search */}
-          <div className="relative col-span-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              placeholder="Search logs (user, action, submission ID)"
-              className="w-full pl-10 pr-3 py-2 bg-muted border border-border rounded-lg text-sm"
-            />
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 text-slate-500 font-medium">
+                <tr>
+                  <th className="px-6 py-4">Timestamp</th>
+                  <th className="px-6 py-4">Admin</th>
+                  <th className="px-6 py-4">Action</th>
+                  <th className="px-6 py-4">Target</th>
+                  <th className="px-6 py-4">Details</th>
+                  <th className="px-6 py-4">IP</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {loading ? (
+                  <tr><td colSpan={6} className="p-8 text-center text-slate-500">Loading logs...</td></tr>
+                ) : logs.length === 0 ? (
+                  <tr><td colSpan={6} className="p-8 text-center text-slate-500">No activity recorded yet.</td></tr>
+                ) : (
+                  logs.map((log) => (
+                    <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-950/50 transition-colors">
+                      <td className="px-6 py-4 text-slate-500 whitespace-nowrap">
+                        {new Date(log.created_at).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">
+                        <div className="flex items-center gap-2">
+                          <Shield size={14} className="text-indigo-500" />
+                          {log.admin_name}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="inline-flex items-center px-2 py-1 rounded bg-slate-100 text-slate-700 font-mono text-xs uppercase">
+                          {log.action}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">
+                        {log.target_type}: {log.target_id?.substring(0, 8)}...
+                      </td>
+                      <td className="px-6 py-4 text-xs text-slate-500 max-w-xs truncate" title={JSON.stringify(log.details)}>
+                        {JSON.stringify(log.details)}
+                      </td>
+                      <td className="px-6 py-4 text-xs text-slate-400">
+                        {log.ip_address || "N/A"}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-
-          {/* Start date */}
-          <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              type="date"
-              className="pl-10 pr-3 py-2 bg-muted border border-border rounded-lg text-sm w-full"
-            />
-          </div>
-
-          {/* End date */}
-          <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              type="date"
-              className="pl-10 pr-3 py-2 bg-muted border border-border rounded-lg text-sm w-full"
-            />
-          </div>
+          {pagination && (
+            <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <span className="text-sm text-slate-500">
+                Page {pagination.page} of {pagination.pages}
+              </span>
+              <button
+                disabled={page >= pagination.pages}
+                onClick={() => setPage(p => p + 1)}
+                className="px-3 py-1 text-sm border rounded hover:bg-slate-50 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
-
-        {/* Export */}
-        <div className="flex justify-end">
-          <button className="px-4 py-2 rounded-lg border border-border bg-card hover:bg-muted transition-all flex items-center gap-2 text-sm">
-            <Download className="h-4 w-4" />
-            Export All Logs
-          </button>
-        </div>
-      </div>
-
-      {/* Logs Table */}
-      <div className="bg-card border border-border rounded-lg shadow-sm p-5 space-y-3">
-        <h3 className="font-medium text-foreground">Activity Log</h3>
-
-        <div className="overflow-auto max-h-[600px] border border-border rounded-lg">
-          <table className="w-full text-left text-sm">
-            <thead className="text-muted-foreground sticky top-0 bg-card border-b border-border">
-              <tr>
-                <th className="py-2 px-3">Timestamp</th>
-                <th className="px-3">User</th>
-                <th className="px-3">Role</th>
-                <th className="px-3">Action</th>
-                <th className="px-3">Target</th>
-                <th className="px-3">Metadata</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {LOGS.map((l, i) => {
-                const Icon = l.icon;
-                return (
-                  <tr
-                    key={i}
-                    className="border-b border-border hover:bg-muted transition-colors"
-                  >
-                    {/* Timestamp */}
-                    <td className="py-3 px-3 flex items-center gap-2 text-foreground">
-                      <CircleDot className="h-3 w-3 text-primary" />
-                      {l.ts}
-                    </td>
-
-                    {/* User */}
-                    <td className="px-3 flex items-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                      {l.user}
-                    </td>
-
-                    <td className="px-3">{l.role}</td>
-
-                    {/* Action */}
-                    <td className="px-3 flex items-center gap-2">
-                      <Icon className="h-4 w-4 text-muted-foreground" />
-                      {l.action}
-                    </td>
-
-                    {/* Target */}
-                    <td className="px-3">{l.target}</td>
-
-                    {/* Metadata */}
-                    <td className="px-3">{l.meta}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      </main>
     </div>
   );
 }

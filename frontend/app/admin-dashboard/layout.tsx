@@ -1,6 +1,6 @@
 "use client";
 
-import Sidebar from "@/components/admin-dashboard/Sidebar";
+import AdminSidebar from "@/components/admin/AdminSidebar";
 import TopNavbar from "@/components/admin-dashboard/TopNavbar";
 import { useState } from "react";
 import ChatbotAuthor from "@/components/author-dashboard/chatbotAuthor";
@@ -10,14 +10,14 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
   const [search, setSearch] = useState("");
 
   return (
-    <div className="flex flex-col bg-white dark:bg-slate-900 text-slate-900 dark:text-white">      
+    <div className="flex flex-col bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
 
       {/* ✅ Sidebar + Content Row */}
       <div className="flex flex-1 relative">
 
         {/* ✅ Sidebar starts below universal Navbar and stretches naturally */}
         <div className="hidden md:block w-64 border-r border-slate-200 dark:border-slate-700">
-          <Sidebar />
+          <AdminSidebar />
         </div>
 
         {/* ✅ Main Content Area */}
@@ -45,10 +45,10 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
 
       {/* ✅ ensures nothing visually hits footer too early */}
       <div className="h-2"></div>
-      <ChatbotAuthor 
-              // No config prop needed - the component handles everything internally
-              className="z-50"
-            />
+      <ChatbotAuthor
+        // No config prop needed - the component handles everything internally
+        className="z-50"
+      />
 
     </div>
   );
