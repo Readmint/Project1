@@ -12,7 +12,9 @@ import {
     getNotifications,
     sendMessage,
     getDashboardStats,
-    checkPlagiarism
+    checkPlagiarism,
+    getReadyToPublish,
+    publishContent
 } from '../controllers/contentManager.controller';
 
 const router = express.Router();
@@ -36,5 +38,9 @@ router.get('/notifications', getNotifications);
 router.post('/send-message', sendMessage);
 router.get('/dashboard-stats', getDashboardStats);
 router.post('/check-plagiarism', checkPlagiarism);
+
+// Publishing Flow
+router.get('/publishing/queue', getReadyToPublish);
+router.post('/publishing/publish', publishContent);
 
 export default router;

@@ -4,7 +4,11 @@ import { useState, useRef, useEffect } from "react";
 import { Bell, Search } from "lucide-react";
 import Link from "next/link";
 
-export default function TopNavbar() {
+interface TopNavbarProps {
+  onSearch?: (value: string) => void;
+}
+
+export default function TopNavbar({ onSearch }: TopNavbarProps) {
   const [value, setValue] = useState("");
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -34,7 +38,11 @@ export default function TopNavbar() {
         <input
           placeholder="Search"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            const v = e.target.value;
+            setValue(v);
+            if (onSearch) onSearch(v);
+          }}
           className="
             w-full bg-muted border border-border 
             pl-9 sm:pl-10 

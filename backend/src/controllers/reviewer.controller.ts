@@ -41,25 +41,176 @@ export const getAssignments = async (req: Request, res: Response): Promise<void>
 
         const [assignments]: any = await db.execute(query, [userId]);
 
-        const formatted = assignments.map((a: any) => ({
-            id: a.assignment_id,
-            articleId: a.article_id,
-            title: a.title,
-            author: { name: a.author_name, id: a.author_id, role: 'Author' },
-            category: a.category_name || 'Uncategorized',
-            status: a.assignment_status,
-            articleStatus: a.article_status,
-            assignedDate: new Date(a.assigned_date).toLocaleDateString(),
-            dueDate: a.due_date ? new Date(a.due_date).toLocaleDateString() : 'No Deadline',
-            manager: a.manager_name ? { name: a.manager_name, id: a.manager_id, role: 'Content Manager' } : null,
-            editor: a.editor_name ? { name: a.editor_name, id: a.editor_id, role: 'Editor' } : null
-        }));
+        const formatted = assignments.map((a: any) => {
+            // Calculate Priority
+            let priority = 'Normal';
+            if (a.due_date) {
+                const now = new Date();
+                const due = new Date(a.due_date);
+                const diffTime = due.getTime() - now.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays <= 2) priority = 'Urgent';
+                else if (diffDays <= 5) priority = 'High';
+            }
+
+            return {
+                id: a.assignment_id,
+                articleId: a.article_id,
+                title: a.title,
+                author: { name: a.author_name, id: a.author_id, role: 'Author' },
+                category: a.category_name || 'Uncategorized',
+                status: a.assignment_status,
+                articleStatus: a.article_status,
+                assignedDate: new Date(a.assigned_date).toLocaleDateString(),
+                dueDate: a.due_date ? new Date(a.due_date).toLocaleDateString() : 'No Deadline',
+                priority,
+                manager: a.manager_name ? { name: a.manager_name, id: a.manager_id, role: 'Content Manager' } : null,
+                editor: a.editor_name ? { name: a.editor_name, id: a.editor_id, role: 'Editor' } : null
+            };
+        });
 
         res.status(200).json({ status: 'success', data: formatted });
 
     } catch (error: any) {
         console.error('Get reviewer assignments error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch assignments' });
+    }
+};
+
+export const getReviewerStats = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user?.userId;
+        const db: any = getDatabase();
+
+        const [rows]: any = await db.execute(`
+            SELECT status, due_date 
+            FROM reviewer_assignments
+            WHERE reviewer_id = ?
+        `, [userId]);
+
+        const result = {
+            total: 0,
+            pending: 0,
+            completed: 0,
+            high_priority: 0,
+            under_evaluation: 0
+        };
+
+        const now = new Date();
+
+        rows.forEach((r: any) => {
+            result.total++;
+
+            if (r.status === 'completed') {
+                result.completed++;
+            } else if (r.status === 'assigned' || r.status === 'in_progress') {
+                result.pending++;
+
+                // Track 'under_evaluation' specifically if needed, or just map 'in_progress' to it
+                if (r.status === 'in_progress') {
+                    result.under_evaluation++;
+                }
+
+                // High Priority Logic: Due within 3 days
+                if (r.due_date) {
+                    const due = new Date(r.due_date);
+                    const diffTime = due.getTime() - now.getTime();
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    if (diffDays <= 3) {
+                        result.high_priority++;
+                    }
+                }
+            }
+        });
+
+        res.status(200).json({ status: 'success', data: result });
+    } catch (error: any) {
+        console.error('Get reviewer stats error:', error);
+        res.status(500).json({ status: 'error', message: 'Failed to fetch stats' });
+    }
+};
+
+import { getStorageBucket, getSignedUrl } from "../utils/storage";
+
+export const getReviewContent = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params; // Article ID
+        const userId = (req as any).user?.userId;
+        const db: any = getDatabase();
+
+        // 1. Verify Assignment
+        const [assignment]: any = await db.execute(
+            'SELECT id, status FROM reviewer_assignments WHERE article_id = ? AND reviewer_id = ?',
+            [id, userId]
+        );
+
+        if (assignment.length === 0) {
+            res.status(403).json({ status: 'error', message: 'Not authorized for this review' });
+            return;
+        }
+
+        // 2. Fetch Content
+        const [contentRows]: any = await db.execute(`
+            SELECT c.id, c.title, c.content as body, c.category_id, cat.name as category_name
+            FROM content c
+            LEFT JOIN categories cat ON c.category_id = cat.category_id
+            WHERE c.id = ?
+        `, [id]);
+
+        if (contentRows.length === 0) {
+            res.status(404).json({ status: 'error', message: 'Article not found' });
+            return;
+        }
+
+        const article = contentRows[0];
+        let fileUrl = null;
+
+        // 3. Fetch Attachments & Handle URLs
+        let attachments: any[] = [];
+        try {
+            const [attRows]: any = await db.execute(
+                'SELECT id, filename, storage_path, public_url, mime_type, size_bytes FROM attachments WHERE article_id = ? ORDER BY uploaded_at ASC',
+                [id]
+            );
+
+            for (const att of (attRows || [])) {
+                let url = att.public_url;
+                if (!url && att.storage_path) {
+                    try {
+                        const gcsPath = att.storage_path.startsWith('gcs/') ? att.storage_path.slice(4) : att.storage_path;
+                        // Attempt to sign
+                        try {
+                            const signed = await getSignedUrl(gcsPath, 'read', 7 * 24 * 60 * 60 * 1000);
+                            url = typeof signed === 'string' ? signed : (signed as any).url || (signed as any).publicUrl;
+                        } catch (err) {
+                            // Fallback to public URL assumption if signing fails (e.g. no creds)
+                            console.warn(`Signing failed for ${att.filename}, assuming public bucket access`);
+                            const bucketName = process.env.FIREBASE_STORAGE_BUCKET || 'readmint-app.firebasestorage.app';
+                            url = `https://storage.googleapis.com/${bucketName}/${encodeURIComponent(gcsPath)}`;
+                        }
+                    } catch (e) {
+                        console.warn('Error processing attachment path', e);
+                    }
+                }
+                attachments.push({ ...att, url });
+            }
+        } catch (e) {
+            console.warn('Error fetching attachments for review', e);
+        }
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                ...article,
+                attachments,
+                file_url: attachments.length > 0 ? attachments[0].url : null
+            }
+        });
+
+    } catch (error: any) {
+        console.error('Get review content error:', error);
+        res.status(500).json({ status: 'error', message: 'Failed to fetch content' });
     }
 };
 
@@ -90,7 +241,6 @@ export const updateAssignmentStatus = async (req: Request, res: Response): Promi
         );
 
         // Notify Content Manager (assigned_by)
-        // If assigned_by is null, we might notify admin or just skip
         const managerId = assignment.assigned_by;
         if (managerId) {
             await db.execute(
@@ -99,9 +249,10 @@ export const updateAssignmentStatus = async (req: Request, res: Response): Promi
                 [managerId, `Reviewer updated status to ${status} for article ${articleId}`, `/cm-dashboard/reviewer-assignments`]
             );
 
+            // Use 'message' type instead of 'status_update' to avoid truncation/enum errors
             await db.execute(
                 `INSERT INTO communications (id, sender_id, receiver_id, message, type, entity_type, entity_id, created_at)
-                 VALUES (UUID(), ?, ?, ?, 'status_update', 'article', ?, NOW())`,
+                 VALUES (UUID(), ?, ?, ?, 'message', 'article', ?, NOW())`,
                 [userId, managerId, `Detailed Feedback/Status: ${status}. ${feedback || ''}`, articleId]
             );
         }
@@ -114,26 +265,7 @@ export const updateAssignmentStatus = async (req: Request, res: Response): Promi
     }
 };
 
-export const getReviewerStats = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const userId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
-        const [stats]: any = await db.execute(`
-            SELECT 
-                COUNT(*) as total_assigned,
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
-                SUM(CASE WHEN status = 'assigned' THEN 1 ELSE 0 END) as pending
-            FROM reviewer_assignments
-            WHERE reviewer_id = ?
-        `, [userId]);
-
-        res.status(200).json({ status: 'success', data: stats[0] });
-    } catch (error: any) {
-        console.error('Get reviewer stats error:', error);
-        res.status(500).json({ status: 'error', message: 'Failed to fetch stats' });
-    }
-};
 
 export const getCommunications = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -234,5 +366,82 @@ export const sendMessage = async (req: Request, res: Response): Promise<void> =>
     } catch (error: any) {
         console.error('Send reviewer message error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to send message' });
+    }
+};
+
+// Mock Plagiarism Check Service
+export const checkPlagiarism = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params; // Article ID
+        const userId = (req as any).user?.userId;
+        const db: any = getDatabase();
+
+        // 1. Verify Assignment
+        const [assignment]: any = await db.execute(
+            'SELECT id FROM reviewer_assignments WHERE article_id = ? AND reviewer_id = ?',
+            [id, userId]
+        );
+
+        if (assignment.length === 0) {
+            res.status(403).json({ status: 'error', message: 'Not authorized' });
+            return;
+        }
+
+        // 2. Check if a report exists or start a new one
+        // For demo purposes, we will simulate a scan immediately
+        const similarityScore = Math.floor(Math.random() * 30); // Random 0-30%
+        const uniqueScore = 100 - similarityScore;
+
+        const report = {
+            similarity_score: similarityScore,
+            unique_score: uniqueScore,
+            matches: [
+                { source: "Wikipedia - AI Ethics", url: "https://en.wikipedia.org/wiki/Ethics_of_artificial_intelligence", similarity: 5 },
+                { source: "TechCrunch Article", url: "https://techcrunch.com/ai-future", similarity: 3 }
+            ],
+            scanned_at: new Date().toISOString()
+        };
+
+        // Upsert report
+        await db.execute(
+            `INSERT INTO plagiarism_reports (id, article_id, run_by, created_at, similarity_summary, status)
+             VALUES (UUID(), ?, ?, NOW(), ?, 'completed')`,
+            [id, userId, JSON.stringify(report)]
+        );
+
+        res.status(200).json({ status: 'success', message: 'Scan completed', data: report });
+
+    } catch (error: any) {
+        console.error('Plagiarism check error:', error);
+        res.status(500).json({ status: 'error', message: 'Failed to run plagiarism check' });
+    }
+};
+
+export const getPlagiarismStatus = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params; // Article ID
+        const db: any = getDatabase();
+
+        const [rows]: any = await db.execute(
+            'SELECT similarity_summary, created_at, status FROM plagiarism_reports WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
+            [id]
+        );
+
+        if (rows.length === 0) {
+            res.status(200).json({ status: 'success', data: null });
+            return;
+        }
+
+        // Parse JSON if needed (though mysql2 usually handles JSON columns, safest to check)
+        let summary = rows[0].similarity_summary;
+        if (typeof summary === 'string') {
+            try { summary = JSON.parse(summary); } catch (e) { }
+        }
+
+        res.status(200).json({ status: 'success', data: { ...rows[0], similarity_summary: summary } });
+
+    } catch (error: any) {
+        console.error('Get plagiarism status error:', error);
+        res.status(500).json({ status: 'error', message: 'Failed to fetch report' });
     }
 };

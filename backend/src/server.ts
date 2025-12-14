@@ -22,6 +22,7 @@ import readerRoutes from './routes/reader.routes';
 import editorRoutes from './routes/editor.routes';
 import reviewerRoutes from './routes/reviewer.routes';
 import adminRoutes from './routes/admin.routes';
+import paymentRoutes from './routes/payment.routes';
 import { setupSwagger } from './config/swagger';
 
 dotenv.config();
@@ -62,6 +63,7 @@ app.use('/api/reader', readerRoutes);
 app.use('/api/editor', editorRoutes);
 app.use('/api/reviewer', reviewerRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/payment', paymentRoutes);
 
 /* ------------------------------- Health Check ---------------------------------- */
 app.get('/api/health-check', (req, res) => {

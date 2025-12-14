@@ -1,15 +1,18 @@
 "use client";
 
+
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Moon, Sun, LogOut, User, ChevronDown, Settings } from "lucide-react";
+import { Menu, X, Moon, Sun, LogOut, User, ChevronDown, Settings, ShoppingCart } from "lucide-react";
+import { useCart } from "@/context/CartContext";
 import { navLinks } from "@/src/data/navLinks";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import LogoutConfirmation from "../LogoutConfirmation";
 
 export default function Navbar() {
+  const { cart } = useCart();
   const router = useRouter();
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
@@ -95,44 +98,47 @@ export default function Navbar() {
   };
 
   const handleLogout = () => {
-  // Clear all auth-related data
-  localStorage.removeItem("token");
-  localStorage.removeItem("user");
-  
-  // Clear any other app-specific data
-  const keysToRemove = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith("app_")) {
-      keysToRemove.push(key);
+    // Clear all auth-related data
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+
+    // Clear any other app-specific data
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("app_")) {
+        keysToRemove.push(key);
+      }
     }
-  }
-  keysToRemove.forEach(key => localStorage.removeItem(key));
-  
-  // Update state
-  setUser(null);
-  
-  // Dispatch logout event for other components
-  window.dispatchEvent(new Event("userLogout"));
-  
-  // Hide confirmation modal
-  setShowLogoutConfirm(false);
-  
-  // Use window.location.href for complete redirect to home page
-  window.location.href = "/";
-};
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+
+    // Update state
+    setUser(null);
+
+    // Dispatch logout event for other components
+    window.dispatchEvent(new Event("userLogout"));
+
+    // Hide confirmation modal
+    setShowLogoutConfirm(false);
+
+    // Use window.location.href for complete redirect to home page
+    window.location.href = "/";
+  };
 
   const getUserDisplayName = () => {
     if (!user) return "";
-    return user.name || user.displayName || user.email?.split("@")[0] || "User";
+    const name = user.name || user.displayName || user.email?.split("@")[0] || "User";
+    return typeof name === "string" ? name : "User";
   };
 
   const getUserRole = () => {
     if (!user) return "";
-    
+
     // Format role for display
     const role = user.role || "";
-    switch(role) {
+    if (typeof role !== "string") return "";
+
+    switch (role) {
       case 'author':
         return 'Author';
       case 'reader':
@@ -152,9 +158,9 @@ export default function Navbar() {
 
   // Get dashboard path based on role
   const getDashboardPath = () => {
-    if (!user || !user.role) return "/";
-    
-    switch(user.role) {
+    if (!user || !user.role || typeof user.role !== 'string') return "/";
+
+    switch (user.role) {
       case 'author':
         return "/author-dashboard";
       case 'reviewer':
@@ -172,9 +178,9 @@ export default function Navbar() {
 
   // Get profile path based on role
   const getProfilePath = () => {
-    if (!user || !user.role) return "/profile";
-    
-    switch(user.role) {
+    if (!user || !user.role || typeof user.role !== 'string') return "/profile";
+
+    switch (user.role) {
       case 'author':
         return "/author-dashboard/profile";
       case 'reviewer':
@@ -199,8 +205,8 @@ export default function Navbar() {
           <div className="flex justify-between items-center h-16">
 
             {/* ✅ LEFT SIDE */}
-            <Link href={isLoggedIn ? getDashboardPath() : "/"} 
-                  className="flex items-center gap-2 flex-shrink-0">
+            <Link href={isLoggedIn ? getDashboardPath() : "/"}
+              className="flex items-center gap-2 flex-shrink-0">
               <Image
                 src="/icons/icon.png"
                 alt="E-Magazine Logo"
@@ -213,9 +219,9 @@ export default function Navbar() {
               </span>
             </Link>
 
-            {/* ✅ MIDDLE: Show user info when on role-specific dashboard */}
+            {/* ✅ MIDDLE: Show user info when on role-specific dashboard (except reader) */}
             <div className="hidden md:flex items-center flex-1 justify-center">
-              {isLoggedIn && pathname.includes("dashboard") ? (
+              {isLoggedIn && pathname.includes("dashboard") && user?.role !== 'reader' ? (
                 <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 rounded-lg px-4 py-2">
                   <div className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300">
                     <User size={16} />
@@ -243,6 +249,16 @@ export default function Navbar() {
             {/* ✅ RIGHT SIDE */}
             <div className="flex items-center gap-3">
 
+              {/* Shopping Cart */}
+              <Link href="/checkout" className="relative p-2 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+                <ShoppingCart size={20} />
+                {cart.length > 0 && (
+                  <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-600 rounded-full">
+                    {cart.length}
+                  </span>
+                )}
+              </Link>
+
               {/* Theme toggle */}
               <button
                 onClick={toggleTheme}
@@ -264,8 +280,7 @@ export default function Navbar() {
                       <p className="text-xs text-slate-600 dark:text-slate-400">{getUserRole()}</p>
                     </div>
                     <div className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300">
-                      {user.photoURL ? (
-                        // Use a plain <img> for external user.photoURL to avoid next/image host validation
+                      {user.photoURL && typeof user.photoURL === 'string' ? (
                         <img
                           src={user.photoURL}
                           alt={getUserDisplayName()}
@@ -284,10 +299,12 @@ export default function Navbar() {
                     <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50">
                       <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
                         <p className="text-sm font-medium text-slate-900 dark:text-white">{getUserDisplayName()}</p>
-                        <p className="text-xs text-slate-600 dark:text-slate-400">{user.email}</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-400">
+                          {typeof user.email === 'string' ? user.email : ''}
+                        </p>
                         <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">{getUserRole()}</p>
                       </div>
-                      
+
                       <Link
                         href={getDashboardPath()}
                         onClick={() => setUserMenuOpen(false)}
@@ -296,7 +313,7 @@ export default function Navbar() {
                         <User size={16} />
                         Dashboard
                       </Link>
-                      
+
                       <Link
                         href={getProfilePath()}
                         onClick={() => setUserMenuOpen(false)}
@@ -305,7 +322,7 @@ export default function Navbar() {
                         <Settings size={16} />
                         Profile Settings
                       </Link>
-                      
+
                       <button
                         onClick={handleLogoutConfirm}
                         className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-700"
@@ -349,7 +366,7 @@ export default function Navbar() {
                   <div className="px-3 py-3 mb-2 bg-slate-100 dark:bg-slate-800 rounded-lg">
                     <div className="flex items-center gap-3">
                       <div className="flex items-center justify-center w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300">
-                        {user.photoURL ? (
+                        {user.photoURL && typeof user.photoURL === 'string' ? (
                           // Use a plain <img> for external user.photoURL to avoid next/image host validation
                           <img
                             src={user.photoURL}
@@ -365,7 +382,9 @@ export default function Navbar() {
                       <div>
                         <p className="font-medium text-slate-900 dark:text-white">{getUserDisplayName()}</p>
                         <p className="text-sm text-slate-600 dark:text-slate-400">{getUserRole()}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-500">{user.email}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-500">
+                          {typeof user.email === 'string' ? user.email : ''}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -396,8 +415,8 @@ export default function Navbar() {
                         Profile Settings
                       </Link>
                     </Button>
-                    <Button 
-                      variant="ghost" 
+                    <Button
+                      variant="ghost"
                       className="w-full justify-start text-red-600 dark:text-red-400"
                       onClick={() => {
                         setIsOpen(false);

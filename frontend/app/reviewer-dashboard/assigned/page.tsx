@@ -34,10 +34,11 @@ export default function AssignedReviewsPage() {
     }
   };
 
-  const filtered = reviews.filter(r =>
-    r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.author.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = reviews.filter(r => {
+    const authorName = typeof r.author === 'object' ? r.author.name : r.author;
+    return r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      String(authorName).toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   return (
     <div className="p-6 space-y-6">
@@ -70,39 +71,50 @@ export default function AssignedReviewsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {filtered.map((review) => (
-            <div key={review.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5 hover:shadow-md transition-shadow flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider
-                            ${review.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}
+          {filtered.map((review) => {
+            const authorName = typeof review.author === 'object' ? review.author.name : review.author;
+            return (
+              <div key={review.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5 hover:shadow-md transition-shadow flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider
+                            ${review.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}
                         `}>
-                    {review.status}
-                  </span>
-                  <span className="text-xs text-slate-400 flex items-center gap-1">
-                    <Clock size={12} /> Due: {review.dueDate}
-                  </span>
+                      {review.status}
+                    </span>
+                    {review.priority && (
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider
+                            ${review.priority === 'Urgent' ? 'bg-red-100 text-red-700' :
+                          review.priority === 'High' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}
+                        `}>
+                        {review.priority} Priority
+                      </span>
+                    )}
+                    <span className="text-xs text-slate-400 flex items-center gap-1">
+                      <Clock size={12} /> Due: {review.dueDate}
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1 group-hover:text-indigo-600 transition-colors">
+                    {review.title}
+                  </h3>
+                  <div className="flex items-center gap-4 text-sm text-slate-500">
+                    <span className="flex items-center gap-1"><FileText size={14} /> {review.category}</span>
+                    <span>•</span>
+                    <span>By {authorName}</span>
+                  </div>
                 </div>
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1 group-hover:text-indigo-600 transition-colors">
-                  {review.title}
-                </h3>
-                <div className="flex items-center gap-4 text-sm text-slate-500">
-                  <span className="flex items-center gap-1"><FileText size={14} /> {review.category}</span>
-                  <span>•</span>
-                  <span>By {review.author}</span>
-                </div>
-              </div>
 
-              <div className="flex items-center gap-3 w-full md:w-auto">
-                <Link
-                  href={`/reviewer-dashboard/workspace?id=${review.articleId}`}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg flex items-center gap-2 transition-colors w-full md:w-auto justify-center"
-                >
-                  Start Review <ArrowRight size={16} />
-                </Link>
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                  <Link
+                    href={`/reviewer-dashboard/workspace?id=${review.articleId}`}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg flex items-center gap-2 transition-colors w-full md:w-auto justify-center"
+                  >
+                    Start Review <ArrowRight size={16} />
+                  </Link>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

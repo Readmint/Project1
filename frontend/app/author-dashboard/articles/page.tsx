@@ -3,6 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { toast } from "sonner"; // Assuming sonner is used, or alert/console fallback
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,22 +24,12 @@ import {
   Edit2,
   Trash2,
   RefreshCw,
+  MessageCircle,
+  ThumbsUp,
 } from "lucide-react";
+import { StatusTracker } from "@/components/author/StatusTracker";
 
 type Status = "Published" | "In Review" | "Revise" | "Draft" | "Rejected";
-
-type Article = {
-  id: string;
-  title: string;
-  category: string;
-  status: Status;
-  views?: number;
-  likes?: number;
-  publishedAt?: string | null;
-  slug?: string | null;
-  attachment_url?: string | null;
-  summary?: string;
-};
 
 // -------------------------
 // API base normalization (robust)
@@ -47,6 +38,20 @@ type Article = {
 const rawApi = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
 const API_BASE = rawApi.endsWith("/api") ? rawApi.replace(/\/api$/, "") : rawApi;
 const API_ROOT = `${API_BASE}/api`.replace(/\/+$/, "");
+
+type Article = {
+  id: string;
+  title: string;
+  category: string;
+  status: string; // Keep raw status for tracker
+  views?: number;
+  likes?: number;
+  comments?: number;
+  publishedAt?: string | null;
+  slug?: string | null;
+  attachment_url?: string | null;
+  summary?: string;
+};
 
 export default function MyArticlesPage() {
   const router = useRouter();
@@ -71,34 +76,6 @@ export default function MyArticlesPage() {
       console.warn("getToken error", err);
       return null;
     }
-  };
-
-  // optional: parse JWT payload if needed later
-  const parseJwt = (token: string | null) => {
-    if (!token) return null;
-    try {
-      const parts = token.split(".");
-      if (parts.length !== 3) return null;
-      const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-      return payload;
-    } catch {
-      return null;
-    }
-  };
-
-  // status mapping between backend and UI
-  const mapBackendToUIStatus = (s: string | null): Status => {
-    if (!s) return "Draft";
-    const st = s.toLowerCase().trim();
-
-    if (st === "published" || st === "approved") return "Published";
-    if (st === "under_review" || st === "submitted") return "In Review";
-    if (st === "changes_requested" || st === "revise") return "Revise";
-    if (st === "draft") return "Draft";
-    if (st === "rejected") return "Rejected";
-
-    console.warn("Unknown status:", s);
-    return "Draft";
   };
 
   // ---- load articles ----
@@ -177,9 +154,10 @@ export default function MyArticlesPage() {
           id: r.id || "",
           title: r.title || "Untitled",
           category: category,
-          status: mapBackendToUIStatus(r.status),
+          status: r.status || "draft", // Use raw status
           views: r.views || 0,
           likes: r.likes || 0,
+          comments: r.comments || 0,
           publishedAt: r.published_at || r.created_at || null,
           slug: r.slug || null,
           attachment_url: r.attachment_url || null,
@@ -191,7 +169,7 @@ export default function MyArticlesPage() {
       setArticles(mapped);
     } catch (err: any) {
       console.error("Fetch articles error:", err?.message ?? err);
-      alert(`Failed to load articles: ${err?.message ?? String(err)}`);
+      // alert(`Failed to load articles: ${err?.message ?? String(err)}`);
     } finally {
       setLoading(false);
     }
@@ -205,13 +183,13 @@ export default function MyArticlesPage() {
   // ---- Derived values ----
   const stats = useMemo(() => {
     const total = articles.length;
-    const published = articles.filter((a) => a.status === "Published").length;
-    const inReview = articles.filter((a) => a.status === "In Review").length;
-    const drafts = articles.filter((a) => a.status === "Draft").length;
-    const revise = articles.filter((a) => a.status === "Revise").length;
-    const rejected = articles.filter((a) => a.status === "Rejected").length;
+    // Map status for simple counters - status strings might vary, adjust as needed
+    const published = articles.filter((a) => a.status === "published" || a.status === "Published").length;
+    const inReview = articles.filter((a) => a.status === "submitted" || a.status === "under_review").length;
+    const drafts = articles.filter((a) => a.status === "draft").length;
 
-    return { total, published, inReview, drafts, revise, rejected };
+    // Just group rejected/revise/etc into general buckets if needed, or stick to simpler stats
+    return { total, published, inReview, drafts };
   }, [articles]);
 
   const categories = useMemo(() => {
@@ -226,7 +204,15 @@ export default function MyArticlesPage() {
         !search ||
         a.title.toLowerCase().includes(search.toLowerCase()) ||
         a.category.toLowerCase().includes(search.toLowerCase());
-      const matchesStatus = statusFilter === "All" ? true : a.status === statusFilter;
+
+      // Status filter might need mapping if dropdown uses "All/Published/Draft" but internal status is snake_case
+      const matchesStatus = statusFilter === "All" ? true :
+        (statusFilter === "Published" ? (a.status === "published" || a.status === "approved") :
+          statusFilter === "In Review" ? (a.status === "submitted" || a.status === "under_review") :
+            statusFilter === "Draft" ? (a.status === "draft") :
+              statusFilter === "Rejected" ? (a.status === "rejected") :
+                true); // Simple mapping
+
       const matchesCategory = categoryFilter === "All" ? true : a.category === categoryFilter;
       return matchesSearch && matchesStatus && matchesCategory;
     });
@@ -234,8 +220,8 @@ export default function MyArticlesPage() {
 
   // ---- Actions ----
   const handleExport = () => {
-    const headers = ["Title", "Category", "Status", "Views", "Likes", "Published Date"];
-    const rows = filteredArticles.map((a) => [a.title, a.category, a.status, a.views ?? "", a.likes ?? "", a.publishedAt ?? ""]);
+    const headers = ["Title", "Category", "Status", "Views", "Likes", "Comments", "Published Date"];
+    const rows = filteredArticles.map((a) => [a.title, a.category, a.status, a.views ?? "", a.likes ?? "", a.comments ?? "", a.publishedAt ?? ""]);
 
     const csv = [headers, ...rows]
       .map((row) => row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
@@ -258,55 +244,13 @@ export default function MyArticlesPage() {
     router.push(`/author-dashboard/articles/${article.id}/stats`);
   };
 
-  // replace existing handleViewArticle with this version
   const handleViewArticle = async (article: Article) => {
     if (!article || !article.id || article.id.trim() === "") {
-      alert("Cannot preview: missing article id. Please refresh the page.");
-      console.error("Preview blocked: missing article id for", article);
+      alert("Cannot preview: missing article id.");
       return;
     }
-
-    if (article.slug) {
-      router.push(`/articles/${article.slug}`);
-      return;
-    }
-
-    try {
-      const token = getToken();
-      if (!token) {
-        alert("Not authenticated. Please log in.");
-        router.push("/login");
-        return;
-      }
-
-      const url = `${API_ROOT}/article/author/articles/${encodeURIComponent(article.id)}`;
-      console.log("Preview: fetching article details from", url);
-
-      const res = await fetch(url, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      let body: any = null;
-      try {
-        body = await res.json();
-      } catch (e) {
-        /* ignore */
-      }
-
-      console.log("Preview fetch status:", res.status, body);
-
-      if (!res.ok) {
-        const message = body?.message || `Preview fetch failed (${res.status})`;
-        alert(`Cannot preview article: ${message}`);
-        return;
-      }
-
-      router.push(`/author-dashboard/articles/${article.id}/preview`);
-    } catch (err: any) {
-      console.error("Preview error:", err);
-      alert("Failed to load article preview: " + (err.message || String(err)));
-    }
+    // author preview or live view depending on status? for now just preview in dashboard
+    router.push(`/author-dashboard/articles/${article.id}/preview`);
   };
 
   const handleEditArticle = (article: Article) => {
@@ -322,14 +266,7 @@ export default function MyArticlesPage() {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token || ""}` },
       });
-      const body = await (async () => {
-        try {
-          return await res.json();
-        } catch {
-          return null;
-        }
-      })();
-      if (!res.ok) throw new Error(body?.message || "Failed to delete");
+      if (!res.ok) throw new Error("Failed to delete");
       setArticles((prev) => prev.filter((a) => a.id !== article.id));
     } catch (err) {
       console.error("Delete draft error:", err);
@@ -350,55 +287,11 @@ export default function MyArticlesPage() {
         },
         body: JSON.stringify({ status: "submitted", note: "Submitted by author" }),
       });
-      const body = await (async () => {
-        try {
-          return await res.json();
-        } catch {
-          return null;
-        }
-      })();
-      if (!res.ok) throw new Error(body?.message || "Failed to submit");
+      if (!res.ok) throw new Error("Failed to submit");
       await fetchArticles();
     } catch (err) {
       console.error("Submit draft error:", err);
       alert("Failed to submit draft");
-    }
-  };
-
-  // ---- Small UI helpers ----
-  const renderStatusBadge = (status: Status) => {
-    const base = "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium";
-    switch (status) {
-      case "Published":
-        return (
-          <span className={`${base} bg-emerald-100 text-emerald-700`}>
-            <CheckCircle2 className="h-3 w-3 mr-1" /> Published
-          </span>
-        );
-      case "In Review":
-        return (
-          <span className={`${base} bg-blue-100 text-blue-700`}>
-            <FileClock className="h-3 w-3 mr-1" /> Under Review
-          </span>
-        );
-      case "Revise":
-        return (
-          <span className={`${base} bg-amber-100 text-amber-700`}>
-            <FilePenLine className="h-3 w-3 mr-1" /> Revision Required
-          </span>
-        );
-      case "Draft":
-        return (
-          <span className={`${base} bg-slate-100 text-slate-700`}>
-            <FileText className="h-3 w-3 mr-1" /> Draft
-          </span>
-        );
-      case "Rejected":
-        return (
-          <span className={`${base} bg-rose-100 text-rose-700`}>
-            <FileText className="h-3 w-3 mr-1" /> Rejected
-          </span>
-        );
     }
   };
 
@@ -440,68 +333,36 @@ export default function MyArticlesPage() {
         </div>
       </div>
 
-      {/* Status summary cards */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <Card className="rounded-2xl border-slate-200 dark:border-slate-700">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500">Total Articles</p>
-                <p className="text-2xl font-semibold">{stats.total}</p>
-              </div>
-              <div className="p-2 rounded-full bg-indigo-50 dark:bg-indigo-900/40">
-                <BarChart3 className="h-5 w-5 text-indigo-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-          <Card className="rounded-2xl border-slate-200 dark:border-slate-700">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500">Published</p>
-                <p className="text-2xl font-semibold">{stats.published}</p>
-              </div>
-              <div className="p-2 rounded-full bg-emerald-50 dark:bg-emerald-900/40">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <Card className="rounded-2xl border-slate-200 dark:border-slate-700">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500">Under Review</p>
-                <p className="text-2xl font-semibold">{stats.inReview}</p>
-              </div>
-              <div className="p-2 rounded-full bg-blue-50 dark:bg-blue-900/40">
-                <Clock3 className="h-5 w-5 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-          <Card className="rounded-2xl border-slate-200 dark:border-slate-700">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500">Drafts</p>
-                <p className="text-2xl font-semibold">{stats.drafts}</p>
-              </div>
-              <div className="p-2 rounded-full bg-slate-50 dark:bg-slate-800">
-                <FileText className="h-5 w-5 text-slate-700 dark:text-slate-200" />
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+        <Card className="rounded-2xl border-slate-200 dark:border-slate-700">
+          <CardContent className="p-4">
+            <p className="text-xs text-slate-500">Total Articles</p>
+            <p className="text-2xl font-semibold">{stats.total}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-2xl border-slate-200 dark:border-slate-700">
+          <CardContent className="p-4">
+            <p className="text-xs text-slate-500">Published</p>
+            <p className="text-2xl font-semibold">{stats.published}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-2xl border-slate-200 dark:border-slate-700">
+          <CardContent className="p-4">
+            <p className="text-xs text-slate-500">Under Review</p>
+            <p className="text-2xl font-semibold">{stats.inReview}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-2xl border-slate-200 dark:border-slate-700">
+          <CardContent className="p-4">
+            <p className="text-xs text-slate-500">Drafts</p>
+            <p className="text-2xl font-semibold">{stats.drafts}</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Search + filters + export */}
+      {/* Search & Filters */}
       <div className="flex flex-col md:flex-row gap-3 md:gap-4 items-stretch md:items-center justify-between">
-        {/* Search */}
         <div className="flex-1 flex items-center">
           <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -513,8 +374,6 @@ export default function MyArticlesPage() {
             />
           </div>
         </div>
-
-        {/* Filters */}
         <div className="flex flex-wrap gap-2 md:gap-3 items-center justify-end">
           <div className="flex items-center gap-1">
             <Filter className="h-4 w-4 text-slate-400 hidden md:block" />
@@ -526,174 +385,126 @@ export default function MyArticlesPage() {
               <option value="All">All Status</option>
               <option value="Published">Published</option>
               <option value="In Review">Under Review</option>
-              <option value="Revise">Revision Required</option>
+              {/* <option value="Revise">Revision Required</option> */}
               <option value="Draft">Drafts</option>
               <option value="Rejected">Rejected</option>
             </select>
           </div>
-
-          <select
-            className="text-xs md:text-sm border rounded-xl px-2.5 py-1.5 bg-white dark:bg-slate-900"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value as string | "All")}
-          >
-            <option value="All">All Categories</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-
           <Button variant="outline" size="sm" onClick={handleExport} className="flex items-center gap-1 rounded-full text-xs md:text-sm">
             <Download className="h-4 w-4" /> Export
           </Button>
         </div>
       </div>
 
-      {/* Table */}
-      <Card className="rounded-2xl border-slate-200 dark:border-slate-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-[800px] w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-900/60 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium">Title</th>
-                <th className="text-left px-4 py-3 font-medium">Category</th>
-                <th className="text-left px-4 py-3 font-medium">Status</th>
-                <th className="text-right px-4 py-3 font-medium">Views</th>
-                <th className="text-right px-4 py-3 font-medium">Likes</th>
-                <th className="text-left px-4 py-3 font-medium">Published Date</th>
-                <th className="text-left px-4 py-3 font-medium">Actions</th>
-              </tr>
-            </thead>
+      {/* Articles List (Cards) */}
+      <div className="space-y-4">
+        {filteredArticles.map((article, idx) => (
+          <motion.div
+            key={article.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: idx * 0.05 }}
+          >
+            <Card className="rounded-xl overflow-hidden hover:shadow-md transition-shadow border-slate-200 dark:border-slate-800">
+              <CardContent className="p-0">
+                {/* Upper Content Section */}
+                <div className="p-5 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1 flex-1 mr-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 uppercase tracking-wide">
+                          {article.category}
+                        </span>
+                        {(article.status === "rejected" || article.status === "published") && (
+                          <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${article.status === "rejected" ? "bg-rose-50 border-rose-200 text-rose-600" : "bg-emerald-50 border-emerald-200 text-emerald-600"}`}>
+                            {article.status}
+                          </span>
+                        )}
+                      </div>
 
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredArticles.map((article, idx) => (
-                <motion.tr
-                  key={article.id}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.02 }}
-                  className="hover:bg-slate-50/70 dark:hover:bg-slate-900/40"
-                >
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-slate-900 dark:text-slate-100 line-clamp-2">{article.title}</div>
-                    {article.summary && <div className="text-xs text-slate-500 mt-1 line-clamp-1">{article.summary}</div>}
-                  </td>
-                  <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{article.category}</td>
-                  <td className="px-4 py-3">{renderStatusBadge(article.status)}</td>
-                  <td className="px-4 py-3 text-right">{formatNumber(article.views)}</td>
-                  <td className="px-4 py-3 text-right">{formatNumber(article.likes)}</td>
-                  <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{formatDate(article.publishedAt)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      {article.status === "Published" && (
-                        <>
-                          <Button variant="outline" size="sm" className="h-7 px-2 flex items-center gap-1" onClick={() => handleViewStats(article)}>
-                            <BarChart3 className="h-3 w-3" />
-                            Stats
-                          </Button>
-                          <Button variant="outline" size="sm" className="h-7 px-2 flex items-center gap-1" onClick={() => handleViewArticle(article)}>
-                            <Eye className="h-3 w-3" />
-                            View
-                          </Button>
-                        </>
-                      )}
+                      <h3 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">
+                        {article.title}
+                      </h3>
+                      <p className="text-sm text-slate-500 line-clamp-2 max-w-3xl">
+                        {article.summary || "No summary available."}
+                      </p>
+                    </div>
 
-                      {article.status === "In Review" && (
-                        <Button variant="outline" size="sm" className="h-7 px-2 flex items-center gap-1" onClick={() => handleViewArticle(article)}>
-                          <Eye className="h-3 w-3" />
-                          Preview
+                    {/* Desktop Actions (Top Right) */}
+                    <div className="hidden md:flex items-center gap-2">
+                      {article.status === "published" && (
+                        <Button size="sm" variant="outline" onClick={() => handleViewArticle(article)} className="gap-2">
+                          <Eye size={14} /> View Live
                         </Button>
                       )}
-
-                      {article.status === "Revise" && (
-                        <>
-                          <Button variant="outline" size="sm" className="h-7 px-2 flex items-center gap-1" onClick={() => handleEditArticle(article)}>
-                            <Edit2 className="h-3 w-3" />
-                            Edit
-                          </Button>
-                          <Button variant="outline" size="sm" className="h-7 px-2 flex items-center gap-1" onClick={() => handleViewArticle(article)}>
-                            <Eye className="h-3 w-3" />
-                            Preview
-                          </Button>
-                        </>
+                      {article.status === "draft" && (
+                        <Button size="sm" onClick={() => handleEditArticle(article)} className="gap-2 bg-indigo-600 text-white hover:bg-indigo-700">
+                          <Edit2 size={14} /> Edit
+                        </Button>
                       )}
-
-                      {article.status === "Draft" && (
-                        <>
-                          <Button variant="outline" size="sm" className="h-7 px-2 flex items-center gap-1" onClick={() => handleEditArticle(article)}>
-                            <Edit2 className="h-3 w-3" />
-                            Edit
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2 flex items-center gap-1 text-rose-600 border-rose-200 dark:border-rose-800"
-                            onClick={() => handleDeleteDraft(article)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            Delete
-                          </Button>
-                          <Button variant="outline" size="sm" className="h-7 px-2 flex items-center gap-1" onClick={() => submitDraft(article)}>
-                            <FileClock className="h-3 w-3" />
-                            Submit
-                          </Button>
-                        </>
-                      )}
-
-                      {article.status === "Rejected" && (
-                        <Button variant="outline" size="sm" className="h-7 px-2 flex items-center gap-1" onClick={() => handleViewArticle(article)}>
-                          <Eye className="h-3 w-3" />
-                          View
+                      {(article.status === "draft" || article.status === "submitted" || article.status === "rejected") && (
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-500 hover:text-rose-600" onClick={() => handleDeleteDraft(article)}>
+                          <Trash2 size={14} />
                         </Button>
                       )}
                     </div>
-                  </td>
-                </motion.tr>
-              ))}
+                  </div>
 
-              {filteredArticles.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
-                    {loading ? "Loading articles..." : "No articles found. Try adjusting filters or search terms."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                  {/* Stats Row */}
+                  <div className="flex items-center gap-6 pt-1">
+                    <div className="flex items-center gap-2 text-slate-500 text-sm" title="Views">
+                      <BarChart3 size={16} />
+                      <span className="font-medium">{formatNumber(article.views)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-500 text-sm" title="Likes">
+                      <ThumbsUp size={16} />
+                      <span className="font-medium">{formatNumber(article.likes)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-500 text-sm" title="Comments">
+                      <MessageCircle size={16} />
+                      <span className="font-medium">{formatNumber(article.comments)}</span>
+                    </div>
+                    <div className="text-xs text-slate-400 border-l pl-4 border-slate-200 dark:border-slate-700">
+                      Updated {formatDate(article.publishedAt)}
+                    </div>
+                  </div>
+                </div>
 
-        <div className="px-4 py-3 text-[11px] text-slate-500 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <span>
-            Showing {filteredArticles.length} of {articles.length} articles
-          </span>
-          <div className="flex gap-1">
-            <Button variant="outline" size="sm" className="h-7">
-              Previous
-            </Button>
-            <Button variant="outline" size="sm" className="h-7">
-              Next
+                {/* Status Tracker Footer (Full Width) */}
+                <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 px-6 py-6">
+                  <StatusTracker status={article.status} />
+
+                  {/* Mobile Actions Footer */}
+                  <div className="md:hidden mt-4 pt-4 border-t border-slate-200/50 flex justify-end gap-2">
+                    {article.status === "draft" && (
+                      <Button size="sm" onClick={() => handleEditArticle(article)}>Edit</Button>
+                    )}
+                    {article.status === "published" && (
+                      <Button size="sm" variant="outline" onClick={() => handleViewArticle(article)}>View Live</Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+
+        {!loading && filteredArticles.length === 0 && (
+          <div className="text-center py-16 bg-white dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+            <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FileText className="h-8 w-8 text-slate-400" />
+            </div>
+            <h3 className="text-lg font-medium text-slate-900 dark:text-white">No articles found</h3>
+            <p className="text-slate-500 mt-1 max-w-sm mx-auto">
+              You haven't created any articles matching your filters yet.
+            </p>
+            <Button onClick={handleWriteNewArticle} className="mt-6">
+              <Plus className="h-4 w-4 mr-2" /> Create New Article
             </Button>
           </div>
-        </div>
-      </Card>
+        )}
+      </div>
 
-      {/* Empty state with retry button */}
-      {!loading && articles.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-slate-500 mb-4">No articles found. Try creating a new article!</p>
-          <div className="flex gap-3 justify-center">
-            <Button onClick={handleWriteNewArticle} className="bg-indigo-600 hover:bg-indigo-700">
-              <Plus className="h-4 w-4 mr-2" /> Write Your First Article
-            </Button>
-            <Button onClick={fetchArticles} variant="outline" className="flex items-center gap-2">
-              <RefreshCw className="h-4 w-4" />
-              Retry Loading
-            </Button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

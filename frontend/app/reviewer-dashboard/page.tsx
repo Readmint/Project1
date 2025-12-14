@@ -1,17 +1,40 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getJSON } from "@/lib/api";
 
 export default function ReviewerOverviewPage() {
   const router = useRouter();
+  const [data, setData] = useState({
+    total: 0,
+    pending: 0,
+    under_evaluation: 0,
+    completed: 0,
+    high_priority: 0
+  });
 
-  // Mocked frontend-only data
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      const res = await getJSON('/reviewer/stats');
+      if (res.status === 'success') {
+        setData(res.data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch reviewer stats");
+    }
+  }
+
   const stats = [
-    { label: "Total Assigned Reviews", value: 24 },
-    { label: "Pending Reviews", value: 8 },
-    { label: "Under Evaluation", value: 6 },
-    { label: "Completed Reviews", value: 10 },
-    { label: "High Priority Submissions", value: 3 },
+    { label: "Total Assigned Reviews", value: data.total },
+    { label: "Pending Reviews", value: data.pending },
+    { label: "Under Evaluation", value: data.under_evaluation },
+    { label: "Completed Reviews", value: data.completed },
+    { label: "High Priority Submissions", value: data.high_priority },
   ];
 
   // Frontend-only handlers (navigation / placeholders)

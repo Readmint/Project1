@@ -722,3 +722,65 @@
 {"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 20:00:05"}
 {"code":"ER_WRONG_FIELD_WITH_GROUP","errno":1055,"level":"error","message":"Analytics error: Expression #4 of SELECT list is not in GROUP BY clause and contains nonaggregated column 'readmint.ra.reviewer_id' which is not functionally dependent on columns in GROUP BY clause; this is incompatible with sql_mode=only_full_group_by","service":"readmint-backend","sql":"\n            SELECT \n                u.name as reviewer_name,\n                COUNT(ra.id) as assigned_count,\n                SUM(CASE WHEN ra.status = 'completed' THEN 1 ELSE 0 END) as completed_count,\n                (SELECT COUNT(*) FROM plagiarism_reports pr WHERE pr.run_by = ra.reviewer_id AND pr.article_id = ra.article_id) as scans_run\n            FROM reviewer_assignments ra\n            JOIN users u ON ra.reviewer_id = u.id\n            GROUP BY u.name\n            ORDER BY assigned_count DESC\n            LIMIT 10\n        ","sqlMessage":"Expression #4 of SELECT list is not in GROUP BY clause and contains nonaggregated column 'readmint.ra.reviewer_id' which is not functionally dependent on columns in GROUP BY clause; this is incompatible with sql_mode=only_full_group_by","sqlState":"42000","stack":"Error: Expression #4 of SELECT list is not in GROUP BY clause and contains nonaggregated column 'readmint.ra.reviewer_id' which is not functionally dependent on columns in GROUP BY clause; this is incompatible with sql_mode=only_full_group_by\n    at PromiseConnection.execute (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\mysql2\\lib\\promise\\connection.js:47:22)\n    at getAdvancedAnalytics (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\controllers\\admin.controller.ts:801:47)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)","timestamp":"2025-12-14 20:01:12"}
 {"code":"ER_WRONG_FIELD_WITH_GROUP","errno":1055,"level":"error","message":"Analytics error: Expression #4 of SELECT list is not in GROUP BY clause and contains nonaggregated column 'readmint.ra.reviewer_id' which is not functionally dependent on columns in GROUP BY clause; this is incompatible with sql_mode=only_full_group_by","service":"readmint-backend","sql":"\n            SELECT \n                u.name as reviewer_name,\n                COUNT(ra.id) as assigned_count,\n                SUM(CASE WHEN ra.status = 'completed' THEN 1 ELSE 0 END) as completed_count,\n                (SELECT COUNT(*) FROM plagiarism_reports pr WHERE pr.run_by = ra.reviewer_id AND pr.article_id = ra.article_id) as scans_run\n            FROM reviewer_assignments ra\n            JOIN users u ON ra.reviewer_id = u.id\n            GROUP BY u.name\n            ORDER BY assigned_count DESC\n            LIMIT 10\n        ","sqlMessage":"Expression #4 of SELECT list is not in GROUP BY clause and contains nonaggregated column 'readmint.ra.reviewer_id' which is not functionally dependent on columns in GROUP BY clause; this is incompatible with sql_mode=only_full_group_by","sqlState":"42000","stack":"Error: Expression #4 of SELECT list is not in GROUP BY clause and contains nonaggregated column 'readmint.ra.reviewer_id' which is not functionally dependent on columns in GROUP BY clause; this is incompatible with sql_mode=only_full_group_by\n    at PromiseConnection.execute (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\mysql2\\lib\\promise\\connection.js:47:22)\n    at getAdvancedAnalytics (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\controllers\\admin.controller.ts:801:47)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)","timestamp":"2025-12-14 20:01:12"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 20:26:24"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 20:26:24"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 20:26:24"}
+{"level":"info","message":"Email sent: <2ff359f3-29b4-9e8c-0377-2f916af50c1d@gmail.com>","service":"readmint-backend","timestamp":"2025-12-14 20:30:02"}
+{"level":"info","message":"Email sent: <cbca5f98-0b32-373f-45a9-1ec7499c0625@gmail.com>","service":"readmint-backend","timestamp":"2025-12-14 20:36:41"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 20:50:16"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 20:50:16"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 20:50:16"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 20:50:26"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 20:50:26"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 20:50:26"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 20:54:57"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 20:54:57"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 20:54:57"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 20:59:38"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 20:59:38"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 20:59:38"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 20:59:47"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 20:59:47"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 20:59:47"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 21:06:27"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 21:06:27"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 21:06:27"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 21:09:23"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 21:09:23"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 21:09:23"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 21:31:39"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 21:31:39"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 21:31:39"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 21:40:07"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 21:40:07"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 21:40:07"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 21:42:26"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 21:42:26"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 21:42:26"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 21:42:48"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 21:42:48"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 21:42:48"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 22:08:30"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 22:08:30"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 22:08:30"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 22:10:25"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 22:10:25"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 22:10:25"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 22:16:02"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 22:16:02"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 22:16:02"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 22:17:05"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 22:17:06"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 22:17:06"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 22:20:08"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 22:20:09"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 22:20:09"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 22:32:35"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 22:32:35"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 22:32:35"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 22:32:50"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 22:32:50"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 22:32:50"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 22:33:11"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 22:33:11"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 22:33:11"}

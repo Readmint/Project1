@@ -1,355 +1,239 @@
-// src/controllers/reader.controller.ts
+
 import { Request, Response } from 'express';
-import admin from 'firebase-admin';
-import { getMySQLDatabase, getFirestoreDatabase } from '../config/database'; // adjust path if needed
-import { logger } from '../utils/logger';
+import { getDatabase } from '../config/database';
+import { getStorageBucket, getSignedUrl } from '../utils/storage'; // Assuming similar helpers exist, or reuse direct GCS
 
-/**
- * Helper: safe getter for mysql_db at request time
- */
-function mysql() {
-  return getMySQLDatabase();
-}
-
-/**
- * Helper: safe getter for firestore (optional)
- */
-function firestore() {
+export const getPublishedArticles = async (req: Request, res: Response): Promise<void> => {
   try {
-    return getFirestoreDatabase();
-  } catch (err) {
-    return null;
-  }
-}
+    const db: any = getDatabase();
+    // Fetch published articles
+    const [rows]: any = await db.execute(`
+            SELECT 
+                c.id, c.title, c.content, c.price, c.is_free, c.published_at, 
+                c.category_id, cat.name as category_name, u.name as author_name,
+                (SELECT COUNT(*) FROM attachments WHERE article_id = c.id) as attachment_count
+            FROM content c
+            JOIN users u ON c.author_id = u.id
+            LEFT JOIN categories cat ON c.category_id = cat.category_id
+            WHERE c.status = 'published'
+            ORDER BY c.published_at DESC
+        `);
 
-/**
- * GET /reader/home
- * Returns featured, trending, and recent content (basic implementation)
- */
-export const getReaderHome = async (req: Request, res: Response) => {
-  try {
-    const mysqlDb = mysql();
+    // Check user purchases if logged in
+    const userId = (req as any).user?.userId;
+    let purchasedIds = new Set();
+    if (userId) {
+      const [purchases]: any = await db.execute(
+        'SELECT article_id FROM user_purchases WHERE user_id = ?',
+        [userId]
+      );
+      purchases.forEach((p: any) => purchasedIds.add(p.article_id));
+    }
 
-    const [featured]: any = await mysqlDb.execute(
-      `SELECT id, title, metadata, featured, reads_count, likes_count, created_at
-       FROM content
-       WHERE featured = TRUE
-       ORDER BY created_at DESC
-       LIMIT 10`
-    );
+    const data = rows.map((row: any) => {
+      // Create plain text synopsis from HTML content
+      const plainText = row.content ? row.content.replace(/<[^>]*>?/gm, '') : '';
+      const synopsis = plainText.substring(0, 150) + (plainText.length > 150 ? '...' : '');
 
-    const [trending]: any = await mysqlDb.execute(
-      `SELECT id, title, metadata, featured, reads_count, likes_count, created_at
-       FROM content
-       WHERE status = 'published'
-       ORDER BY trending_score DESC, reads_count DESC
-       LIMIT 20`
-    );
+      // Remove full content before sending list to reduce payload
+      const { content, ...rest } = row;
 
-    const [recent]: any = await mysqlDb.execute(
-      `SELECT id, title, metadata, featured, reads_count, likes_count, created_at
-       FROM content
-       WHERE status = 'published'
-       ORDER BY created_at DESC
-       LIMIT 20`
-    );
-
-    return res.json({
-      featured: featured[0] ? featured : [],
-      trending: trending[0] ? trending : [],
-      recent: recent[0] ? recent : []
+      return {
+        ...rest,
+        synopsis,
+        is_purchased: row.is_free ? true : purchasedIds.has(row.id)
+      };
     });
-  } catch (error) {
-    logger.error('Error in getReaderHome', error);
-    return res.status(500).json({ message: 'Internal server error' });
+
+    res.status(200).json({ status: 'success', data });
+  } catch (error: any) {
+    console.error('Get published articles error:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to fetch articles' });
   }
 };
 
-/**
- * GET /content/:contentId
- * Returns content metadata, checks premium flag and subscription if user present
- */
-export const getContentById = async (req: Request, res: Response) => {
+export const getMyLibrary = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { contentId } = req.params;
-    const uid = (req as any).user?.uid || null; // if you have auth middleware that sets req.user
+    const userId = (req as any).user?.userId;
+    const db: any = getDatabase();
 
-    const mysqlDb = mysql();
+    const [rows]: any = await db.execute(`
+            SELECT 
+                c.id, c.title, c.content, c.published_at, 
+                u.name as author_name, up.purchased_at
+            FROM user_purchases up
+            JOIN content c ON up.article_id = c.id
+            JOIN users u ON c.author_id = u.id
+            WHERE up.user_id = ?
+            ORDER BY up.purchased_at DESC
+        `, [userId]);
 
-    const [rows]: any = await mysqlDb.execute(
-      `SELECT id, title, author_id, category_id, metadata, featured, reads_count, likes_count, status
-       FROM content WHERE id = ? LIMIT 1`,
-      [contentId]
-    );
+    const data = rows.map((row: any) => {
+      const plainText = row.content ? row.content.replace(/<[^>]*>?/gm, '') : '';
+      const synopsis = plainText.substring(0, 150) + (plainText.length > 150 ? '...' : '');
+      const { content, ...rest } = row;
+      return { ...rest, synopsis };
+    });
 
-    if (!rows[0]) {
-      return res.status(404).json({ message: 'Content not found' });
+    res.status(200).json({ status: 'success', data });
+  } catch (error: any) {
+    console.error('Get library error:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to fetch library' });
+  }
+};
+
+export const getArticleDetails = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).user?.userId;
+    const db: any = getDatabase();
+
+    // 1. Fetch Article Metadata
+    const [articles]: any = await db.execute(`
+            SELECT 
+                c.id, c.title, c.content, c.price, c.is_free, c.published_at, 
+                c.category_id, cat.name as category_name, u.name as author_name
+            FROM content c
+            JOIN users u ON c.author_id = u.id
+            LEFT JOIN categories cat ON c.category_id = cat.category_id
+            WHERE c.id = ? AND c.status = 'published'
+        `, [id]);
+
+    if (articles.length === 0) {
+      res.status(404).json({ status: 'error', message: 'Article not found' });
+      return;
     }
 
-    const content = rows[0];
+    const article = articles[0];
 
-    // If content is premium and you want to check subscription:
-    const isPremium = content.metadata && content.metadata.isPremium;
-    if (isPremium && uid) {
-      // Check user's subscription status in user_subscriptions
-      const [userSubs]: any = await mysqlDb.execute(
-        `SELECT status, end_date FROM user_subscriptions WHERE user_id = ? AND status = 'active' ORDER BY end_date DESC LIMIT 1`,
-        [ (req as any).user?.id || null ]
+    // 2. Check Access
+    let hasAccess = article.is_free === 1;
+    if (!hasAccess && userId) {
+      const [purchase]: any = await db.execute(
+        'SELECT 1 FROM user_purchases WHERE user_id = ? AND article_id = ?',
+        [userId, id]
       );
-      // If no active subscription, mark restricted
-      if (!userSubs[0]) {
-        content.access = 'restricted';
-      } else {
-        content.access = 'granted';
+      if (purchase.length > 0) hasAccess = true;
+    }
+
+    // 3. Fetch Social Stats (Likes & Comments)
+    const [likes]: any = await db.execute(
+      'SELECT COUNT(*) as count FROM user_likes WHERE article_id = ?', [id]
+    );
+
+    let isLiked = false;
+    if (userId) {
+      const [userLike]: any = await db.execute(
+        'SELECT 1 FROM user_likes WHERE user_id = ? AND article_id = ?',
+        [userId, id]
+      );
+      isLiked = userLike.length > 0;
+    }
+
+    const [comments]: any = await db.execute(`
+            SELECT ac.id, ac.content, ac.created_at, u.name as user_name
+            FROM article_comments ac
+            JOIN users u ON ac.user_id = u.id
+            WHERE ac.article_id = ?
+            ORDER BY ac.created_at DESC
+        `, [id]);
+
+    // 4. Prepare Response
+    const plainText = article.content ? article.content.replace(/<[^>]*>?/gm, '') : '';
+    const synopsis = plainText.substring(0, 200) + '...';
+
+    let attachments = [];
+    if (hasAccess) {
+      const [atts]: any = await db.execute('SELECT id, filename, storage_path FROM attachments WHERE article_id = ?', [id]);
+      // Generate signed URLs (mock for now, similar to previous reviewer implementation)
+      // const { getSignedUrl } = require('../utils/storage'); // Already imported at the top
+      attachments = await Promise.all(atts.map(async (att: any) => {
+        let public_url = att.storage_path.startsWith('http') ? att.storage_path : null;
+        if (!public_url) {
+          try {
+            public_url = await getSignedUrl(att.storage_path);
+          } catch (e) {
+            public_url = null; // Fallback handled in UI
+          }
+        }
+        return {
+          id: att.id,
+          filename: att.filename,
+          public_url,
+          storage_path: att.storage_path
+        };
+      }));
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        ...article,
+        content: hasAccess ? article.content : null, // Hide content if locked
+        synopsis,
+        has_access: hasAccess,
+        attachments,
+        social: {
+          likes: likes[0].count,
+          is_liked: isLiked,
+          comments
+        }
       }
-    } else if (isPremium && !uid) {
-      content.access = 'restricted';
-    } else {
-      content.access = 'granted';
-    }
-
-    return res.json({ content });
-  } catch (error) {
-    logger.error('Error in getContentById', error);
-    return res.status(500).json({ message: 'Internal server error' });
-  }
-};
-
-/**
- * GET /content/:contentId/stream
- * Returns a signed URL to storage (uses firebase admin storage)
- * Assumes content.metadata.storage_path contains the path
- */
-export const getContentStream = async (req: Request, res: Response) => {
-  try {
-    const { contentId } = req.params;
-    const mysqlDb = mysql();
-
-    const [rows]: any = await mysqlDb.execute(
-      `SELECT id, title, metadata FROM content WHERE id = ? LIMIT 1`,
-      [contentId]
-    );
-
-    if (!rows[0]) {
-      return res.status(404).json({ message: 'Content not found' });
-    }
-
-    const content = rows[0];
-    const storagePath = content.metadata?.storage_path || content.metadata?.filePath;
-
-    if (!storagePath) {
-      return res.status(400).json({ message: 'No storage path available for this content' });
-    }
-
-    if (!admin.apps.length) {
-      return res.status(500).json({ message: 'Storage not configured' });
-    }
-
-    const bucketName = process.env.FIREBASE_STORAGE_BUCKET || admin.storage().bucket().name;
-    const bucket = admin.storage().bucket(bucketName);
-    const file = bucket.file(storagePath);
-
-    // Signed URL valid for short time (e.g., 5 minutes)
-    const [url] = await file.getSignedUrl({
-      action: 'read',
-      expires: Date.now() + 5 * 60 * 1000 // 5 minutes
     });
 
-    return res.json({ url });
-  } catch (error) {
-    logger.error('Error in getContentStream', error);
-    return res.status(500).json({ message: 'Internal server error' });
+  } catch (error: any) {
+    console.error('Get article details error:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to fetch article' });
   }
 };
 
-/**
- * POST /users/:userId/progress
- * Save or update reading progress (upsert)
- */
-export const postReadingProgress = async (req: Request, res: Response) => {
+export const toggleLike = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { userId } = req.params;
-    const { contentId, lastReadPosition, percentRead } = req.body;
+    const { id } = req.params;
+    const userId = (req as any).user.userId;
+    const db: any = getDatabase();
 
-    if (!userId || !contentId) {
-      return res.status(400).json({ message: 'userId and contentId are required' });
-    }
-
-    const mysqlDb = mysql();
-
-    // Upsert (insert or update)
-    await mysqlDb.execute(
-      `INSERT INTO reading_progress (id, user_id, content_id, last_read_position, percent_read, last_opened_at, created_at, updated_at)
-       VALUES (UUID(), ?, ?, ?, ?, NOW(), NOW(), NOW())
-       ON DUPLICATE KEY UPDATE
-         last_read_position = VALUES(last_read_position),
-         percent_read = VALUES(percent_read),
-         last_opened_at = NOW(),
-         updated_at = NOW()`,
-      [userId, contentId, lastReadPosition || null, percentRead || 0]
+    // Check if already liked
+    const [existing]: any = await db.execute(
+      'SELECT * FROM user_likes WHERE user_id = ? AND article_id = ?',
+      [userId, id]
     );
 
-    return res.json({ message: 'Progress saved' });
-  } catch (error) {
-    logger.error('Error in postReadingProgress', error);
-    return res.status(500).json({ message: 'Internal server error' });
-  }
-};
-
-/**
- * GET /users/:userId/progress
- * Get recent progress for a user
- */
-export const getReadingProgress = async (req: Request, res: Response) => {
-  try {
-    const { userId } = req.params;
-    const mysqlDb = mysql();
-
-    const [rows]: any = await mysqlDb.execute(
-      `SELECT user_id, content_id, last_read_position, percent_read, last_opened_at
-       FROM reading_progress
-       WHERE user_id = ?
-       ORDER BY last_opened_at DESC
-       LIMIT 50`,
-      [userId]
-    );
-
-    return res.json({ progress: rows[0] ? rows : [] });
-  } catch (error) {
-    logger.error('Error in getReadingProgress', error);
-    return res.status(500).json({ message: 'Internal server error' });
-  }
-};
-
-/**
- * POST /users/:userId/bookmark
- * Toggle bookmark: body -> { contentId }
- */
-export const toggleBookmark = async (req: Request, res: Response) => {
-  try {
-    const { userId } = req.params;
-    const { contentId } = req.body;
-
-    if (!userId || !contentId) {
-      return res.status(400).json({ message: 'userId and contentId are required' });
-    }
-
-    const mysqlDb = mysql();
-
-    // Check if exists
-    const [existing]: any = await mysqlDb.execute(
-      `SELECT id FROM user_bookmarks WHERE user_id = ? AND content_id = ? LIMIT 1`,
-      [userId, contentId]
-    );
-
-    if (existing[0]) {
-      // remove
-      await mysqlDb.execute(`DELETE FROM user_bookmarks WHERE id = ?`, [existing[0].id]);
-      // decrement saved_items_count safely
-      await mysqlDb.execute(
-        `UPDATE readers SET saved_items_count = GREATEST(0, saved_items_count - 1) WHERE user_id = ?`,
-        [userId]
-      );
-      return res.json({ message: 'Bookmark removed', removed: true });
+    if (existing.length > 0) {
+      // Unlike
+      await db.execute('DELETE FROM user_likes WHERE user_id = ? AND article_id = ?', [userId, id]);
+      res.status(200).json({ status: 'success', liked: false });
     } else {
-      // insert
-      await mysqlDb.execute(
-        `INSERT INTO user_bookmarks (id, user_id, content_id, saved_at) VALUES (UUID(), ?, ?, NOW())`,
-        [userId, contentId]
-      );
-      await mysqlDb.execute(
-        `UPDATE readers SET saved_items_count = COALESCE(saved_items_count,0) + 1 WHERE user_id = ?`,
-        [userId]
-      );
-      return res.json({ message: 'Bookmark added', added: true });
+      // Like
+      await db.execute('INSERT INTO user_likes (user_id, article_id) VALUES (?, ?)', [userId, id]);
+      res.status(200).json({ status: 'success', liked: true });
     }
-  } catch (error) {
-    logger.error('Error in toggleBookmark', error);
-    return res.status(500).json({ message: 'Internal server error' });
+  } catch (error: any) {
+    console.error('Toggle like error:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to toggle like' });
   }
 };
 
-/**
- * POST /users/:userId/like
- * Toggle like: body -> { contentId }
- */
-export const toggleLike = async (req: Request, res: Response) => {
+export const postComment = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { userId } = req.params;
-    const { contentId } = req.body;
+    const { id } = req.params;
+    const { content } = req.body;
+    const userId = (req as any).user.userId;
 
-    if (!userId || !contentId) {
-      return res.status(400).json({ message: 'userId and contentId are required' });
+    if (!content || !content.trim()) {
+      res.status(400).json({ status: 'error', message: 'Comment content is required' });
+      return;
     }
 
-    const mysqlDb = mysql();
-
-    const [existing]: any = await mysqlDb.execute(
-      `SELECT id FROM user_likes WHERE user_id = ? AND content_id = ? LIMIT 1`,
-      [userId, contentId]
+    const db: any = getDatabase();
+    await db.execute(
+      'INSERT INTO article_comments (id, article_id, user_id, content) VALUES (UUID(), ?, ?, ?)',
+      [id, userId, content]
     );
 
-    if (existing[0]) {
-      // remove like
-      await mysqlDb.execute(`DELETE FROM user_likes WHERE id = ?`, [existing[0].id]);
-      // decrement counters
-      await mysqlDb.execute(
-        `UPDATE content SET likes_count = GREATEST(0, likes_count - 1) WHERE id = ?`,
-        [contentId]
-      );
-      await mysqlDb.execute(
-        `UPDATE readers SET likes_count = GREATEST(0, likes_count - 1) WHERE user_id = ?`,
-        [userId]
-      );
-      return res.json({ message: 'Like removed', removed: true });
-    } else {
-      // add like
-      await mysqlDb.execute(
-        `INSERT INTO user_likes (id, user_id, content_id, liked_at) VALUES (UUID(), ?, ?, NOW())`,
-        [userId, contentId]
-      );
-      await mysqlDb.execute(
-        `UPDATE content SET likes_count = COALESCE(likes_count,0) + 1 WHERE id = ?`,
-        [contentId]
-      );
-      await mysqlDb.execute(
-        `UPDATE readers SET likes_count = COALESCE(likes_count,0) + 1 WHERE user_id = ?`,
-        [userId]
-      );
-      return res.json({ message: 'Like added', added: true });
-    }
-  } catch (error) {
-    logger.error('Error in toggleLike', error);
-    return res.status(500).json({ message: 'Internal server error' });
-  }
-};
-
-/**
- * GET /recommendations/:userId
- * Simple recommendations: use recommendations table if present, fallback to trending
- */
-export const getRecommendations = async (req: Request, res: Response) => {
-  try {
-    const { userId } = req.params;
-    const mysqlDb = mysql();
-
-    const [recRows]: any = await mysqlDb.execute(
-      `SELECT items, algorithm_version, generated_at FROM recommendations WHERE user_id = ? ORDER BY generated_at DESC LIMIT 1`,
-      [userId]
-    );
-
-    if (recRows[0] && recRows[0].items) {
-      return res.json({ recommendations: recRows[0].items, algorithm_version: recRows[0].algorithm_version });
-    }
-
-    // Fallback: top trending
-    const [trending]: any = await mysqlDb.execute(
-      `SELECT id, title, metadata, reads_count, likes_count FROM content WHERE status = 'published' ORDER BY trending_score DESC, reads_count DESC LIMIT 20`
-    );
-
-    return res.json({ recommendations: trending[0] ? trending : [] });
-  } catch (error) {
-    logger.error('Error in getRecommendations', error);
-    return res.status(500).json({ message: 'Internal server error' });
+    res.status(201).json({ status: 'success', message: 'Comment posted' });
+  } catch (error: any) {
+    console.error('Post comment error:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to post comment' });
   }
 };

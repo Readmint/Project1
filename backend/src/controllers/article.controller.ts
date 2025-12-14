@@ -564,8 +564,10 @@ export const listAuthorArticles = async (req: Request, res: Response): Promise<v
 
     let articlesQuery = `
       SELECT
-        c.id, c.title, c.status, c.created_at, c.updated_at,
-        c.reads_count AS views, c.likes_count AS likes,
+        c.id, c.title, c.status, c.created_at, c.updated_at, c.published_at,
+        c.reads_count AS views,
+        (SELECT COUNT(*) FROM user_likes ul WHERE ul.article_id = c.id) AS likes,
+        (SELECT COUNT(*) FROM article_comments ac WHERE ac.article_id = c.id) AS comments,
         c.category_id, c.summary, c.metadata,
         (SELECT public_url FROM attachments a WHERE a.article_id = c.id LIMIT 1) AS attachment_url
       FROM content c
@@ -841,7 +843,7 @@ function cosineVec(a: number[], b: number[]) {
 
 async function extractTextFromBuffer(filename: string, buffer: Buffer): Promise<string> {
   const ext = (filename.split('.').pop() || '').toLowerCase();
-  
+
   try {
     if (ext === 'pdf') {
       if (!pdfParse) {
@@ -852,17 +854,17 @@ async function extractTextFromBuffer(filename: string, buffer: Buffer): Promise<
       const data = await pdfParse(buffer);
       return data?.text || '';
     }
-    
+
     if (ext === 'docx' || ext === 'doc') {
       const result = await mammoth.extractRawText({ buffer });
       return result.value || '';
     }
-    
+
     // For text files (txt, md, html, etc.)
     if (['txt', 'md', 'text', 'rtf', 'html', 'htm'].includes(ext)) {
       return buffer.toString('utf8');
     }
-    
+
     // For other file types, try to decode as UTF-8
     try {
       return buffer.toString('utf8');
@@ -1259,7 +1261,7 @@ async function exists(p: string) {
 async function zipFolder(folderPath: string, outPath: string) {
   return new Promise<void>((resolve, reject) => {
     const output = require('fs').createWriteStream(outPath);
-    const archive = archiver('zip', { zlib: { level: 9 }});
+    const archive = archiver('zip', { zlib: { level: 9 } });
     output.on('close', () => resolve());
     archive.on('error', reject);
     archive.pipe(output);

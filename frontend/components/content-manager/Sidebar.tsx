@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { LayoutDashboard, ClipboardList, Users, FileEdit, GitBranch, RefreshCw, ShieldCheck, CalendarDays, MessageCircle, BarChart2, Tags, Award, BookText, Settings, LogOut, Menu, X, } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Users, FileEdit, GitBranch, RefreshCw, ShieldCheck, CalendarDays, MessageCircle, BarChart2, Tags, Award, BookText, Settings, LogOut, Menu, X, Send } from "lucide-react";
 
 import LogoutConfirmation from "../LogoutConfirmation";
 
@@ -21,6 +21,7 @@ const navGroups = [
       { label: "Workflow Timeline", path: "/cm-dashboard/timeline", icon: GitBranch },
       { label: "Change Requests", path: "/cm-dashboard/change-requests", icon: RefreshCw },
       { label: "Quality Check", path: "/cm-dashboard/quality-check", icon: ShieldCheck },
+      { label: "Final Publication", path: "/cm-dashboard/publish", icon: Send },
       { label: "Scheduling", path: "/cm-dashboard/scheduling", icon: CalendarDays },
       { label: "Communication", path: "/cm-dashboard/communication", icon: MessageCircle },
       { label: "Reports & Analytics", path: "/cm-dashboard/reports", icon: BarChart2 },
