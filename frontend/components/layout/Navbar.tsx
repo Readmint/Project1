@@ -4,15 +4,24 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Moon, Sun, LogOut, User, ChevronDown, Settings, ShoppingCart } from "lucide-react";
+import { Menu, X, Moon, Sun, LogOut, User, ChevronDown, Settings, ShoppingCart, Languages } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { navLinks } from "@/src/data/navLinks";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import LogoutConfirmation from "../LogoutConfirmation";
+import { useLanguage } from "@/context/LanguageContext";
+import { SUPPORTED_LANGUAGES } from "@/constants/languages";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function Navbar() {
   const { cart } = useCart();
+  const { language, setLanguage, t } = useLanguage();
   const router = useRouter();
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
@@ -168,7 +177,7 @@ export default function Navbar() {
       case 'editor':
         return "/editor-dashboard";
       case 'content_manager':
-        return "/content-manager-dashboard";
+        return "/cm-dashboard";
       case 'admin':
         return "/admin-dashboard";
       default:
@@ -188,7 +197,7 @@ export default function Navbar() {
       case 'editor':
         return "/editor-dashboard/profile";
       case 'content_manager':
-        return "/content-manager-dashboard/profile";
+        return "/cm-dashboard/profile";
       case 'admin':
         return "/admin-dashboard/profile";
       default:
@@ -248,6 +257,27 @@ export default function Navbar() {
 
             {/* ✅ RIGHT SIDE */}
             <div className="flex items-center gap-3">
+
+              {/* Language Switcher */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="p-2 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+                    <Languages size={20} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48 max-h-96 overflow-y-auto z-[60]">
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <DropdownMenuItem
+                      key={lang.code}
+                      onClick={() => setLanguage(lang.code)}
+                      className={`cursor-pointer ${language === lang.code ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : ''}`}
+                    >
+                      <span className="mr-2 text-lg">{lang.label}</span>
+                      <span className="text-sm opacity-70">({lang.name})</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               {/* Shopping Cart */}
               <Link href="/checkout" className="relative p-2 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">

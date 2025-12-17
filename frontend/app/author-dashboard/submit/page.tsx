@@ -13,8 +13,10 @@ import {
   Upload,
   ChevronDown,
   AlertCircle,
+  Languages,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { SUPPORTED_LANGUAGES } from "@/constants/languages";
 
 type UploadResult = {
   attachmentId: string;
@@ -67,11 +69,14 @@ const API_ROOT = `${API_BASE}/api`.replace(/\/+$/, ""); // e.g. http://localhost
 
 export default function SubmitArticlePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryArticleId = searchParams.get("articleId");
 
   // Article form state
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [content, setContent] = useState("");
+  const [language, setLanguage] = useState("en");
   const [category_id, setCategory_id] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<string[]>([]);
@@ -202,24 +207,68 @@ export default function SubmitArticlePage() {
     }
   };
 
-  // Auto restore draft
+  // Fetch article content if editing
   useEffect(() => {
-    const saved = localStorage.getItem("draft");
-    if (saved) {
-      try {
-        const d = JSON.parse(saved);
-        setTitle(d.title || "");
-        setSummary(d.summary || "");
-        setContent(d.content || "");
-        setCategory_id(d.category_id || "");
-        setTags(d.tags || []);
-        setIssue_id(d.issue_id || "");
-        setStatusMsg("✅ Draft Loaded");
-      } catch {
-        // ignore parse errors
+    if (queryArticleId) {
+      setArticleId(queryArticleId);
+      // Fetch details
+      const fetchDetails = async () => {
+        try {
+          const token = getToken();
+          const res = await fetch(`${API_ROOT}/article/author/articles/${queryArticleId}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          });
+          if (res.ok) {
+            const json = await res.json();
+            const art = json.data?.article;
+            if (art) {
+              setTitle(art.title || "");
+              setSummary(art.summary || "");
+              setContent(art.content || "");
+              setLanguage(art.language || "en");
+              setCategory_id(art.category_id || "");
+              if (art.metadata) {
+                try {
+                  const meta = typeof art.metadata === 'string' ? JSON.parse(art.metadata) : art.metadata;
+                  if (meta.tags) setTags(meta.tags);
+                  if (meta.issue_id) setIssue_id(meta.issue_id);
+                } catch (e) { /* ignore */ }
+              } else if (art.tags) {
+                // Fallback if tags stored in separate column and not metadata (depends on backend)
+                // Controller stores tags in metadata AND separate column often.
+                // Try parsing separate column if it's a string
+                try {
+                  setTags(typeof art.tags === 'string' ? JSON.parse(art.tags) : art.tags);
+                } catch { /* */ }
+              }
+              setStatusMsg("Loaded article for editing");
+            }
+          }
+        } catch (err) {
+          console.error("Failed to fetch article details", err);
+        }
+      };
+      fetchDetails();
+    } else {
+      // Only load draft if NOT editing (or if editing overrides draft?)
+      // Let's say if queryArticleId is absent, we check local storage.
+      const saved = localStorage.getItem("draft");
+      if (saved) {
+        try {
+          const d = JSON.parse(saved);
+          setTitle(d.title || "");
+          setSummary(d.summary || "");
+          setContent(d.content || "");
+          setCategory_id(d.category_id || "");
+          setTags(d.tags || []);
+          setIssue_id(d.issue_id || "");
+          setStatusMsg("✅ Draft Loaded");
+        } catch {
+          // ignore parse errors
+        }
       }
     }
-  }, []);
+  }, [queryArticleId]);
 
   // Auto Save to localStorage
   useEffect(() => {
@@ -231,6 +280,7 @@ export default function SubmitArticlePage() {
             title,
             summary,
             content,
+            language,
             category_id,
             tags,
             issue_id,
@@ -273,6 +323,24 @@ export default function SubmitArticlePage() {
       err.res = res;
       err.body = body;
       throw err;
+    }
+    return body;
+  };
+
+  // Update article content
+  const updateArticleOnServer = async (id: string, payload: any) => {
+    const token = getToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const res = await fetch(`${API_ROOT}/article/author/articles/${id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      throw new Error(body.message || "Failed to update article");
     }
     return body;
   };
@@ -457,15 +525,24 @@ export default function SubmitArticlePage() {
         content: content || "",
         category_id: category_id || null,
         tags: tags || [],
-        status: "draft",
         issue_id: issue_id || null,
+        // Don't force 'draft' status if updating existing article, unless we want to?
+        // Usually draft save keeps it as draft.
+        // If articleId exists, use update.
       };
 
-      const body = await createArticleOnServer(payload);
-      const newArticleId = body?.data?.id || body?.id;
-      if (!newArticleId) throw new Error("Article ID not returned by server");
-      setArticleId(newArticleId);
-      setStatusMsg("✅ Draft saved to server");
+      if (articleId) {
+        await updateArticleOnServer(articleId, payload);
+        setStatusMsg("✅ Draft updated on server");
+      } else {
+        // Create new
+        (payload as any).status = "draft";
+        const body = await createArticleOnServer(payload);
+        const newArticleId = body?.data?.id || body?.id;
+        if (!newArticleId) throw new Error("Article ID not returned by server");
+        setArticleId(newArticleId);
+        setStatusMsg("✅ Draft saved to server");
+      }
       localStorage.removeItem("draft");
     } catch (err: any) {
       console.error("Save draft error:", err);
@@ -489,19 +566,26 @@ export default function SubmitArticlePage() {
     setStatusMsg("Creating article...");
 
     try {
-      // Step 1: create article as draft if not already created
+      // Step 1: create article if not exists, or update if exists
       let newArticleId = articleId;
-      if (!newArticleId) {
-        const payload: any = {
-          title: title.trim(),
-          summary: summary.trim() || "",
-          content: content || "",
-          tags: tags || [],
-          status: "draft",
-        };
-        if (category_id && category_id.trim()) payload.category_id = category_id.trim();
-        if (issue_id && issue_id.trim()) payload.issue_id = issue_id.trim();
 
+      const payload: any = {
+        title: title.trim(),
+        summary: summary.trim() || "",
+        content: content || "",
+        language: language || "en",
+        tags: tags || [],
+      };
+      if (category_id && category_id.trim()) payload.category_id = category_id.trim();
+      if (issue_id && issue_id.trim()) payload.issue_id = issue_id.trim();
+
+      if (newArticleId) {
+        // Update existing
+        setStatusMsg("Updating article content...");
+        await updateArticleOnServer(newArticleId, payload);
+      } else {
+        // Create new
+        payload.status = "draft";
         const createBody = await createArticleOnServer(payload);
         newArticleId = createBody?.data?.id || createBody?.id;
         if (!newArticleId) throw new Error("Article ID not returned by server");
@@ -687,6 +771,25 @@ export default function SubmitArticlePage() {
           <Card className="p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
             <h3 className="text-base font-semibold mb-3">Article Content</h3>
 
+            <label className="text-sm font-medium">Language</label>
+            <div className="relative mb-4 mt-1">
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className="w-full appearance-none border bg-slate-100 dark:bg-slate-900 text-sm p-3 rounded-xl pr-10"
+                disabled={isSubmitting}
+              >
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.label} ({lang.name})
+                  </option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-3 pointer-events-none text-slate-500">
+                <ChevronDown size={16} />
+              </div>
+            </div>
+
             <label className="text-sm font-medium">Title *</label>
             <input
               value={title}
@@ -787,9 +890,8 @@ export default function SubmitArticlePage() {
               onDragOver={!isSubmitting ? handleDragOver : undefined}
               onDragLeave={handleDragLeave}
               onDragEnter={!isSubmitting ? handleDragOver : undefined}
-              className={`w-full flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-6 mt-2 ${
-                !isSubmitting ? "cursor-pointer" : "cursor-not-allowed opacity-50"
-              }`}
+              className={`w-full flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-6 mt-2 ${!isSubmitting ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+                }`}
             >
               <UploadCloud size={28} />
               <p className="text-xs text-slate-500 mt-2 text-center">{isDragging ? "Drop files to upload" : "Drag and drop files here or click"}</p>

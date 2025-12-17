@@ -21,6 +21,7 @@ import {
   FileText,
   Eye,
   XCircle,
+  Languages,
 } from "lucide-react";
 
 type Stats = {
@@ -51,7 +52,8 @@ type Profile = {
   membership?: any;
   resumeUrl?: string | null;
   experience_months?: number;
-  fields?: string[]; // editor fields / interests
+  fields?: string[]; // editor expertise
+  languages?: string[]; // editor languages
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
@@ -152,6 +154,18 @@ export default function AuthorProfilePage() {
 
       const data = await res.json().catch(() => null);
       if (data?.status === "success" && data.data) {
+        // Parse fields (legacy array vs new object)
+        let expertise: string[] = [];
+        let langs: string[] = [];
+        const rawFields = data.data.fields;
+
+        if (Array.isArray(rawFields)) {
+          expertise = rawFields;
+        } else if (rawFields && typeof rawFields === 'object') {
+          expertise = rawFields.expertise || [];
+          langs = rawFields.languages || [];
+        }
+
         const p: Profile = {
           id: data.data.user_id || data.data.user_id,
           email: data.data.email,
@@ -176,7 +190,8 @@ export default function AuthorProfilePage() {
           membership: data.data.membership || null,
           resumeUrl: data.data.resume_url || null,
           experience_months: data.data.experience_months || 0,
-          fields: data.data.fields || [],
+          fields: expertise,
+          languages: langs,
         };
         setProfile(p);
         setResumeFileName(p.resumeUrl ? extractFileName(p.resumeUrl) : null);
@@ -252,18 +267,14 @@ export default function AuthorProfilePage() {
       pushIf("qualifications", profile.qualifications);
       pushIf("specialty", profile.specialty);
 
-      // fields: ensure it's an array if provided
-      if (profile.fields !== undefined && profile.fields !== null) {
-        if (Array.isArray(profile.fields)) {
-          if (profile.fields.length > 0) updates["fields"] = profile.fields;
-        } else if (typeof profile.fields === "string") {
-          const arr = (profile.fields as string)
-            .split(",")
-            .map((s: string) => s.trim())
-            .filter(Boolean);
-          if (arr.length > 0) updates["fields"] = arr;
-        }
-      }
+      // fields: Save as structured object { expertise, languages }
+      const fieldsObj = {
+        expertise: Array.isArray(profile.fields) ? profile.fields : [],
+        languages: Array.isArray(profile.languages) ? profile.languages : [],
+      };
+      // Only add if not empty? Or always add to allow clearing?
+      // Let's always add if we are in this profile page, as it manages both.
+      updates["fields"] = fieldsObj;
 
       if (profile.experience_months !== undefined && profile.experience_months !== null) {
         const num = Number(profile.experience_months);
@@ -691,6 +702,14 @@ function PersonalInfoSection({ profile, isEditing, onChange, onSave, onResumeCha
               tags={profile?.fields || []}
               disabled={!isEditing}
               onChange={(newTags) => onChange("fields", newTags)}
+            />
+          </div>
+          <div className="col-span-2">
+            <TagInput
+              label={<span className="flex items-center gap-1"><Languages size={12} /> Languages Known</span>}
+              tags={profile?.languages || []}
+              disabled={!isEditing}
+              onChange={(newTags) => onChange("languages", newTags)}
             />
           </div>
         </div>

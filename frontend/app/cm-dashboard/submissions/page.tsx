@@ -21,7 +21,7 @@ import {
 
 import { ActionModal } from "@/components/ui/action-modal";
 import Link from "next/link";
-import { getJSON, postJSON } from "@/lib/api";
+import { getJSON, postJSON, API_BASE } from "@/lib/api";
 import { useEffect } from "react";
 
 interface Submission {
@@ -64,6 +64,7 @@ export default function SubmissionsPage() {
     type: null,
     submission: null,
   });
+  const [feedback, setFeedback] = useState("");
 
   const openModal = (type: "sendback" | "approve", submission: Submission) => {
     setModal({ type, submission });
@@ -74,12 +75,32 @@ export default function SubmissionsPage() {
   };
 
   // UPDATE STATUS FUNCTION
-  const updateStatus = (id: string, newStatus: string) => {
-    setSubmissions((prev) =>
-      prev.map((sub) =>
-        sub.id === id ? { ...sub, status: newStatus } : sub
-      )
-    );
+  const updateStatus = async (id: string, newStatus: string, note?: string) => {
+    try {
+      const token = localStorage.getItem("token") || localStorage.getItem("ACCESS_TOKEN");
+      const res = await fetch(`${API_BASE}/article/author/articles/${id}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: newStatus, note })
+      });
+
+      if (!res.ok) {
+        alert("Failed to update status");
+        return;
+      }
+
+      setSubmissions((prev) =>
+        prev.map((sub) =>
+          sub.id === id ? { ...sub, status: newStatus } : sub
+        )
+      );
+    } catch (err) {
+      console.error("Error updating status:", err);
+      alert("Error updating status");
+    }
   };
 
   return (
@@ -203,13 +224,16 @@ export default function SubmissionsPage() {
             className="w-full border rounded p-2"
             rows={4}
             placeholder="Write feedback..."
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
           />
 
           <button
             className="mt-4 bg-rose-600 text-white px-4 py-2 rounded w-full"
             onClick={() => {
-              updateStatus(modal.submission!.id, "Changes Requested");
+              updateStatus(modal.submission!.id, "changes_requested", feedback);
               closeModal();
+              setFeedback("");
             }}
           >
             Send Back

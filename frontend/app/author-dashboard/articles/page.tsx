@@ -437,9 +437,9 @@ export default function MyArticlesPage() {
                           <Eye size={14} /> View Live
                         </Button>
                       )}
-                      {article.status === "draft" && (
+                      {(article.status === "draft" || article.status === "changes_requested") && (
                         <Button size="sm" onClick={() => handleEditArticle(article)} className="gap-2 bg-indigo-600 text-white hover:bg-indigo-700">
-                          <Edit2 size={14} /> Edit
+                          <Edit2 size={14} /> {article.status === "changes_requested" ? "Fix & Resubmit" : "Edit"}
                         </Button>
                       )}
                       {(article.status === "draft" || article.status === "submitted" || article.status === "rejected") && (
