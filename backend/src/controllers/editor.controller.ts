@@ -106,6 +106,7 @@ export const saveEditorProfile = async (req: Request, res: Response): Promise<vo
       resume_url,
       resume_name,
       email, // accept email and update users table if provided
+      languages, // [NEW] Accept languages array
     } = req.body || {};
 
     // try update first
@@ -123,7 +124,7 @@ export const saveEditorProfile = async (req: Request, res: Response): Promise<vo
       [
         display_name || null,
         profile_photo_url || null,
-        fields ? JSON.stringify(fields) : null,
+        fields ? JSON.stringify(fields) : (languages ? JSON.stringify({ languages }) : null), // If fields provided use it, else if languages provided wrap it
         typeof experience_months === "number" ? experience_months : null,
         typeof is_active === "boolean" ? is_active : null,
         resume_url || null,
@@ -143,7 +144,7 @@ export const saveEditorProfile = async (req: Request, res: Response): Promise<vo
           userId,
           display_name || null,
           profile_photo_url || null,
-          fields ? JSON.stringify(fields) : JSON.stringify([]),
+          fields ? JSON.stringify(fields) : (languages ? JSON.stringify({ languages }) : JSON.stringify([])),
           typeof experience_months === "number" ? experience_months : 0,
           typeof is_active === "boolean" ? is_active : true,
           resume_url || null,

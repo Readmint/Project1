@@ -24,10 +24,27 @@ export const getStorageBucket = (): Bucket => {
     // fall through to fallback
   }
 
-  // fallback: use google-cloud storage client (requires GOOGLE_APPLICATION_CREDENTIALS or env keys)
+  // fallback: use google-cloud storage client with explicit credentials from env
   const bucketName = process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`;
   if (!bucketName) throw new Error('FIREBASE_STORAGE_BUCKET or FIREBASE_PROJECT_ID must be set');
 
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  // Handle escaped newlines in private key if present
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+
+  if (projectId && clientEmail && privateKey) {
+    const storage = new Storage({
+      projectId,
+      credentials: {
+        client_email: clientEmail,
+        private_key: privateKey,
+      }
+    });
+    return storage.bucket(bucketName);
+  }
+
+  // If no env vars, fallback to default (ADC) which might throw if not configured on machine
   const storage = new Storage();
   return storage.bucket(bucketName);
 };
@@ -97,7 +114,7 @@ export const deleteFile = async (storagePath: string): Promise<void> => {
   if (!storagePath) return;
   const bucket = getStorageBucket();
   const file = bucket.file(storagePath);
-  await file.delete().catch((err) => {
+  await file.delete().catch((err: any) => {
     // swallow errors (caller should log if needed)
     // but rethrow if needed: throw err;
   });

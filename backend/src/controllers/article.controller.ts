@@ -129,8 +129,8 @@ export const createArticle = async (req: Request, res: Response): Promise<void> 
 
     const insertSql = `
       INSERT INTO content (
-        id, title, author_id, category_id, content, summary, tags, status, metadata, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        id, title, author_id, category_id, content, summary, tags, language, status, metadata, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `;
 
     try {
@@ -142,6 +142,7 @@ export const createArticle = async (req: Request, res: Response): Promise<void> 
         content || '',
         summary || '',
         JSON.stringify(tags || []),
+        req.body.language || 'English',
         status,
         metadata,
       ]);
@@ -186,6 +187,105 @@ export const createArticle = async (req: Request, res: Response): Promise<void> 
     res.status(500).json({ status: 'error', message: 'Failed to create article', error: errorMessage, code: errorCode });
     return;
   }
+};
+/**
+ * PATCH /api/author/articles/:articleId
+ */
+export const updateArticleContent = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!requireAuth(req, res)) return;
+
+    const db: any = getDatabase();
+    const userId = req.user!.userId!;
+    const { articleId } = req.params;
+    const {
+      title,
+      summary,
+      content,
+      category_id,
+      tags,
+      issue_id,
+      metadata
+    } = req.body;
+
+    const [rows]: any = await db.execute('SELECT author_id, status FROM content WHERE id = ?', [articleId]);
+    if (!rows || rows.length === 0) {
+      res.status(404).json({ status: 'error', message: 'Article not found' });
+      return;
+    }
+
+    const article = rows[0];
+
+    // Check permissions
+    if (article.author_id === userId) {
+      if (!['draft', 'changes_requested', 'submitted'].includes(article.status)) { // Allow editing submitted too? usually not unless retracted. But let's allow changes_requested.
+        // For now, allow editing if status is draft or changes_requested.
+        // If submitted, maybe author shouldn't edit?
+        // Let's stick to draft and changes_requested for now.
+        if (!['draft', 'changes_requested'].includes(article.status)) {
+          res.status(403).json({ status: 'error', message: 'Cannot edit article in this status' });
+          return;
+        }
+      }
+    } else {
+      const allowedRoles = ['admin', 'content_manager', 'editor'];
+      if (!allowedRoles.includes(req.user!.role || '')) {
+        res.status(403).json({ status: 'error', message: 'Forbidden' });
+        return;
+      }
+    }
+
+    // Build update query dynamically
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (typeof title === 'string') { updates.push('title = ?'); values.push(title.trim()); }
+    if (typeof summary === 'string') { updates.push('summary = ?'); values.push(summary); }
+    if (typeof content === 'string') { updates.push('content = ?'); values.push(content); }
+    if (category_id !== undefined) {
+      // Allow setting to null
+      updates.push('category_id = ?');
+      values.push(category_id || null);
+    }
+    if (tags !== undefined) {
+      updates.push('tags = ?');
+      values.push(JSON.stringify(tags || []));
+    }
+    if (metadata !== undefined) {
+      updates.push('metadata = ?');
+      values.push(typeof metadata === 'string' ? metadata : JSON.stringify(metadata));
+    }
+    if (req.body.language !== undefined) {
+      updates.push('language = ?');
+      values.push(req.body.language);
+    }
+
+    // Always update timestamp
+    updates.push('updated_at = NOW()');
+
+    if (updates.length === 0) {
+      res.status(200).json({ status: 'success', message: 'No changes provided' });
+      return;
+    }
+
+    const sql = `UPDATE content SET ${updates.join(', ')} WHERE id = ?`;
+    values.push(articleId);
+
+    await db.execute(sql, values);
+
+    // If issue_id is provided, update it in metadata (if logic requires). 
+    // Actually metadata overrides above might handle it if passed.
+    // For now assuming metadata field handles issue_id if passed there.
+
+    res.status(200).json({ status: 'success', message: 'Article updated', data: { id: articleId } });
+    return;
+  } catch (err: any) {
+    logger.error('updateArticleContent error:', err);
+    res.status(500).json({ status: 'error', message: 'Failed to update article', error: err?.message });
+    return;
+  }
+
+
 };
 
 /**
@@ -568,7 +668,7 @@ export const listAuthorArticles = async (req: Request, res: Response): Promise<v
         c.reads_count AS views,
         (SELECT COUNT(*) FROM user_likes ul WHERE ul.article_id = c.id) AS likes,
         (SELECT COUNT(*) FROM article_comments ac WHERE ac.article_id = c.id) AS comments,
-        c.category_id, c.summary, c.metadata,
+        c.category_id, c.summary, c.metadata, c.language,
         (SELECT public_url FROM attachments a WHERE a.article_id = c.id LIMIT 1) AS attachment_url
       FROM content c
     `;
@@ -642,6 +742,7 @@ export const listAuthorArticles = async (req: Request, res: Response): Promise<v
         summary,
         metadata,
         category,
+        language: row.language || 'English',
         attachment_url: row.attachment_url,
         publishedAt: row.created_at,
       };

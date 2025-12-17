@@ -784,3 +784,65 @@
 {"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 22:33:11"}
 {"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 22:33:11"}
 {"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 22:33:11"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-14 22:50:36"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-14 22:50:37"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-14 22:50:37"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-15 20:42:58"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-15 20:42:58"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-15 20:42:58"}
+{"level":"info","message":"Email sent: <a1593909-8853-874b-f39d-b3b6441703d1@gmail.com>","service":"readmint-backend","timestamp":"2025-12-15 20:45:38"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-15 21:15:06"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-15 21:15:06"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-15 21:15:06"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-15 21:25:54"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-15 21:25:54"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-15 21:25:54"}
+{"level":"info","message":"Article 0d54b00f-7e4f-4476-bf82-9e3c30fc3005 status changed from approved to changes_requested by 07d3bde7-d7f8-11f0-ac57-00155dc911bb","service":"readmint-backend","timestamp":"2025-12-15 21:29:06"}
+{"level":"warn","message":"Failed to download attachment","service":"readmint-backend","timestamp":"2025-12-15 21:31:18"}
+{"level":"warn","message":"Failed to download attachment","service":"readmint-backend","timestamp":"2025-12-15 21:31:19"}
+{"level":"error","message":"uploadAttachment: failed to upload to GCS or save DB row Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.","service":"readmint-backend","stack":"Error: Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.\n    at GoogleAuth.getApplicationDefaultAsync (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:287:15)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async GoogleAuth._GoogleAuth_determineClient (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:834:32)\n    at async GoogleAuth.getClient (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:698:20)\n    at async GoogleAuth.authorizeRequest (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:741:24)\n    at async Promise.all (index 1)\n    at async prepareRequest (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\@google-cloud\\storage\\build\\cjs\\src\\nodejs-common\\util.js:504:61)","timestamp":"2025-12-15 21:31:31"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-15 21:36:21"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-15 21:36:22"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-15 21:36:22"}
+{"level":"warn","message":"Failed to download attachment","service":"readmint-backend","timestamp":"2025-12-15 21:36:55"}
+{"level":"error","message":"uploadAttachment: failed to upload to GCS or save DB row Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.","service":"readmint-backend","stack":"Error: Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.\n    at GoogleAuth.getApplicationDefaultAsync (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:287:15)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async GoogleAuth._GoogleAuth_determineClient (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:834:32)\n    at async GoogleAuth.getClient (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:698:20)\n    at async GoogleAuth.authorizeRequest (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:741:24)\n    at async Promise.all (index 1)\n    at async prepareRequest (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\@google-cloud\\storage\\build\\cjs\\src\\nodejs-common\\util.js:504:61)","timestamp":"2025-12-15 21:36:55"}
+{"level":"warn","message":"Failed to download attachment","service":"readmint-backend","timestamp":"2025-12-15 21:36:56"}
+{"level":"info","message":"Article 0d54b00f-7e4f-4476-bf82-9e3c30fc3005 status changed from changes_requested to submitted by ab6bd878-ce96-11f0-ac57-00155dc911bb","service":"readmint-backend","timestamp":"2025-12-15 21:36:58"}
+{"level":"info","message":"Email sent: <123290b4-1ef3-3c8f-eb99-8e9aa961b94c@gmail.com>","service":"readmint-backend","timestamp":"2025-12-15 21:41:09"}
+{"level":"info","message":"Email sent: <1003c430-56f2-f804-c798-a3607b0fa921@gmail.com>","service":"readmint-backend","timestamp":"2025-12-15 21:43:22"}
+{"level":"info","message":"Email sent: <88de0f58-4dae-d269-57f1-8d0eef006158@gmail.com>","service":"readmint-backend","timestamp":"2025-12-15 21:43:56"}
+{"level":"info","message":"Email sent: <b7fbae2d-c9d8-2546-a530-53e08b15a4e6@gmail.com>","service":"readmint-backend","timestamp":"2025-12-15 21:44:17"}
+{"level":"info","message":"Email sent: <f006505f-72d5-a91e-82f1-884b42776017@gmail.com>","service":"readmint-backend","timestamp":"2025-12-15 21:44:20"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-15 21:45:45"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-15 21:45:45"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-15 21:45:45"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-15 21:45:45"}
+{"level":"info","message":"Email sent: <a742437c-2d10-4d8f-a123-c20834d5538a@gmail.com>","service":"readmint-backend","timestamp":"2025-12-15 21:45:58"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-15 21:45:59"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-15 21:45:59"}
+{"level":"info","message":"Email sent: <eac481f4-f775-5d39-f388-80d54a243e12@gmail.com>","service":"readmint-backend","timestamp":"2025-12-15 21:46:06"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-15 21:46:08"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-15 21:46:08"}
+{"code":"ER_BAD_FIELD_ERROR","errno":1054,"level":"error","message":"getEditorAnalytics error Unknown column 'cat.id' in 'on clause'","service":"readmint-backend","sql":"SELECT cat.name as category, COUNT(ea.id) as edits, \n              AVG(TIMESTAMPDIFF(HOUR, ea.created_at, ea.updated_at)) as avg_time\n       FROM editor_assignments ea\n       JOIN content c ON ea.article_id = c.id\n       LEFT JOIN categories cat ON c.category_id = cat.id\n       WHERE ea.editor_id = ? AND ea.status = 'completed'\n       GROUP BY cat.name","sqlMessage":"Unknown column 'cat.id' in 'on clause'","sqlState":"42S22","stack":"Error: Unknown column 'cat.id' in 'on clause'\n    at PromiseConnection.execute (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\mysql2\\lib\\promise\\connection.js:47:22)\n    at getEditorAnalytics (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\controllers\\editor.controller.ts:897:42)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)","timestamp":"2025-12-15 21:46:28"}
+{"code":"ER_BAD_FIELD_ERROR","errno":1054,"level":"error","message":"getEditorAnalytics error Unknown column 'cat.id' in 'on clause'","service":"readmint-backend","sql":"SELECT cat.name as category, COUNT(ea.id) as edits, \n              AVG(TIMESTAMPDIFF(HOUR, ea.created_at, ea.updated_at)) as avg_time\n       FROM editor_assignments ea\n       JOIN content c ON ea.article_id = c.id\n       LEFT JOIN categories cat ON c.category_id = cat.id\n       WHERE ea.editor_id = ? AND ea.status = 'completed'\n       GROUP BY cat.name","sqlMessage":"Unknown column 'cat.id' in 'on clause'","sqlState":"42S22","stack":"Error: Unknown column 'cat.id' in 'on clause'\n    at PromiseConnection.execute (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\mysql2\\lib\\promise\\connection.js:47:22)\n    at getEditorAnalytics (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\src\\controllers\\editor.controller.ts:897:42)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)","timestamp":"2025-12-15 21:46:28"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-16 19:57:54"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-16 19:57:55"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-16 19:57:55"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-16 20:10:04"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-16 20:10:04"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-16 20:10:17"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-16 20:11:47"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-16 20:11:47"}
+{"level":"info","message":"Email sent: <a64bdc51-bc51-8b09-6f8f-d9f92243680e@gmail.com>","service":"readmint-backend","timestamp":"2025-12-16 20:11:54"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-16 20:11:56"}
+{"level":"info","message":"Email sent: <7d48fba7-245c-16a5-a981-c73865ce25c7@gmail.com>","service":"readmint-backend","timestamp":"2025-12-16 20:12:08"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-16 20:12:10"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-16 20:12:57"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-16 20:12:57"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-16 20:12:57"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-16 20:12:57"}
+{"level":"info","message":"Email sent: <915288a3-95ab-b630-247f-951b12c0f31f@gmail.com>","service":"readmint-backend","timestamp":"2025-12-16 20:16:10"}
+{"level":"info","message":"Email sent: <ce4eb772-b9d9-fc4e-0cf9-a360a45d93cf@gmail.com>","service":"readmint-backend","timestamp":"2025-12-16 20:16:12"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-17 21:28:27"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-17 21:28:27"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-17 21:28:27"}

@@ -17,6 +17,7 @@ import {
   runPlagiarismCheck,
   getAttachmentSignedDownloadUrl,
   runSimilarityCheck,
+  updateArticleContent,
 } from '../controllers/article.controller';
 
 import { authenticate } from '../middleware/auth';
@@ -166,6 +167,22 @@ router.get(
   getArticleValidation,
   getArticleDetails
 );
+
+// Update article content (for author edits)
+router.patch(
+  '/author/articles/:articleId',
+  authenticate,
+  // Add validation similar to create
+  [
+    param('articleId').isString().notEmpty(),
+    body('title').optional().isString().trim(),
+    body('summary').optional().isString(),
+    body('content').optional().isString(),
+    body('tags').optional().isArray(),
+  ],
+  updateArticleContent // Imported from controller (need to export it first)
+);
+
 
 // Update article status (author/editor workflow)
 router.patch(

@@ -156,6 +156,7 @@ const initializeTables = async (): Promise<void> => {
       author_id VARCHAR(36) NOT NULL,
       category_id VARCHAR(36),
       content LONGTEXT,
+      language VARCHAR(50) DEFAULT 'English',
       status ENUM('draft', 'submitted', 'under_review', 'changes_requested', 'approved', 'published', 'rejected') DEFAULT 'draft',
       featured BOOLEAN DEFAULT FALSE,
       trending_score INT DEFAULT 0,
@@ -168,6 +169,7 @@ const initializeTables = async (): Promise<void> => {
       FOREIGN KEY (category_id) REFERENCES categories(category_id),
       INDEX idx_author_status (author_id, status),
       INDEX idx_status (status),
+      INDEX idx_language (language),
       INDEX idx_created_at (created_at)
     )
   `;
