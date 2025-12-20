@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { LayoutDashboard, Users, FileText, ShieldAlert, Activity, Settings, LogOut, Menu, AlertTriangle, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Users, FileText, ShieldAlert, Activity, Settings, LogOut, Menu, AlertTriangle, BarChart3, Briefcase } from "lucide-react";
 
 import LogoutConfirmation from "@/components/LogoutConfirmation"; // Reusing existing component
 
@@ -21,6 +21,7 @@ const navGroups = [
         label: "Management",
         items: [
             { label: "User Management", path: "/admin-dashboard/users", icon: Users },
+            { label: "Partner Management", path: "/admin-dashboard/partners", icon: Briefcase },
             { label: "Content Oversight", path: "/admin-dashboard/content", icon: FileText },
             { label: "Plagiarism Monitor", path: "/admin-dashboard/plagiarism", icon: ShieldAlert },
             { label: "Incident Management", path: "/admin-dashboard/incidents", icon: AlertTriangle },

@@ -88,6 +88,8 @@ export default function Login() {
     }
     else if (role === "reviewer") {
       router.push("/reviewer-dashboard");
+    } else if (role === "partner") {
+      router.push("/partner-dashboard");
     }
     else {
       // fallback for other roles (reviewer, content_manager, admin, etc.)

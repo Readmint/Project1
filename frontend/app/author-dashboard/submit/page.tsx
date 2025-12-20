@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Eye,
   Send,
@@ -15,7 +17,7 @@ import {
   AlertCircle,
   Languages,
 } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { SUPPORTED_LANGUAGES } from "@/constants/languages";
 
 type UploadResult = {
@@ -70,6 +72,7 @@ const API_ROOT = `${API_BASE}/api`.replace(/\/+$/, ""); // e.g. http://localhost
 export default function SubmitArticlePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const queryArticleId = searchParams.get("articleId");
 
   // Article form state
@@ -89,6 +92,13 @@ export default function SubmitArticlePage() {
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [articleId, setArticleId] = useState<string | null>(null);
 
+  // Partner Event & Visibility support
+  const [event_id, setEvent_id] = useState("");
+  const [events, setEvents] = useState<any[]>([]);
+  const [visibility, setVisibility] = useState("public");
+  // Co-authors support (comma separated string)
+  const [co_authors, setCoAuthors] = useState("");
+
   // Plagiarism UI state (JPlag)
   const [plagiarismLoading, setPlagiarismLoading] = useState(false);
   const [plagiarismStatus, setPlagiarismStatus] = useState<string | null>(null);
@@ -106,6 +116,7 @@ export default function SubmitArticlePage() {
 
   // authorization bits (client-side minimal)
   const [userRole, setUserRole] = useState<string>("");
+  const isPartner = (userRole && userRole.toLowerCase() === "partner") || pathname?.includes("/partner-dashboard");
   const [userId, setUserId] = useState<string | null>(null);
   const [isAuthorizedToRun, setIsAuthorizedToRun] = useState<boolean>(false);
   const privilegedRoles = ["admin", "content_manager", "editor"];
@@ -158,6 +169,7 @@ export default function SubmitArticlePage() {
   // Fetch categories
   useEffect(() => {
     fetchCategories();
+    fetchEvents();
   }, []);
 
   /**
@@ -207,6 +219,21 @@ export default function SubmitArticlePage() {
     }
   };
 
+  const fetchEvents = async () => {
+    try {
+      const token = getToken();
+      if (!token) return;
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      const res = await fetch(`${API_ROOT}/partner/events`, { headers });
+      if (res.ok) {
+        const json = await res.json();
+        setEvents(json.data || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch events", e);
+    }
+  };
+
   // Fetch article content if editing
   useEffect(() => {
     if (queryArticleId) {
@@ -227,22 +254,32 @@ export default function SubmitArticlePage() {
               setContent(art.content || "");
               setLanguage(art.language || "en");
               setCategory_id(art.category_id || "");
+              setEvent_id(art.event_id || "");
+              setVisibility(art.visibility || "public");
               if (art.metadata) {
                 try {
                   const meta = typeof art.metadata === 'string' ? JSON.parse(art.metadata) : art.metadata;
                   if (meta.tags) setTags(meta.tags);
                   if (meta.issue_id) setIssue_id(meta.issue_id);
                 } catch (e) { /* ignore */ }
-              } else if (art.tags) {
-                // Fallback if tags stored in separate column and not metadata (depends on backend)
-                // Controller stores tags in metadata AND separate column often.
-                // Try parsing separate column if it's a string
-                try {
-                  setTags(typeof art.tags === 'string' ? JSON.parse(art.tags) : art.tags);
-                } catch { /* */ }
               }
-              setStatusMsg("Loaded article for editing");
+              // Removed redundant catch
+              // Parse co_authors
+              let ca = art.co_authors;
+              if (ca && Array.isArray(ca)) {
+                setCoAuthors(ca.join(", "));
+              } else if (typeof ca === 'string') {
+                setCoAuthors(ca); // fallback
+              }
+            } else if (art.tags) {
+              // Fallback if tags stored in separate column and not metadata (depends on backend)
+              // Controller stores tags in metadata AND separate column often.
+              // Try parsing separate column if it's a string
+              try {
+                setTags(typeof art.tags === 'string' ? JSON.parse(art.tags) : art.tags);
+              } catch { /* */ }
             }
+            setStatusMsg("Loaded article for editing");
           }
         } catch (err) {
           console.error("Failed to fetch article details", err);
@@ -260,6 +297,8 @@ export default function SubmitArticlePage() {
           setSummary(d.summary || "");
           setContent(d.content || "");
           setCategory_id(d.category_id || "");
+          setEvent_id(d.event_id || "");
+          setVisibility(d.visibility || "public");
           setTags(d.tags || []);
           setIssue_id(d.issue_id || "");
           setStatusMsg("✅ Draft Loaded");
@@ -282,6 +321,8 @@ export default function SubmitArticlePage() {
             content,
             language,
             category_id,
+            event_id,
+            visibility,
             tags,
             issue_id,
           })
@@ -293,7 +334,7 @@ export default function SubmitArticlePage() {
     }, 3000);
 
     return () => clearInterval(timer);
-  }, [title, summary, content, category_id, tags, issue_id]);
+  }, [title, summary, content, category_id, tags, issue_id, event_id, visibility]);
 
   // Helper API calls
 
@@ -524,6 +565,8 @@ export default function SubmitArticlePage() {
         summary: summary || "",
         content: content || "",
         category_id: category_id || null,
+        event_id: event_id || null,
+        visibility: visibility || "public",
         tags: tags || [],
         issue_id: issue_id || null,
         // Don't force 'draft' status if updating existing article, unless we want to?
@@ -575,8 +618,11 @@ export default function SubmitArticlePage() {
         content: content || "",
         language: language || "en",
         tags: tags || [],
+        co_authors: co_authors ? co_authors.split(",").map(s => s.trim()).filter(Boolean) : []
       };
       if (category_id && category_id.trim()) payload.category_id = category_id.trim();
+      if (event_id && event_id.trim()) payload.event_id = event_id.trim();
+      if (visibility) payload.visibility = visibility;
       if (issue_id && issue_id.trim()) payload.issue_id = issue_id.trim();
 
       if (newArticleId) {
@@ -643,7 +689,11 @@ export default function SubmitArticlePage() {
       await finalizeSubmission(newArticleId);
       setStatusMsg("Article submitted");
       localStorage.removeItem("draft");
-      router.push("/author-dashboard/articles");
+      if (isPartner) {
+        router.push("/partner-dashboard/submissions");
+      } else {
+        router.push("/author-dashboard/articles"); // default
+      }
     } catch (err: any) {
       console.error("Submit error:", err);
       setStatusMsg("❌ Submission failed: " + (err.message || ""));
@@ -668,7 +718,11 @@ export default function SubmitArticlePage() {
       await finalizeSubmission(articleId);
       setStatusMsg("Article submitted");
       localStorage.removeItem("draft");
-      router.push("/author-dashboard/articles");
+      if (isPartner) {
+        router.push("/partner-dashboard/submissions");
+      } else {
+        router.push("/author-dashboard/articles");
+      }
     } catch (err: any) {
       setStatusMsg("❌ Finalize failed: " + (err.message || ""));
       setIsSubmitting(false);
@@ -967,7 +1021,48 @@ export default function SubmitArticlePage() {
             </div>
 
             <label className="text-xs font-medium">Assign to Issue ID (Optional)</label>
-            <input value={issue_id} onChange={(e) => setIssue_id(e.target.value)} placeholder="Enter issue ID if applicable" className="w-full border bg-slate-100 dark:bg-slate-900 text-xs p-2 rounded-lg" disabled={isSubmitting} />
+            <input value={issue_id} onChange={(e) => setIssue_id(e.target.value)} placeholder="Enter issue ID if applicable" className="w-full border bg-slate-100 dark:bg-slate-900 text-xs p-2 rounded-lg mb-3" disabled={isSubmitting} />
+
+            <label className="text-xs font-medium block mb-1">Link to Event (Optional)</label>
+            <div className="relative mb-3">
+              <select
+                value={event_id}
+                onChange={(e) => setEvent_id(e.target.value)}
+                className="w-full border bg-slate-100 dark:bg-slate-900 text-xs p-2 rounded-lg appearance-none pr-8"
+                disabled={isSubmitting}
+              >
+                <option value="">No Event</option>
+                {events.map((ev: any) => (
+                  <option key={ev.id} value={ev.id}>{ev.title}</option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none" />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Visibility</Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:ring-offset-slate-950 dark:focus-visible:ring-slate-300"
+                value={visibility}
+                onChange={(e) => setVisibility(e.target.value)}
+              >
+                <option value="public">Public (Community)</option>
+                {isPartner && <option value="partner">Partner Only</option>}
+                <option value="private">Private</option>
+              </select>
+            </div>
+
+            {isPartner && (
+              <div className="space-y-2">
+                <Label>Co-Authors</Label>
+                <Input
+                  placeholder="Enter names separated by commas..."
+                  value={co_authors}
+                  onChange={(e) => setCoAuthors(e.target.value)}
+                />
+                <p className="text-[10px] text-slate-500">List other contributors (optional)</p>
+              </div>
+            )}
           </Card>
 
           {/* Similarity Card */}
@@ -1178,10 +1273,16 @@ export default function SubmitArticlePage() {
                       finalizeSubmission(articleId)
                         .then(() => {
                           localStorage.removeItem("draft");
-                          router.push("/author-dashboard/articles");
+                          if (isPartner) {
+                            router.push("/partner-dashboard/submissions");
+                          } else {
+                            router.push("/author-dashboard/articles");
+                          }
                         })
-                        .catch((e) => setStatusMsg("❌ Finalize failed: " + (e.message || "")))
-                        .finally(() => setIsSubmitting(false));
+                        .catch((err) => {
+                          setStatusMsg("Submission failed: " + err.message);
+                          setIsSubmitting(false);
+                        });
                     } else {
                       setStatusMsg("Missing article ID");
                     }

@@ -73,8 +73,8 @@ export default function SubmissionDetailsPage() {
                             <div key={index} className="relative pl-8">
                                 {/* Dot */}
                                 <div className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full border-2 border-white dark:border-slate-900 ${event.step === 'PUBLISHED' ? 'bg-purple-600' :
-                                        event.step.includes('APPROVED') ? 'bg-green-600' :
-                                            'bg-indigo-600'
+                                    event.step.includes('APPROVED') ? 'bg-green-600' :
+                                        'bg-indigo-600'
                                     }`}></div>
 
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-1">
@@ -99,23 +99,52 @@ export default function SubmissionDetailsPage() {
                     </div>
                 </div>
 
-                {/* DETAILS SIDEBAR (Optional) */}
-                <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-xl h-fit border">
-                    <h3 className="font-semibold mb-4">Submission Details</h3>
-                    <div className="space-y-4 text-sm">
-                        <div>
-                            <span className="block text-slate-500 text-xs uppercase mb-1">Author</span>
-                            <span>{article.author}</span>
+                {/* DETAILS SIDEBAR */}
+                <div className="space-y-6">
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-xl h-fit border">
+                        <h3 className="font-semibold mb-4">Submission Details</h3>
+                        <div className="space-y-4 text-sm">
+                            <div>
+                                <span className="block text-slate-500 text-xs uppercase mb-1">Author</span>
+                                <span>{article.author}</span>
+                            </div>
+                            <div>
+                                <span className="block text-slate-500 text-xs uppercase mb-1">Category</span>
+                                <span>{article.category}</span>
+                            </div>
+                            <div>
+                                <span className="block text-slate-500 text-xs uppercase mb-1">Article ID</span>
+                                <span className="font-mono text-xs">{article.id}</span>
+                            </div>
                         </div>
-                        <div>
-                            <span className="block text-slate-500 text-xs uppercase mb-1">Category</span>
-                            <span>{article.category}</span>
-                        </div>
-                        <div>
-                            <span className="block text-slate-500 text-xs uppercase mb-1">Article ID</span>
-                            <span className="font-mono text-xs">{article.id}</span>
-                        </div>
-                        {/* Could add a content preview or link here */}
+                    </div>
+
+                    {/* ATTACHMENTS */}
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl h-fit border shadow-sm">
+                        <h3 className="font-semibold mb-4 flex items-center gap-2">
+                            <Tag size={16} className="text-indigo-600" /> Attachments
+                        </h3>
+                        {data.attachments && data.attachments.length > 0 ? (
+                            <ul className="space-y-3">
+                                {data.attachments.map((file: any) => (
+                                    <li key={file.id} className="flex justify-between items-center text-sm p-2 bg-slate-50 dark:bg-slate-900 rounded border">
+                                        <div className="truncate max-w-[140px]" title={file.filename}>
+                                            {file.filename}
+                                        </div>
+                                        <a
+                                            href={file.public_url || '#'}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-xs text-indigo-600 font-medium hover:underline"
+                                        >
+                                            View
+                                        </a>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-sm text-slate-500 italic">No files attached.</p>
+                        )}
                     </div>
                 </div>
 
