@@ -6,21 +6,47 @@ import { getStorageBucket, getSignedUrl } from '../utils/storage'; // Assuming s
 export const getPublishedArticles = async (req: Request, res: Response): Promise<void> => {
   try {
     const db: any = getDatabase();
-    // Fetch published articles
-    const [rows]: any = await db.execute(`
+    const userId = (req as any).user?.userId;
+
+    // Get Reader's partner_id
+    let readerPartnerId = null;
+    if (userId) {
+      const [uRows]: any = await db.execute('SELECT partner_id FROM users WHERE id = ?', [userId]);
+      readerPartnerId = uRows[0]?.partner_id || null;
+    }
+
+    // Dynamic Query based on Reader's Partner
+    let query = `
             SELECT 
                 c.id, c.title, c.content, c.price, c.is_free, c.published_at, 
                 c.category_id, cat.name as category_name, u.name as author_name,
+                c.visibility,
                 (SELECT COUNT(*) FROM attachments WHERE article_id = c.id) as attachment_count
             FROM content c
             JOIN users u ON c.author_id = u.id
             LEFT JOIN categories cat ON c.category_id = cat.category_id
             WHERE c.status = 'published'
-            ORDER BY c.published_at DESC
-        `);
+    `;
+
+    const params: any[] = [];
+
+    if (readerPartnerId) {
+      // Reader is part of a Partner Organization
+      // Show: Public content + Partner content (if author is in same partner)
+      // Ensure that visibility is either public OR (partner AND author.partner_id matches)
+      // Also handling 'private' which shouldn't be here typically, but let's exclude it implicitly by not selecting it.
+      query += ` AND (c.visibility = 'public' OR (c.visibility = 'partner' AND u.partner_id = ?))`;
+      params.push(readerPartnerId);
+    } else {
+      // General Reader (Public only)
+      query += ` AND c.visibility = 'public'`;
+    }
+
+    query += ` ORDER BY c.published_at DESC`;
+
+    const [rows]: any = await db.execute(query, params);
 
     // Check user purchases if logged in
-    const userId = (req as any).user?.userId;
     let purchasedIds = new Set();
     if (userId) {
       const [purchases]: any = await db.execute(

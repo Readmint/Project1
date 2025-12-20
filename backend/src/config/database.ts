@@ -82,10 +82,45 @@ const initializeTables = async (): Promise<void> => {
       email VARCHAR(255) UNIQUE NOT NULL,
       name VARCHAR(255) NOT NULL,
       password VARCHAR(255) NOT NULL,
-      role ENUM('reader', 'author', 'reviewer', 'editor', 'content_manager', 'admin') DEFAULT 'reader',
+      role ENUM('reader', 'author', 'reviewer', 'editor', 'content_manager', 'admin', 'partner') DEFAULT 'reader',
+      partner_id VARCHAR(36),
       profile_data JSON,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_partner_id (partner_id)
+    )
+  `;
+
+  const createPartnersTable = `
+    CREATE TABLE IF NOT EXISTS partners (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      name VARCHAR(255) NOT NULL,
+      type VARCHAR(50) DEFAULT 'university',
+      admin_user_id VARCHAR(36),
+      website VARCHAR(500),
+      logo_url VARCHAR(1000),
+      settings JSON,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_partner_admin (admin_user_id)
+      -- Foreign key constraint added later to separate dependency
+    )
+  `;
+
+  const createPartnerEventsTable = `
+    CREATE TABLE IF NOT EXISTS partner_events (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      partner_id VARCHAR(36) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      description TEXT,
+      start_date DATETIME,
+      end_date DATETIME,
+      status ENUM('upcoming', 'active', 'ended', 'archived') DEFAULT 'upcoming',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE,
+      INDEX idx_partner_events (partner_id),
+      INDEX idx_event_status (status)
     )
   `;
 
@@ -155,22 +190,29 @@ const initializeTables = async (): Promise<void> => {
       title VARCHAR(500) NOT NULL,
       author_id VARCHAR(36) NOT NULL,
       category_id VARCHAR(36),
+      event_id VARCHAR(36),
       content LONGTEXT,
       language VARCHAR(50) DEFAULT 'English',
       status ENUM('draft', 'submitted', 'under_review', 'changes_requested', 'approved', 'published', 'rejected') DEFAULT 'draft',
+      visibility ENUM('public', 'partner', 'private') DEFAULT 'public',
       featured BOOLEAN DEFAULT FALSE,
       trending_score INT DEFAULT 0,
       likes_count INT DEFAULT 0,
       reads_count INT DEFAULT 0,
+      reads_count INT DEFAULT 0,
       metadata JSON,
+      co_authors JSON,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       FOREIGN KEY (author_id) REFERENCES users(id),
       FOREIGN KEY (category_id) REFERENCES categories(category_id),
+      FOREIGN KEY (event_id) REFERENCES partner_events(id) ON DELETE SET NULL,
       INDEX idx_author_status (author_id, status),
       INDEX idx_status (status),
       INDEX idx_language (language),
-      INDEX idx_created_at (created_at)
+      INDEX idx_created_at (created_at),
+      INDEX idx_visibility (visibility),
+      INDEX idx_event_content (event_id)
     )
   `;
 
@@ -678,6 +720,72 @@ const initializeTables = async (): Promise<void> => {
     await mysqlDb.execute(createVersionsTable);
     console.log('✅ Versions table created');
 
+    console.log('🔄 Creating partners table...');
+    await mysqlDb.execute(createPartnersTable);
+    console.log('✅ Partners table created');
+
+    console.log('🔄 Creating partner_events table...');
+    await mysqlDb.execute(createPartnerEventsTable);
+    console.log('✅ Partner events table created');
+
+    console.log('🔄 Creating article_co_authors table...');
+    await mysqlDb.execute(`
+      CREATE TABLE IF NOT EXISTS article_co_authors (
+        id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        article_id VARCHAR(36) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE,
+        INDEX idx_co_author_article (article_id)
+      )
+    `);
+    console.log('✅ Article co-authors table created');
+
+    // --- MIGRATIONS for existing tables ---
+    console.log('🔄 Running migrations for schema updates...');
+
+    // 1. Update users table role enum and add partner_id
+    try {
+      await mysqlDb.execute(`
+         ALTER TABLE users 
+         MODIFY COLUMN role ENUM('reader', 'author', 'reviewer', 'editor', 'content_manager', 'admin', 'partner') DEFAULT 'reader'
+       `);
+    } catch (e) { /* ignore if already updated or specific error */ }
+
+    try {
+      // Check if partner_id exists
+      const [cols]: any = await mysqlDb.execute("SHOW COLUMNS FROM users LIKE 'partner_id'");
+      if (!cols || cols.length === 0) {
+        await mysqlDb.execute("ALTER TABLE users ADD COLUMN partner_id VARCHAR(36), ADD INDEX idx_partner_id (partner_id)");
+      }
+    } catch (e) { console.log('Notice: users.partner_id migration skipped or failed', (e as any).message); }
+
+    // 2. Update content table for event_id and visibility
+    try {
+      const [cols]: any = await mysqlDb.execute("SHOW COLUMNS FROM content LIKE 'event_id'");
+      if (!cols || cols.length === 0) {
+        await mysqlDb.execute("ALTER TABLE content ADD COLUMN event_id VARCHAR(36), ADD INDEX idx_event_content (event_id)");
+        await mysqlDb.execute("ALTER TABLE content ADD CONSTRAINT fk_content_event FOREIGN KEY (event_id) REFERENCES partner_events(id) ON DELETE SET NULL");
+      }
+    } catch (e) { console.log('Notice: content.event_id migration skipped', (e as any).message); }
+
+    try {
+      const [cols]: any = await mysqlDb.execute("SHOW COLUMNS FROM content LIKE 'visibility'");
+      if (!cols || cols.length === 0) {
+        await mysqlDb.execute("ALTER TABLE content ADD COLUMN visibility ENUM('public', 'partner', 'private') DEFAULT 'public', ADD INDEX idx_visibility (visibility)");
+      }
+    } catch (e) { console.log('Notice: content.visibility migration skipped', (e as any).message); }
+
+    try {
+      const [cols]: any = await mysqlDb.execute("SHOW COLUMNS FROM content LIKE 'co_authors'");
+      if (!cols || cols.length === 0) {
+        await mysqlDb.execute("ALTER TABLE content ADD COLUMN co_authors JSON");
+      }
+    } catch (e) { console.log('Notice: content.co_authors migration skipped', (e as any).message); }
+
+    console.log('✅ Migrations completed');
+
     console.log('🔄 Creating reviewer_assignments table...');
     await mysqlDb.execute(createReviewerAssignmentsTable);
     console.log('✅ Reviewer assignments table created');
@@ -797,6 +905,8 @@ const verifyTableCreation = async (): Promise<void> => {
       'plagiarism_reports',
       'workflow_events',
       'reviews',
+      'partners',
+      'partner_events',
       'subscription_plans',
       'payment_orders',
       'user_subscriptions',

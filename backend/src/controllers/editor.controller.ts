@@ -246,7 +246,7 @@ export const uploadEditorResume = [
         });
         passthrough.pipe(writeStream)
           .on("finish", () => resolve())
-          .on("error", (err) => reject(err));
+          .on("error", (err: any) => reject(err));
       });
 
       // generate signed URL (long-lived). getSignedUrl helper expects path & expiryMs
@@ -305,9 +305,12 @@ export const getAssignedForEditor = async (req: Request, res: Response): Promise
     const editorId = edRows[0].id;
 
     const [rows]: any = await db.execute(
-      `SELECT ea.id as assignment_id, ea.article_id, c.title, c.status, ea.assigned_date, ea.due_date, ea.priority, ea.status AS assignment_status
+      `SELECT ea.id as assignment_id, ea.article_id, c.title, c.status, ea.assigned_date, ea.due_date, ea.priority, ea.status AS assignment_status,
+              COALESCE(NULLIF(a.display_name, ''), NULLIF(u.name, ''), u.email, 'Unknown Author') as author_name
        FROM editor_assignments ea
        LEFT JOIN content c ON c.id = ea.article_id
+       LEFT JOIN users u ON u.id = c.author_id
+       LEFT JOIN authors a ON a.user_id = c.author_id
        WHERE ea.editor_id = ? AND ea.status IN ('assigned', 'in_progress')
        ORDER BY ea.assigned_date DESC`,
       [editorId]
@@ -337,10 +340,13 @@ export const getSubmittedForEditor = async (req: Request, res: Response): Promis
 
     // Fetch articles where assignment status is completed
     const [rows]: any = await db.execute(
-      `SELECT ea.id as assignment_id, ea.article_id, c.title, c.status as article_status, ea.assigned_date, ea.due_date, ea.priority, ea.status AS assignment_status, ea.updated_at as completed_at, cat.name as category
+      `SELECT ea.id as assignment_id, ea.article_id, c.title, c.status as article_status, ea.assigned_date, ea.due_date, ea.priority, ea.status AS assignment_status, ea.updated_at as completed_at, cat.name as category,
+              COALESCE(NULLIF(a.display_name, ''), NULLIF(u.name, ''), u.email, 'Unknown Author') as author_name
        FROM editor_assignments ea
        LEFT JOIN content c ON c.id = ea.article_id
        LEFT JOIN categories cat ON c.category_id = cat.category_id
+       LEFT JOIN users u ON u.id = c.author_id
+       LEFT JOIN authors a ON a.user_id = c.author_id
        WHERE ea.editor_id = ? AND ea.status = 'completed'
        ORDER BY ea.updated_at DESC`,
       [editorId]
@@ -383,7 +389,7 @@ export const getArticleForEdit = async (req: Request, res: Response): Promise<vo
     }
 
     const [rows]: any = await db.execute(
-      `SELECT c.*, u.email as author_email, a.display_name as author_name
+      `SELECT c.*, u.email as author_email, COALESCE(NULLIF(a.display_name, ''), NULLIF(u.name, ''), u.email, 'Unknown Author') as author_name
        FROM content c
        LEFT JOIN users u ON u.id = c.author_id
        LEFT JOIN authors a ON a.user_id = c.author_id
@@ -396,6 +402,24 @@ export const getArticleForEdit = async (req: Request, res: Response): Promise<vo
     }
 
     const article = rows[0];
+
+    // Fallback: If author_name is missing/empty, try fetching purely from users table
+    // This handles cases where the JOIN might have behaved unexpectedly or data is partial
+    if (!article.author_name || article.author_name === 'Unknown Author') {
+      try {
+        const [uRows]: any = await db.execute('SELECT name, email FROM users WHERE id = ?', [article.author_id]);
+        if (uRows && uRows.length > 0) {
+          const u = uRows[0];
+          article.author_name = u.name || u.email || 'Unknown Author';
+          article.author_email = u.email;
+          console.log(`[DEBUG] Recovered author name via direct query: ${article.author_name}`);
+        }
+      } catch (err) {
+        console.error('Failed to recover author name', err);
+      }
+    }
+
+    console.log(`[DEBUG] getArticleForEdit id=${id} author_id=${article.author_id} author_email=${article.author_email} author_name=${article.author_name}`);
 
     // permission: ensure editor assigned, or privileged roles
     const privileged = ['admin', 'content_manager'];

@@ -42,6 +42,12 @@ export const getStorageBucket = (): Bucket => {
       }
     });
     return storage.bucket(bucketName);
+  } else {
+    console.warn("⚠️  Missing GCS Credentials for manual config:");
+    if (!projectId) console.warn("   - FIREBASE_PROJECT_ID is missing");
+    if (!clientEmail) console.warn("   - FIREBASE_CLIENT_EMAIL is missing");
+    if (!privateKey) console.warn("   - FIREBASE_PRIVATE_KEY is missing");
+    console.warn("   Attempting to use Default Application Credentials...");
   }
 
   // If no env vars, fallback to default (ADC) which might throw if not configured on machine
@@ -88,8 +94,14 @@ export const getSignedUrl = async (
   }
 
   // file.getSignedUrl returns Promise<[string]>; return the first string
-  const [url] = await file.getSignedUrl(getUrlOptions);
-  return url;
+  try {
+    const [url] = await file.getSignedUrl(getUrlOptions);
+    return url;
+  } catch (error: any) {
+    console.warn(`getSignedUrl failed for ${storagePath}: ${error.message}`);
+    // Fallback: return public URL construction
+    return `https://storage.googleapis.com/${bucket.name}/${encodeURI(storagePath)}`;
+  }
 };
 
 /**

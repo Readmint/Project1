@@ -101,6 +101,8 @@ export const createArticle = async (req: Request, res: Response): Promise<void> 
       tags = [],
       status = 'draft',
       issue_id = null,
+      event_id = null,
+      visibility = 'public',
     } = req.body;
 
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
@@ -127,10 +129,14 @@ export const createArticle = async (req: Request, res: Response): Promise<void> 
     const articleId = uuidv4();
     const metadata = JSON.stringify({ issue_id, tags: tags || [] });
 
+    // Include event_id (FK to partner_events) and visibility
+    // Note: ensure event_id is valid or set to null if empty string
+    const finalEventId = (event_id && typeof event_id === 'string' && event_id.trim()) ? event_id.trim() : null;
+
     const insertSql = `
       INSERT INTO content (
-        id, title, author_id, category_id, content, summary, tags, language, status, metadata, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        id, title, author_id, category_id, content, summary, tags, language, status, metadata, event_id, visibility, co_authors, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `;
 
     try {
@@ -145,6 +151,9 @@ export const createArticle = async (req: Request, res: Response): Promise<void> 
         req.body.language || 'English',
         status,
         metadata,
+        finalEventId,
+        visibility,
+        JSON.stringify(req.body.co_authors || [])
       ]);
     } catch (dbError: any) {
       // if FK constraint fails for category, retry with null
@@ -169,10 +178,22 @@ export const createArticle = async (req: Request, res: Response): Promise<void> 
 
     // Insert workflow event
     await db.execute(
-      `INSERT INTO workflow_events (id, article_id, actor_id, from_status, to_status, note, created_at)
-       VALUES (UUID(), ?, ?, ?, ?, ?, NOW())`,
-      [articleId, authorId, null, status, `Created as ${status}`]
+      `INSERT INTO workflow_events(id, article_id, actor_id, from_status, to_status, note, created_at)
+    VALUES(UUID(), ?, ?, ?, ?, ?, NOW())`,
+      [articleId, authorId, null, status, `Created as ${status} `]
     );
+
+    // Insert Co-Authors into separate table
+    if (req.body.co_authors && Array.isArray(req.body.co_authors)) {
+      for (const name of req.body.co_authors) {
+        if (typeof name === 'string' && name.trim()) {
+          await db.execute(
+            'INSERT INTO article_co_authors (id, article_id, name) VALUES (UUID(), ?, ?)',
+            [articleId, name.trim()]
+          );
+        }
+      }
+    }
 
     res.status(201).json({
       status: 'success',
@@ -259,6 +280,10 @@ export const updateArticleContent = async (req: Request, res: Response): Promise
       updates.push('language = ?');
       values.push(req.body.language);
     }
+    if (req.body.co_authors !== undefined) {
+      updates.push('co_authors = ?');
+      values.push(JSON.stringify(req.body.co_authors));
+    }
 
     // Always update timestamp
     updates.push('updated_at = NOW()');
@@ -268,10 +293,25 @@ export const updateArticleContent = async (req: Request, res: Response): Promise
       return;
     }
 
-    const sql = `UPDATE content SET ${updates.join(', ')} WHERE id = ?`;
+    const sql = `UPDATE content SET ${updates.join(', ')} WHERE id = ? `;
     values.push(articleId);
 
     await db.execute(sql, values);
+
+    // Update Co-Authors table if provided
+    if (req.body.co_authors !== undefined && Array.isArray(req.body.co_authors)) {
+      // Delete existing
+      await db.execute('DELETE FROM article_co_authors WHERE article_id = ?', [articleId]);
+      // Insert new
+      for (const name of req.body.co_authors) {
+        if (typeof name === 'string' && name.trim()) {
+          await db.execute(
+            'INSERT INTO article_co_authors (id, article_id, name) VALUES (UUID(), ?, ?)',
+            [articleId, name.trim()]
+          );
+        }
+      }
+    }
 
     // If issue_id is provided, update it in metadata (if logic requires). 
     // Actually metadata overrides above might handle it if passed.
@@ -337,7 +377,7 @@ export const getAttachmentSignedUrl = async (req: Request, res: Response): Promi
       status: 'error',
       message:
         'Signed-upload is disabled. Upload attachments to the server using multipart POST to /api/author/articles/:articleId/attachments (field name "file").',
-      alternative: { method: 'POST', path: `/api/author/articles/:articleId/attachments`, formField: 'file' },
+      alternative: { method: 'POST', path: `/ api / author / articles /: articleId / attachments`, formField: 'file' },
     });
     return;
   } catch (err: any) {
@@ -388,7 +428,7 @@ export const uploadAttachment = async (req: Request, res: Response): Promise<voi
       return;
     }
     const article = articleRows[0];
-    if (article.author_id !== userId && !['admin', 'content_manager'].includes(req.user!.role || '')) {
+    if (article.author_id !== userId && !['admin', 'content_manager', 'editor'].includes(req.user!.role || '')) {
       res.status(403).json({ status: 'error', message: 'Forbidden to upload for this article' });
       return;
     }
@@ -400,11 +440,11 @@ export const uploadAttachment = async (req: Request, res: Response): Promise<voi
     }
 
     const attachmentId = uuidv4();
-    const originalName = file.originalname || `attachment-${attachmentId}`;
+    const originalName = file.originalname || `attachment - ${attachmentId} `;
     const contentType = file.mimetype || 'application/octet-stream';
 
     const safeName = originalName.replace(/[^\w.\-]/g, '_').slice(0, 200);
-    const destPath = `attachments/${articleId}/${attachmentId}-${safeName}`;
+    const destPath = `attachments / ${articleId}/${attachmentId}-${safeName}`;
 
     try {
       const bucket = getStorageBucket();
@@ -418,8 +458,11 @@ export const uploadAttachment = async (req: Request, res: Response): Promise<voi
         resumable: false,
       });
 
-      // Optionally set ACL or make public — keep null and use signed URLs for reads
-      const publicUrl = null;
+      // Make file public immediately so it can be viewed in <img> tags without auth
+      await gcsFile.makePublic();
+      const bucketName = bucket.name; // or process.env.FIREBASE_STORAGE_BUCKET
+      const publicUrl = `https://storage.googleapis.com/${bucketName}/${encodeURI(destPath)}`;
+
       const sizeBytes = file.size || (file.buffer ? file.buffer.length : 0);
 
       // Save metadata in MySQL attachments table
@@ -438,6 +481,7 @@ export const uploadAttachment = async (req: Request, res: Response): Promise<voi
           filename: originalName,
           size: sizeBytes,
           mime_type: contentType,
+          public_url: publicUrl, // Return direct public URL
         },
       });
       return;
@@ -798,6 +842,16 @@ export const getArticleDetails = async (req: Request, res: Response): Promise<vo
     const [attachments]: any = await db.execute('SELECT id, filename, public_url, storage_path, mime_type, size_bytes, uploaded_at FROM attachments WHERE article_id = ?', [articleId]);
     const [events]: any = await db.execute('SELECT id, actor_id, from_status, to_status, note, created_at FROM workflow_events WHERE article_id = ? ORDER BY created_at DESC', [articleId]);
     const [reviews]: any = await db.execute('SELECT id, reviewer_id, summary, details, decision, similarity_score, created_at FROM reviews WHERE article_id = ? ORDER BY created_at DESC', [articleId]);
+
+    // Fetch Co-Authors
+    try {
+      const [coRows]: any = await db.execute('SELECT name FROM article_co_authors WHERE article_id = ?', [articleId]);
+      if (coRows && coRows.length > 0) {
+        article.co_authors = coRows.map((r: any) => r.name);
+      } else if (article.co_authors && typeof article.co_authors === 'string') {
+        try { article.co_authors = JSON.parse(article.co_authors); } catch (e) { }
+      }
+    } catch (e) { /* ignore */ }
 
     res.status(200).json({ status: 'success', message: 'Article details fetched', data: { article, attachments, workflow: events, reviews } });
     return;

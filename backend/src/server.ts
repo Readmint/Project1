@@ -23,6 +23,7 @@ import editorRoutes from './routes/editor.routes';
 import reviewerRoutes from './routes/reviewer.routes';
 import adminRoutes from './routes/admin.routes';
 import paymentRoutes from './routes/payment.routes';
+import partnerRoutes from './routes/partner.routes';
 import { setupSwagger } from './config/swagger';
 
 dotenv.config();
@@ -45,6 +46,7 @@ app.use(
 /* -------------------------------- Body Parsers --------------------------------- */
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static('uploads')); // Serve local uploads
 
 /* ---------------------------------- Swagger ------------------------------------ */
 setupSwagger(app);
@@ -53,6 +55,7 @@ setupSwagger(app);
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/articles', articleRoutes);
+app.use('/api', articleRoutes); // Fix for /api/author/articles/ routes
 app.use('/api/authors', authorRoutes);
 app.use('/api/editors', editorRoutes);
 app.use('/api/subscription', subscriptionRoutes);
@@ -64,6 +67,7 @@ app.use('/api/editor', editorRoutes);
 app.use('/api/reviewer', reviewerRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/partner', partnerRoutes);
 
 /* ------------------------------- Health Check ---------------------------------- */
 app.get('/api/health-check', (req, res) => {

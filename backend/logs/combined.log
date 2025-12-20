@@ -846,3 +846,121 @@
 {"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-17 21:28:27"}
 {"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-17 21:28:27"}
 {"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-17 21:28:27"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 20:59:48"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 20:59:48"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 20:59:48"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-19 21:01:59"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-19 21:01:59"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-19 21:01:59"}
+{"level":"warn","message":"getSignedUrl failed for","service":"readmint-backend","timestamp":"2025-12-19 21:01:59"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 21:24:51"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 21:24:51"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 21:24:51"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 22:02:21"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 22:02:21"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 22:02:21"}
+{"level":"error","message":"uploadAttachment: failed to upload to GCS or save DB row Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.","service":"readmint-backend","stack":"Error: Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.\n    at GoogleAuth.getApplicationDefaultAsync (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:287:15)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async GoogleAuth._GoogleAuth_determineClient (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:834:32)\n    at async GoogleAuth.getClient (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:698:20)\n    at async GoogleAuth.authorizeRequest (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:741:24)\n    at async Promise.all (index 1)\n    at async prepareRequest (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\@google-cloud\\storage\\build\\cjs\\src\\nodejs-common\\util.js:504:61)","timestamp":"2025-12-19 22:07:39"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 22:09:52"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 22:09:52"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 22:09:52"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 22:15:28"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 22:15:28"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 22:15:28"}
+{"level":"error","message":"uploadAttachment: failed to upload to GCS or save DB row Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.","service":"readmint-backend","stack":"Error: Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.\n    at GoogleAuth.getApplicationDefaultAsync (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:287:15)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async GoogleAuth._GoogleAuth_determineClient (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:834:32)\n    at async GoogleAuth.getClient (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:698:20)\n    at async GoogleAuth.authorizeRequest (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:741:24)\n    at async Promise.all (index 1)\n    at async prepareRequest (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\@google-cloud\\storage\\build\\cjs\\src\\nodejs-common\\util.js:504:61)","timestamp":"2025-12-19 22:16:04"}
+{"level":"error","message":"uploadAttachment: failed to upload to GCS or save DB row Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.","service":"readmint-backend","stack":"Error: Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.\n    at GoogleAuth.getApplicationDefaultAsync (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:287:15)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async GoogleAuth._GoogleAuth_determineClient (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:834:32)\n    at async GoogleAuth.getClient (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:698:20)\n    at async GoogleAuth.authorizeRequest (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\google-auth-library\\build\\src\\auth\\googleauth.js:741:24)\n    at async Promise.all (index 1)\n    at async prepareRequest (C:\\Users\\Devanshu\\OneDrive\\Documents\\Readmint\\backend\\node_modules\\@google-cloud\\storage\\build\\cjs\\src\\nodejs-common\\util.js:504:61)","timestamp":"2025-12-19 22:21:34"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-19 22:22:09"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 22:22:09"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 22:22:09"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 22:22:09"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-19 22:23:59"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 22:23:59"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 22:24:00"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 22:24:00"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-19 22:45:37"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 22:45:37"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 22:45:37"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 22:45:37"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-19 22:48:55"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 22:48:55"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 22:48:55"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 22:48:55"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-19 22:50:12"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 22:50:12"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 22:50:12"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 22:50:12"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-19 22:52:11"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 22:52:11"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 22:52:11"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 22:52:11"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-19 22:55:17"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 22:55:17"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 22:55:17"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 22:55:17"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-19 22:55:42"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 22:55:42"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 22:55:42"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 22:55:42"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-19 22:56:54"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 22:56:54"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 22:56:54"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 22:56:55"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-19 23:01:33"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-19 23:01:33"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-19 23:01:33"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-19 23:01:33"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-20 20:35:57"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-20 20:35:57"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-20 20:35:57"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-20 20:35:57"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-20 20:51:38"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-20 20:51:38"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-20 20:51:39"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-20 20:51:39"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-20 20:52:28"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-20 20:52:28"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-20 20:52:28"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-20 20:52:28"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-20 20:52:59"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-20 20:52:59"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-20 20:52:59"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-20 20:52:59"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-20 20:54:27"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-20 20:54:27"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-20 20:54:27"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-20 20:54:27"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-20 21:05:14"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-20 21:05:14"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-20 21:05:14"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-20 21:05:14"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-20 21:15:59"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-20 21:15:59"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-20 21:15:59"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-20 21:15:59"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-20 21:20:52"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-20 21:20:52"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-20 21:20:52"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-20 21:20:52"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-20 21:21:19"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-20 21:21:19"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-20 21:21:19"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-20 21:21:19"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-20 21:49:50"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-20 21:49:50"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-20 21:49:50"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-20 21:49:50"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-20 21:49:54"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-20 21:49:54"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-20 21:49:54"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-20 21:49:54"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-20 21:50:13"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-20 21:50:13"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-20 21:50:13"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-20 21:50:13"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2025-12-20 22:00:47"}
+{"level":"info","message":"Connected to MySQL database","service":"readmint-backend","timestamp":"2025-12-20 22:00:47"}
+{"level":"info","message":"MySQL database tables initialized successfully","service":"readmint-backend","timestamp":"2025-12-20 22:00:47"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2025-12-20 22:00:47"}
+{"level":"info","message":"Email sent: <fc8cdd3b-1d20-6ad2-c540-9a28c985181e@gmail.com>","service":"readmint-backend","timestamp":"2025-12-20 22:14:24"}
+{"level":"info","message":"Notified 1 admins about new event ef19e3a6-4512-43b8-80fa-ac9d39c9f486","service":"readmint-backend","timestamp":"2025-12-20 22:14:24"}
+{"level":"info","message":"Article 132fd917-79b5-422d-8121-06be3eea7110 status changed from draft to submitted by ed27a1a0-90c9-47d2-b503-bdfe05c7d8c0","service":"readmint-backend","timestamp":"2025-12-20 22:17:11"}
+{"level":"info","message":"Article fe5f38d6-c526-4180-a106-29756b2aaef8 status changed from draft to submitted by ed27a1a0-90c9-47d2-b503-bdfe05c7d8c0","service":"readmint-backend","timestamp":"2025-12-20 22:21:07"}

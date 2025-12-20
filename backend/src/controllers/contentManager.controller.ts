@@ -642,6 +642,8 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
 
         events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+        const [attachments]: any = await db.execute('SELECT id, filename, public_url, storage_path, mime_type, uploaded_at FROM attachments WHERE article_id = ?', [id]);
+
         res.status(200).json({
             status: 'success',
             data: {
@@ -653,7 +655,8 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
                     category: article.category_name,
                     content: article.content
                 },
-                timeline: events
+                timeline: events,
+                attachments: attachments || []
             }
         });
 
