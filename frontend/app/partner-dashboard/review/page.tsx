@@ -71,27 +71,27 @@ export default function PartnerReviewPage() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8 min-h-screen">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8 min-h-screen">
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
+          <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
             Review & Plagiarism
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm md:text-base">
             Ensure integrity and quality before publishing.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Card className="px-4 py-2 flex items-center gap-2 bg-emerald-50 border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-800">
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
+          <Card className="flex-1 md:flex-none px-4 py-2 flex items-center gap-2 bg-emerald-50 border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-800">
             <CheckCircle className="h-4 w-4 text-emerald-600" />
             <div className="text-xs">
               <span className="font-bold text-emerald-700 block">45 Approved</span>
               <span className="text-emerald-600/70">This Month</span>
             </div>
           </Card>
-          <Card className="px-4 py-2 flex items-center gap-2 bg-red-50 border-red-100 dark:bg-red-900/20 dark:border-red-800">
+          <Card className="flex-1 md:flex-none px-4 py-2 flex items-center gap-2 bg-red-50 border-red-100 dark:bg-red-900/20 dark:border-red-800">
             <AlertTriangle className="h-4 w-4 text-red-600" />
             <div className="text-xs">
               <span className="font-bold text-red-700 block">3 flagged</span>
@@ -103,15 +103,15 @@ export default function PartnerReviewPage() {
 
       {/* Main Review List */}
       <Card className="border shadow-sm overflow-hidden bg-white dark:bg-slate-900 rounded-xl">
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-          <div className="relative w-64">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50/50 dark:bg-slate-900/50">
+          <div className="relative w-full md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               placeholder="Search submissions..."
               className="w-full bg-white dark:bg-slate-950 border rounded-lg pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
             />
           </div>
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-slate-500 w-full md:w-auto text-right">
             Showing {articles.length} records
           </div>
         </div>

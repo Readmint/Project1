@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -94,7 +94,7 @@ export default function AdminSidebar() {
 
                 {/* Branding */}
                 <div className="p-6 pb-2">
-                    <h2 className="text-2xl font-bold text-indigo-600">ReadMint</h2>
+                    <h2 className="text-2xl font-bold text-indigo-600">MindRadix</h2>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                         Super Admin Portal
                     </p>
@@ -156,3 +156,4 @@ export default function AdminSidebar() {
         </>
     );
 }
+

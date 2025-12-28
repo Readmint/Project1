@@ -1,4 +1,4 @@
-
+﻿
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
@@ -26,7 +26,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     // Load from local storage
     useEffect(() => {
-        const stored = localStorage.getItem("readmint_cart");
+        const stored = localStorage.getItem("MindRadix_cart");
         if (stored) {
             try {
                 setCart(JSON.parse(stored));
@@ -38,7 +38,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     // Save to local storage
     useEffect(() => {
-        localStorage.setItem("readmint_cart", JSON.stringify(cart));
+        localStorage.setItem("MindRadix_cart", JSON.stringify(cart));
     }, [cart]);
 
     const addToCart = (item: CartItem) => {
@@ -77,3 +77,4 @@ export function useCart() {
     }
     return context;
 }
+

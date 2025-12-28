@@ -71,8 +71,8 @@ export default function AssignedArticlesPage() {
                 </p>
               </div>
 
-              <Link href={`/editor-dashboard/assigned/${item.article_id}/edit`}>
-                <Button>Edit</Button>
+              <Link href={`/editor-dashboard/design/${item.article_id}`}>
+                <Button>Edit Design</Button>
               </Link>
             </CardContent>
           </Card>

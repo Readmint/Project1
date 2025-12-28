@@ -346,7 +346,7 @@ export default function ReviewQueuePage() {
                     <Button
                       onClick={() =>
                         router.push(
-                          `/editor-dashboard/assigned/${article.id}/edit`
+                          `/editor-dashboard/design/${article.id}`
                         )
                       }
                       className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] rounded-full px-3 py-1.5"

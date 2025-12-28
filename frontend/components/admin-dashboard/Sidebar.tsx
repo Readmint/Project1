@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -36,7 +36,7 @@ export default function Sidebar() {
         {/* HEADER */}
         <div className="mb-6">
           <h2 className="text-lg font-semibold text-foreground">
-            ReadMint — Admin
+            MindRadix — Admin
           </h2>
           <p className="text-muted-foreground text-sm">
             Platform control & compliance
@@ -51,17 +51,16 @@ export default function Sidebar() {
             const active = isHome
               ? pathname === item.href
               : pathname === item.href ||
-                pathname.startsWith(item.href + "/");
+              pathname.startsWith(item.href + "/");
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`block px-3 py-2 rounded-lg transition-all ${
-                  active
+                className={`block px-3 py-2 rounded-lg transition-all ${active
                     ? "bg-muted text-primary font-medium"
                     : "hover:bg-muted text-foreground"
-                }`}
+                  }`}
               >
                 {item.name}
               </Link>

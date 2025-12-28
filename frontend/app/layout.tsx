@@ -9,6 +9,16 @@ import Script from "next/script";
 import WhatsAppButton from "@/components/layout/WhatsAppButton";
 import Footer from "@/components/layout/Footer";
 
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "MindRadix",
+  description: "A digital magazine platform",
+  icons: {
+    icon: "/icons/mindradix_logo.jpg",
+  },
+};
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>

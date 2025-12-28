@@ -227,6 +227,10 @@ export default function SubscribePage() {
               <SummaryRow label="Total Amount" value={`₹${formatPrice(plan.price_monthly)}`} bold />
             </div>
 
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 text-center">
+              By subscribing, you agree to our <a href="/refund-policy" target="_blank" className="text-indigo-600 underline">Refund Policy</a> and <a href="/terms" target="_blank" className="text-indigo-600 underline">Terms</a>.
+            </p>
+
             <Button
               onClick={handlePayment}
               disabled={loading}
@@ -236,7 +240,7 @@ export default function SubscribePage() {
             </Button>
 
             <p className="text-center text-sm mt-6 text-slate-500 dark:text-slate-400 cursor-pointer"
-               onClick={() => router.back()}>
+              onClick={() => router.back()}>
               ← Back to plans
             </p>
           </div>

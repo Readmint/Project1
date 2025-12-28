@@ -8,15 +8,15 @@ export default function Footer() {
 
         {/* Column 1 */}
         <div>
-          <Image 
-            src="/icons/icon.png" 
-            alt="E-Magazine Logo" 
-            width={48} 
+          <Image
+            src="/icons/mindradix_logo.jpg"
+            alt="MindRadix Logo"
+            width={48}
             height={48}
-            className="mb-4"
+            className="mb-4 rounded-lg"
           />
 
-          <h3 className="text-xl font-semibold mb-2">E-Magazine</h3>
+          <h3 className="text-xl font-semibold mb-2">MindRadix</h3>
           <p>Your premier platform for digital publishing and content discovery.</p>
         </div>
 
@@ -37,9 +37,13 @@ export default function Footer() {
           <h4 className="text-lg font-semibold mb-4">Resources</h4>
 
           <ul className="space-y-2">
-            <li><a href="/help" className="hover:text-indigo-600">Help Center</a></li>
-            <li><a href="/guidelines" className="hover:text-indigo-600">Guidelines</a></li>
+
+            <li><a href="/grievance-redressal" className="hover:text-indigo-600">Grievance Redressal Policy</a></li>
+            <li><a href="/plagiarism-ethics" className="hover:text-indigo-600">Plagiarism & Ethics Policy</a></li>
+            <li><a href="/intellectual-property" className="hover:text-indigo-600">Intellectual Property Policy</a></li>
             <li><a href="/privacy" className="hover:text-indigo-600">Privacy Policy</a></li>
+            <li><a href="/refund-policy" className="hover:text-indigo-600">Refund Policy</a></li>
+            <li><a href="/shipping-delivery" className="hover:text-indigo-600">Shipping & Delivery Policy</a></li>
             <li><a href="/terms" className="hover:text-indigo-600">Terms of Service</a></li>
           </ul>
         </div>
@@ -52,17 +56,17 @@ export default function Footer() {
 
             <li className="flex items-center gap-3">
               <Mail className="w-5 h-5" />
-              contact@emagazine.com
+              support@MindRadix.in
             </li>
 
             <li className="flex items-center gap-3">
               <Phone className="w-5 h-5" />
-              +1 (555) 123-4567
+              +91 98765 43210
             </li>
 
             <li className="flex items-center gap-3">
               <MapPin className="w-5 h-5" />
-              San Francisco, CA
+              Rajasthan, India
             </li>
 
           </ul>
@@ -72,7 +76,7 @@ export default function Footer() {
 
       {/* Bottom Line */}
       <div className="text-center text-sm mt-12 text-slate-500 dark:text-slate-400">
-        © 2025 E-Magazine Platform. All rights reserved.
+        © 2025 MindRadix. All rights reserved.
       </div>
     </footer>
   );

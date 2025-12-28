@@ -27,7 +27,7 @@ const A4Template = forwardRef<HTMLDivElement, A4TemplateProps>(({ content, metad
     const {
         issn, volume, issue, editorName, authorName, title, logo,
         publicationTitle = "THE MAGAZINE",
-        footerText = "Readmint Platform",
+        footerText = "MindRadix Platform",
         themeColor = "#166534", // Default Green
         heroImage,
         tableOfContent,

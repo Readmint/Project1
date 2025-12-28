@@ -13,6 +13,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import ArticleCard from "@/components/reader-dashboard/ArticleCard";
 
 interface Article {
   id: string;
@@ -63,60 +64,7 @@ export default function ReaderDashboard() {
     });
   };
 
-  const ArticleCard = ({ article, isLibrary = false }: { article: Article, isLibrary?: boolean }) => {
-    const hasAccess = article.is_free === 1 || article.is_purchased || isLibrary;
 
-    return (
-      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden hover:shadow-md transition-shadow flex flex-col h-full">
-        <div className="p-5 flex-1 space-y-3">
-          <div className="flex justify-between items-start">
-            <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-              {article.category_name || "General"}
-            </span>
-            {hasAccess ? (
-              <span className="text-green-600 dark:text-green-400 flex items-center gap-1 text-xs font-bold">
-                <CheckCircle size={12} /> Owned
-              </span>
-            ) : (
-              <span className="text-slate-500 font-medium text-xs bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">
-                ${Number(article.price).toFixed(2)}
-              </span>
-            )}
-          </div>
-
-          <h3 className="text-xl font-bold text-slate-900 dark:text-white line-clamp-2">
-            {article.title}
-          </h3>
-
-          <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-3">
-            {article.synopsis || "No synopsis available."}
-          </p>
-
-          <div className="text-xs text-slate-500 pt-2">
-            By {article.author_name} • {new Date(article.published_at).toLocaleDateString()}
-          </div>
-        </div>
-
-        <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex gap-2">
-          {hasAccess ? (
-            <Button asChild className="w-full bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
-              <Link href={`/reader/article/${article.id}`}>
-                <BookOpen size={16} /> Read Now
-              </Link>
-            </Button>
-          ) : (
-            <Button
-              onClick={() => handleAddToCart(article)}
-              variant="outline"
-              className="w-full border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-white gap-2"
-            >
-              <ShoppingCart size={16} /> Add to Cart
-            </Button>
-          )}
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
@@ -141,7 +89,15 @@ export default function ReaderDashboard() {
           ) : articles.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {articles.map(article => (
-                <ArticleCard key={article.id} article={article} />
+                <ArticleCard
+                  key={article.id}
+                  article={article}
+                  onAddToCart={handleAddToCart}
+                  onBookmarkChange={(id, val) => {
+                    // Update local list
+                    setArticles(prev => prev.map(a => a.id === id ? { ...a, is_bookmarked: val } : a));
+                  }}
+                />
               ))}
             </div>
           ) : (
@@ -159,7 +115,14 @@ export default function ReaderDashboard() {
           ) : library.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {library.map(article => (
-                <ArticleCard key={article.id} article={article} isLibrary={true} />
+                <ArticleCard
+                  key={article.id}
+                  article={article}
+                  isLibrary={true}
+                  onBookmarkChange={(id, val) => {
+                    setLibrary(prev => prev.map(a => a.id === id ? { ...a, is_bookmarked: val } : a));
+                  }}
+                />
               ))}
             </div>
           ) : (

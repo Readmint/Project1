@@ -103,11 +103,11 @@ const buildJsonHeaders = (): Record<string, string> => {
   return headers;
 };
 
-export default function AuthorProfilePage() {
+export default function EditorProfilePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [tab, setTab] = useState<"info" | "social" | "payout" | "membership">("info");
+  const [tab, setTab] = useState<"info" | "social" | "payout">("info");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -537,7 +537,7 @@ export default function AuthorProfilePage() {
       </motion.div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard icon={<FileText className="h-5 w-5" />} label="Articles Published" value={profile?.stats?.articles ?? 0} />
+        <StatCard icon={<FileText className="h-5 w-5" />} label="Articles Reviewed" value={profile?.stats?.articles ?? 0} />
         <StatCard icon={<Eye className="h-5 w-5" />} label="Total Views" value={formatNumber(profile?.stats?.views)} />
         <StatCard icon={<Award className="h-5 w-5" />} label="Certificates" value={profile?.stats?.certificates ?? 0} />
         <StatCard icon={<Banknote className="h-5 w-5" />} label="Earnings" value={`$${formatNumber(profile?.stats?.earnings as any as number)}`} />
@@ -552,9 +552,6 @@ export default function AuthorProfilePage() {
         </TabBtn>
         <TabBtn active={tab === "payout"} onClick={() => setTab("payout")} icon={<CreditCard size={14} />}>
           Payout Details
-        </TabBtn>
-        <TabBtn active={tab === "membership"} onClick={() => setTab("membership")} icon={<Crown size={14} />}>
-          Membership
         </TabBtn>
       </div>
 
@@ -575,7 +572,7 @@ export default function AuthorProfilePage() {
       {tab === "payout" && <PayoutSection profile={profile ?? {}} isEditing={isEditing} onChange={(k, v) => {
         setProfile((p) => (p ? { ...p, payoutDetails: { ...p.payoutDetails, [k]: v } } : p));
       }} onSave={handleSaveProfile} />}
-      {tab === "membership" && <MembershipSection formatNumber={formatNumber} membership={profile?.membership} />}
+
 
       {unauthorized && (
         <div className="text-xs text-slate-600 mt-2">
@@ -770,30 +767,4 @@ function PayoutSection({ profile, isEditing, onChange, onSave }: { profile: Prof
   );
 }
 
-function MembershipSection({ formatNumber, membership }: { formatNumber: (n?: number) => string; membership: any }) {
-  const price = membership?.priceMonthly ?? 19.99;
-  const renew = membership?.endDate ?? "N/A";
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <Card className="rounded-2xl border bg-indigo-50 dark:bg-indigo-900/30">
-        <CardContent className="p-4 grid gap-3 text-center">
-          <h3 className="font-semibold flex justify-center items-center gap-1"><Crown size={16} className="text-indigo-600" /> Premium Author Plan</h3>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Card className="rounded-xl p-3 border"><p className="text-xl font-semibold">${price}</p><p className="text-[10px] text-slate-500">Monthly Price</p></Card>
-            <Card className="rounded-xl p-3 border"><p className="text-sm font-semibold">{renew}</p><p className="text-[10px] text-slate-500">Renewal Date</p></Card>
-          </div>
-          <ul className="text-[10px] space-y-1">
-            <li>✨ Unlimited article submissions</li>
-            <li>🚀 Priority review queue</li>
-            <li>📊 Advanced analytics</li>
-            <li>🎓 Certificate eligibility</li>
-          </ul>
-          <div className="flex gap-2 justify-center">
-            <Button variant="outline" size="sm" className="text-[10px] rounded-full">Change Plan</Button>
-            <Button size="sm" className="bg-rose-600 text-white text-[10px] rounded-full">Cancel Subscription</Button>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-}
+

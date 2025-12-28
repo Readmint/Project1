@@ -114,15 +114,16 @@ export default function PlagiarismMonitorPage() {
                                     <th className="px-6 py-4">Submission</th>
                                     <th className="px-6 py-4">Reviewer Compliance</th>
                                     <th className="px-6 py-4">Similarity</th>
+                                    <th className="px-6 py-4">AI Score</th>
                                     <th className="px-6 py-4">Last Check</th>
                                     <th className="px-6 py-4 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                 {loading ? (
-                                    <tr><td colSpan={5} className="p-8 text-center text-slate-500">Loading monitor...</td></tr>
+                                    <tr><td colSpan={6} className="p-8 text-center text-slate-500">Loading monitor...</td></tr>
                                 ) : data.length === 0 ? (
-                                    <tr><td colSpan={5} className="p-8 text-center text-slate-500">No records found.</td></tr>
+                                    <tr><td colSpan={6} className="p-8 text-center text-slate-500">No records found.</td></tr>
                                 ) : (
                                     data.map((item) => (
                                         <tr key={item.article_id} className="hover:bg-slate-50 dark:hover:bg-slate-950/50 transition-colors">
@@ -164,6 +165,14 @@ export default function PlagiarismMonitorPage() {
                                                     <SimilarityBadge score={item.similarity_score} />
                                                 ) : (
                                                     <span className="text-slate-400 text-xs italic">Pending Scan</span>
+                                                )}
+                                            </td>
+
+                                            <td className="px-6 py-4">
+                                                {item.similarity_summary?.ai_score !== undefined ? (
+                                                    <AIBadge score={item.similarity_summary.ai_score} />
+                                                ) : (
+                                                    <span className="text-slate-400 text-xs">-</span>
                                                 )}
                                             </td>
 
@@ -248,4 +257,14 @@ function SimilarityBadge({ score }: { score: number }) {
         return <span className="inline-flex items-center px-2 py-1 rounded bg-amber-100 text-amber-700 text-xs font-bold">{score}% Match</span>
     }
     return <span className="inline-flex items-center px-2 py-1 rounded bg-emerald-100 text-emerald-700 text-xs font-bold">{score}% Match</span>
+}
+
+function AIBadge({ score }: { score: number }) {
+    if (score > 70) {
+        return <span className="inline-flex items-center px-2 py-1 rounded bg-purple-100 text-purple-700 text-xs font-bold">{score}% AI</span>
+    }
+    if (score > 40) {
+        return <span className="inline-flex items-center px-2 py-1 rounded bg-amber-100 text-amber-700 text-xs font-bold">{score}% AI</span>
+    }
+    return <span className="inline-flex items-center px-2 py-1 rounded bg-slate-100 text-slate-700 text-xs font-bold">{score}% AI</span>
 }

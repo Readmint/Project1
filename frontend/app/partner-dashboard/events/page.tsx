@@ -102,21 +102,21 @@ export default function PartnerEventsPage() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto min-h-screen space-y-8">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto min-h-screen space-y-6 md:space-y-8">
 
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-4xl font-extrabold bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+          <h1 className="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
             Event Horizon
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">
+          <p className="text-slate-500 dark:text-slate-400 mt-2 text-base md:text-lg">
             Manage your academic gatherings and notify the admins in style.
           </p>
         </div>
         <Button
           onClick={() => setShowForm(!showForm)}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30 transition-all hover:scale-105"
+          className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30 transition-all hover:scale-105"
         >
           {showForm ? "Cancel Creation" : <><Plus className="mr-2 h-4 w-4" /> Create New Event</>}
         </Button>

@@ -108,10 +108,10 @@ export default function AuthorProfilePage() {
               // Firebase uid saved as uid
               headers["x-user-id"] = u.uid;
             }
-          } catch {}
+          } catch { }
         }
       }
-    } catch {}
+    } catch { }
     return headers;
   };
 
@@ -123,7 +123,7 @@ export default function AuthorProfilePage() {
     const headers = getAuthHeaders();
 
     try {
-      const res = await fetch(`${API_ROOT}/author/profile`, {
+      const res = await fetch(`${API_ROOT}/authors/profile`, {
         method: "GET",
         headers,
         credentials: "include",
@@ -215,7 +215,7 @@ export default function AuthorProfilePage() {
 
     try {
       const headers = getAuthHeaders();
-      const res = await fetch(`${API_ROOT}/author/profile`, {
+      const res = await fetch(`${API_ROOT}/authors/profile`, {
         method: "PUT",
         headers,
         credentials: "include",
@@ -264,7 +264,7 @@ export default function AuthorProfilePage() {
     try {
       // Here we pretend we've uploaded and obtained 'url' - send to backend to store
       const headers = getAuthHeaders();
-      const res = await fetch(`${API_ROOT}/author/profile/photo`, {
+      const res = await fetch(`${API_ROOT}/authors/profile/photo`, {
         method: "PUT",
         headers,
         credentials: "include",

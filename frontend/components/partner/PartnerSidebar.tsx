@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -75,7 +75,7 @@ export default function PartnerSidebar() {
   ${open ? "fixed inset-y-0 left-0 z-40" : "hidden md:flex"}`}
             >
                 <div className="p-6 pb-2">
-                    <h2 className="text-2xl font-bold text-indigo-600">ReadMint</h2>
+                    <h2 className="text-2xl font-bold text-indigo-600">MindRadix</h2>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                         Partner Dashboard
                     </p>
@@ -134,3 +134,4 @@ export default function PartnerSidebar() {
         </>
     );
 }
+

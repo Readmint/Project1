@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { SUPPORTED_LANGUAGES } from '../constants/languages';
@@ -15,7 +15,7 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 // Basic dictionaries (We can move these to JSON files later if they grow)
 const dictionaries: Record<string, Record<string, string>> = {
     en: {
-        'app.title': 'ReadMint',
+        'app.title': 'MindRadix',
         'sidebar.dashboard': 'Dashboard',
         'sidebar.articles': 'Articles',
         'sidebar.new_article': 'New Article',
@@ -42,7 +42,7 @@ const dictionaries: Record<string, Record<string, string>> = {
         'article.back_library': 'Back to Library',
     },
     hi: {
-        'app.title': 'ReadMint',
+        'app.title': 'MindRadix',
         'sidebar.dashboard': 'डैशबोर्ड',
         'sidebar.articles': 'लेख',
         'sidebar.new_article': 'नया लेख',
@@ -75,7 +75,7 @@ export const LanguageProvider = ({ children }: { children: ReactNode }) => {
     const [language, setLanguage] = useState<string>('en');
 
     useEffect(() => {
-        const stored = localStorage.getItem('readmint_language');
+        const stored = localStorage.getItem('MindRadix_language');
         if (stored && SUPPORTED_LANGUAGES.some(l => l.code === stored)) {
             setLanguage(stored);
         }
@@ -83,7 +83,7 @@ export const LanguageProvider = ({ children }: { children: ReactNode }) => {
 
     const changeLanguage = (lang: string) => {
         setLanguage(lang);
-        localStorage.setItem('readmint_language', lang);
+        localStorage.setItem('MindRadix_language', lang);
 
         // Trigger Google Translate
         if (typeof window !== 'undefined' && (window as any).google && (window as any).google.translate) {

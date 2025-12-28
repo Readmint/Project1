@@ -108,6 +108,51 @@ export async function postJSON(path: string, body: any, token?: string) {
 }
 
 /**
+ * Enhanced PUT JSON helper
+ */
+export async function putJSON(path: string, body: any, token?: string) {
+  const url = buildUrl(path);
+  let res: Response;
+
+  const tokenToUse = token ?? readTokenFromStorage();
+
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`API PUT: ${url}`, { body: { ...body }, tokenProvided: !!tokenToUse });
+  }
+
+  try {
+    res = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...(tokenToUse ? { Authorization: `Bearer ${tokenToUse}` } : {}),
+      },
+      body: JSON.stringify(body ?? {}),
+      credentials: "include",
+    });
+  } catch (err: any) {
+    const error = new ApiError("Network request failed", 0, { error: String(err?.message ?? err) }, url);
+    console.error('Network error:', error);
+    throw error;
+  }
+
+  const data = await parseResponse(res);
+
+  if (!res.ok) {
+    const message = (data && data.message) ? data.message : `HTTP ${res.status}`;
+    const error = new ApiError(message, res.status, data, url);
+    console.error(`API Error ${res.status}: ${url}`, {
+      status: res.status,
+      message: error.getDetailedMessage(),
+      data: data
+    });
+    throw error;
+  }
+
+  return data;
+}
+
+/**
  * GET JSON helper
  * @param path - path under API base
  * @param token - optional Bearer token override

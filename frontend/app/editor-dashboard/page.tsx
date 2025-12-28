@@ -75,9 +75,7 @@ export default function AssignedPage() {
           id: item.article_id,
           title: item.title,
           assignedDate: new Date(item.assigned_date).toLocaleDateString(),
-          author: "Unknown Author", // Join backend to get author name? Backend does currently join content but maybe not author details fully or mapped. 
-          // Actually getAssignedForEditor controller does not return author name. 
-          // I'll leave as Unknown or update Controller later if needed.
+          author: item.author_name || "Unknown Author",
           dueDate: item.due_date ? new Date(item.due_date).toLocaleDateString() : 'No Deadline',
           priority: item.priority || 'Medium',
           status: item.assignment_status === 'in_progress' ? 'In Progress' : item.assignment_status, // map if needed
@@ -210,7 +208,7 @@ export default function AssignedPage() {
 
                           {/* EDIT → CMS Editor */}
                           <Button
-                            onClick={() => router.push(`/editor-dashboard/assigned/${article.id}/edit`)}
+                            onClick={() => router.push(`/editor-dashboard/design/${article.id}`)}
                             className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-full px-3 py-1.5"
                           >
                             <PenTool size={13} /> Edit

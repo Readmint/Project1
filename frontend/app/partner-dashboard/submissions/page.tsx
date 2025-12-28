@@ -81,20 +81,20 @@ export default function PartnerSubmissionsPage() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8 min-h-screen">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8 min-h-screen">
 
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+        <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
           Submissions & Extraction
         </h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-1">
+        <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm md:text-base">
           Upload bulk Word files and manage extracted topics.
         </p>
       </div>
 
       {/* Upload Section */}
-      <Card className="p-8 border-dashed border-2 border-indigo-200 dark:border-slate-700 bg-indigo-50/50 dark:bg-slate-900/50 rounded-2xl flex flex-col items-center justify-center text-center space-y-4 hover:border-indigo-400 transition-colors group cursor-pointer">
+      <Card className="p-6 md:p-8 border-dashed border-2 border-indigo-200 dark:border-slate-700 bg-indigo-50/50 dark:bg-slate-900/50 rounded-2xl flex flex-col items-center justify-center text-center space-y-4 hover:border-indigo-400 transition-colors group cursor-pointer">
         <div className="bg-white dark:bg-slate-800 p-4 rounded-full shadow-sm group-hover:scale-110 transition-transform duration-300">
           <UploadCloud className="h-10 w-10 text-indigo-500" />
         </div>
@@ -108,7 +108,7 @@ export default function PartnerSubmissionsPage() {
         <Button
           onClick={handleUpload}
           disabled={uploading}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20"
+          className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20"
         >
           {uploading ? <><Loader2 className="animate-spin mr-2 h-4 w-4" /> Extracting...</> : "Upload File"}
         </Button>

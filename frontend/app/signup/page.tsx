@@ -25,6 +25,7 @@ export default function Signup() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [otp, setOtp] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -39,9 +40,14 @@ export default function Signup() {
     setIsLoading(true);
     try {
       setError("");
-      const payload = { name, email, password, role: role || "reader" };
+      if (!termsAccepted) {
+        setError("Please accept the Terms & Conditions");
+        setIsLoading(false);
+        return;
+      }
+      const payload = { name, email, password, role: role || "reader", termsAccepted };
       const res = await postJSON("/auth/register", payload);
-      
+
       if (res.data.requiresVerification) {
         setVerificationStep(true);
         setSuccess("Verification email sent! Check your inbox.");
@@ -71,14 +77,14 @@ export default function Signup() {
     try {
       setError("");
       const res = await postJSON("/auth/verify-email", { email, otp });
-      
+
       setSuccess("Email verified successfully! You can now login.");
-      
+
       // Redirect to login after 2 seconds
       setTimeout(() => {
         router.push("/login");
       }, 2000);
-      
+
     } catch (err: any) {
       const msg = err?.data?.message || "Verification failed";
       setError(msg);
@@ -120,9 +126,9 @@ export default function Signup() {
     try {
       const result = await signInWithGoogle();
       const user = result.user;
-      
+
       console.log('Google sign-up successful:', user.email);
-      
+
       const userData = {
         uid: user.uid,
         email: user.email,
@@ -131,19 +137,19 @@ export default function Signup() {
         emailVerified: user.emailVerified,
         role: 'reader'
       };
-      
+
       localStorage.setItem("user", JSON.stringify(userData));
-      
+
       try {
         const idToken = await user.getIdToken();
-        const res = await postJSON("/auth/sync-user", { 
+        const res = await postJSON("/auth/sync-user", {
           idToken,
           email: user.email,
           name: user.displayName,
           photoURL: user.photoURL,
           role: 'reader'
         });
-        
+
         if (res.data?.token) {
           localStorage.setItem("token", res.data.token);
           localStorage.setItem("user", JSON.stringify(res.data.user));
@@ -151,7 +157,7 @@ export default function Signup() {
       } catch (syncError) {
         console.log('Backend sync failed, using Firebase auth only');
       }
-      
+
       router.push("/");
     } catch (err: any) {
       console.error("Google sign-up failed", err);
@@ -242,8 +248,8 @@ export default function Signup() {
                 disabled={resendCooldown > 0}
                 className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 disabled:text-slate-400 disabled:cursor-not-allowed"
               >
-                {resendCooldown > 0 
-                  ? `Resend code in ${resendCooldown}s` 
+                {resendCooldown > 0
+                  ? `Resend code in ${resendCooldown}s`
                   : "Didn't receive the code? Resend"
                 }
               </button>
@@ -280,7 +286,7 @@ export default function Signup() {
         <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-lg shadow-2xl border border-slate-200/50 dark:border-slate-700/50 p-5 sm:p-6">
           {/* Logo + Header */}
           <div className="mb-3 flex flex-col items-center">
-            <Image 
+            <Image
               src="/icons/icon.png"
               alt="E-Magazine Logo"
               width={44}
@@ -314,8 +320,8 @@ export default function Signup() {
                 placeholder="Jane Doe"
                 required
                 className="w-full h-9 text-sm bg-white/70 dark:bg-slate-900/70 border-slate-300 dark:border-slate-600"
-                value={name} 
-                onChange={(e) => setName(e.target.value)} 
+                value={name}
+                onChange={(e) => setName(e.target.value)}
               />
             </div>
 
@@ -329,8 +335,8 @@ export default function Signup() {
                 placeholder="you@example.com"
                 required
                 className="w-full h-9 text-sm bg-white/70 dark:bg-slate-900/70 border-slate-300 dark:border-slate-600"
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
             </div>
 
@@ -339,10 +345,10 @@ export default function Signup() {
               <label className="block text-xs font-medium text-slate-900 dark:text-slate-200 mb-1">
                 I want to join as
               </label>
-              <select 
-                required 
+              <select
+                required
                 className="w-full h-9 text-sm bg-white/70 dark:bg-slate-900/70 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                value={role} 
+                value={role}
                 onChange={(e) => setRole(e.target.value)}
               >
                 <option value="">Select role</option>
@@ -359,18 +365,18 @@ export default function Signup() {
               <label className="block text-xs font-medium text-slate-900 dark:text-slate-200 mb-1">
                 Password
               </label>
-              <Input 
-                type={showPassword ? "text" : "password"} 
-                placeholder="••••••••" 
-                required 
-                minLength={6} 
-                value={password} 
+              <Input
+                type={showPassword ? "text" : "password"}
+                placeholder="••••••••"
+                required
+                minLength={6}
+                value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className={`w-full h-9 text-sm bg-white/70 dark:bg-slate-900/70 border-slate-300 dark:border-slate-600 pr-10 ${error ? "border-red-500" : ""}`} 
+                className={`w-full h-9 text-sm bg-white/70 dark:bg-slate-900/70 border-slate-300 dark:border-slate-600 pr-10 ${error ? "border-red-500" : ""}`}
               />
-              <button 
-                type="button" 
-                onClick={() => setShowPassword(!showPassword)} 
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-[1.75rem] text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -382,18 +388,18 @@ export default function Signup() {
               <label className="block text-xs font-medium text-slate-900 dark:text-slate-200 mb-1">
                 Confirm Password
               </label>
-              <Input 
-                type={showConfirm ? "text" : "password"} 
-                placeholder="••••••••" 
-                required 
-                minLength={6} 
-                value={confirm} 
+              <Input
+                type={showConfirm ? "text" : "password"}
+                placeholder="••••••••"
+                required
+                minLength={6}
+                value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
-                className={`w-full h-9 text-sm bg-white/70 dark:bg-slate-900/70 border-slate-300 dark:border-slate-600 pr-10 ${error ? "border-red-500" : ""}`} 
+                className={`w-full h-9 text-sm bg-white/70 dark:bg-slate-900/70 border-slate-300 dark:border-slate-600 pr-10 ${error ? "border-red-500" : ""}`}
               />
-              <button 
-                type="button" 
-                onClick={() => setShowConfirm(!showConfirm)} 
+              <button
+                type="button"
+                onClick={() => setShowConfirm(!showConfirm)}
                 className="absolute right-3 top-[1.75rem] text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
               >
                 {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -405,15 +411,21 @@ export default function Signup() {
 
             {/* Terms */}
             <div className="flex items-start pt-1">
-              <input type="checkbox" required className="mr-2 mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 dark:border-slate-600 flex-shrink-0" />
+              <input
+                type="checkbox"
+                required
+                className="mr-2 mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 dark:border-slate-600 flex-shrink-0 cursor-pointer icon-shadow transition-colors focus:ring-1 focus:ring-indigo-500"
+                checked={termsAccepted}
+                onChange={(e) => setTermsAccepted(e.target.checked)}
+              />
               <span className="text-xs text-slate-900 dark:text-slate-300 leading-tight">
                 I agree to the{" "}
-                <Link href="/terms" className="text-indigo-600 dark:text-indigo-400 hover:underline">Terms & Conditions</Link>
+                <Link href="/terms" className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium" target="_blank">Terms & Conditions</Link>
               </span>
             </div>
 
             {/* Submit Button */}
-            <Button 
+            <Button
               type="submit"
               disabled={isLoading}
               className="w-full h-9 text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-lg hover:shadow-xl transition-shadow mt-3 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -435,8 +447,8 @@ export default function Signup() {
           {/* OAuth Buttons */}
           <div className="space-y-2.5 mt-2">
             {/* Google */}
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={handleGoogle}
               disabled={oauthLoading !== null}
               className="w-full h-10 flex items-center justify-center gap-2 
@@ -453,8 +465,8 @@ export default function Signup() {
             </button>
 
             {/* Facebook */}
-            <button 
-              type="button" 
+            <button
+              type="button"
               disabled={oauthLoading !== null}
               className="w-full h-10 flex items-center justify-center gap-2 
                          bg-white/40 dark:bg-slate-900/40 
@@ -470,8 +482,8 @@ export default function Signup() {
             </button>
 
             {/* Apple */}
-            <button 
-              type="button" 
+            <button
+              type="button"
               disabled={oauthLoading !== null}
               className="w-full h-10 flex items-center justify-center gap-2 
                          bg-white/40 dark:bg-slate-900/40 

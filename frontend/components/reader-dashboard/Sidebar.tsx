@@ -12,6 +12,7 @@ import LogoutConfirmation from "../LogoutConfirmation";
 const nav = [
   { name: "Dashboard", href: "/reader-dashboard" },
   { name: "My Library", href: "/reader-dashboard/library" },
+  { name: "Plans", href: "/reader-dashboard/plans" },
   { name: "Bookmarks", href: "/reader-dashboard/bookmarks" },
   { name: "Certificates", href: "/reader-dashboard/certificates" },
   { name: "Billing & Orders", href: "/reader-dashboard/billing" },
@@ -84,17 +85,16 @@ export default function Sidebar() {
             const active = isHome
               ? pathname === item.href
               : pathname === item.href ||
-                pathname.startsWith(item.href + "/");
+              pathname.startsWith(item.href + "/");
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`block px-3 py-2 rounded-lg transition-all ${
-                  active
+                className={`block px-3 py-2 rounded-lg transition-all ${active
                     ? "bg-muted text-primary font-medium"
                     : "text-foreground hover:bg-muted"
-                }`}
+                  }`}
               >
                 {item.name}
               </Link>

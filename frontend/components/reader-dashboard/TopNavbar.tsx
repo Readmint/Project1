@@ -3,14 +3,12 @@
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Bell, Search, ShoppingCart } from "lucide-react";
-import { motion } from "framer-motion";
+import Link from "next/link";
 
 export default function TopNavbar({
   onSearch,
-  onOpenCart,
 }: {
   onSearch: (v: string) => void;
-  onOpenCart: () => void;
 }) {
   const [value, setValue] = useState("");
   const [cartCount, setCartCount] = useState(0);
@@ -52,7 +50,7 @@ export default function TopNavbar({
             onSearch(e.target.value);
           }}
         />
-        
+
         <Search
           className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 pointer-events-none"
           size={16}
@@ -68,12 +66,9 @@ export default function TopNavbar({
           <span className="absolute -top-1.5 -right-1.5 sm:-top-2 sm:-right-2 bg-red-600 text-[9px] sm:text-xs text-white rounded-full px-1.5 py-0.5 sm:px-2 sm:py-0"></span>
         </button>
 
-        {/* Cart Button */}
-        <motion.button
-          onClick={onOpenCart}
-          whileHover={{ scale: 1.08 }}
-          whileTap={{ scale: 0.95 }}
-          className="relative flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white rounded-full p-2 sm:p-2.5 shadow-md transition-all"
+        <Link
+          href="/checkout"
+          className="relative flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white rounded-full p-2 sm:p-2.5 shadow-md transition-all hover:scale-110 active:scale-95"
         >
           <ShoppingCart size={18} />
 
@@ -83,7 +78,7 @@ export default function TopNavbar({
               {cartCount}
             </span>
           )}
-        </motion.button>
+        </Link>
 
       </div>
     </nav>

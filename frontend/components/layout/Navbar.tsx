@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Menu, X, Moon, Sun, LogOut, User, ChevronDown, Settings, ShoppingCart, Languages } from "lucide-react";
-import { useCart } from "@/context/CartContext";
+
 import { navLinks } from "@/src/data/navLinks";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function Navbar() {
-  const { cart } = useCart();
+
   const { language, setLanguage, t } = useLanguage();
   const router = useRouter();
   const pathname = usePathname();
@@ -217,14 +217,15 @@ export default function Navbar() {
             <Link href={isLoggedIn ? getDashboardPath() : "/"}
               className="flex items-center gap-2 flex-shrink-0">
               <Image
-                src="/icons/icon.png"
-                alt="E-Magazine Logo"
+                src="/icons/mindradix_logo.jpg"
+                alt="MindRadix Logo"
                 width={32}
                 height={32}
                 className="rounded-lg"
               />
-              <span className="text-slate-900 dark:text-white font-semibold text-lg hidden sm:block">
-                E-Magazine
+              <span className="text-lg hidden sm:block font-bold">
+                <span style={{ color: '#E63946' }}>Mind</span>
+                <span style={{ color: '#457B9D' }}>Radix</span>
               </span>
             </Link>
 
@@ -279,15 +280,7 @@ export default function Navbar() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* Shopping Cart */}
-              <Link href="/checkout" className="relative p-2 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                <ShoppingCart size={20} />
-                {cart.length > 0 && (
-                  <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-600 rounded-full">
-                    {cart.length}
-                  </span>
-                )}
-              </Link>
+
 
               {/* Theme toggle */}
               <button

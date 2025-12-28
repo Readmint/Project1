@@ -7,10 +7,9 @@ import { useState } from "react";
 export default function ReaderDashboardLayout({ children }: { children: React.ReactNode }) {
   const sidebarWidth = 256; // w-64 = 256px
   const [search, setSearch] = useState("");
-  const [isCartOpen, setIsCartOpen] = useState(false);
 
   return (
-    <div className="flex flex-col bg-white dark:bg-slate-900 text-slate-900 dark:text-white">      
+    <div className="flex flex-col bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
 
       {/* ✅ Sidebar + Content Row */}
       <div className="flex flex-1 relative">
@@ -33,7 +32,7 @@ export default function ReaderDashboardLayout({ children }: { children: React.Re
               width: `calc(100% - ${sidebarWidth}px)`
             }}
           >
-            <TopNavbar onSearch={(v: string) => setSearch(v)} onOpenCart={() => setIsCartOpen(true)} />
+            <TopNavbar onSearch={(v: string) => setSearch(v)} />
           </header>
 
           {/* ✅ Scrollable Dashboard Content */}
