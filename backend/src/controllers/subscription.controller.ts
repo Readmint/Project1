@@ -55,14 +55,14 @@ interface UserSubscription {
 const getPayUConfig = (): PayUConfig => {
   const merchantKey = process.env.PAYU_MERCHANT_KEY || '';
   const merchantSalt = process.env.PAYU_MERCHANT_SALT || '';
-  
+
   // Debug logging
   console.log('🔑 PayU Config Loaded:');
   console.log('   Key exists:', !!merchantKey);
   console.log('   Key value (first 4 chars):', merchantKey ? merchantKey.substring(0, 4) + '...' : 'EMPTY');
   console.log('   Salt exists:', !!merchantSalt);
   console.log('   NODE_ENV:', process.env.NODE_ENV);
-  
+
   // Determine base URL based on environment
   let baseUrl = 'https://test.payu.in'; // Default to test
   if (process.env.NODE_ENV === 'production') {
@@ -70,9 +70,9 @@ const getPayUConfig = (): PayUConfig => {
   } else if (process.env.PAYU_MODE === 'production') {
     baseUrl = 'https://secure.payu.in';
   }
-  
+
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-  
+
   return {
     merchantKey,
     merchantSalt,
@@ -97,11 +97,11 @@ export const getSubscriptionPlans = async (req: Request, res: Response): Promise
     } else {
       // MySQL - Get subscription plans
       const [rows]: any = await db.execute('SELECT * FROM subscription_plans ORDER BY price_monthly ASC');
-      
+
       // Fix the JSON parsing with better error handling
       subscriptionPlans = rows.map((row: any) => {
         let featuresArray: string[] = [];
-        
+
         try {
           if (row.features) {
             if (typeof row.features === 'string') {
@@ -126,7 +126,7 @@ export const getSubscriptionPlans = async (req: Request, res: Response): Promise
           // Default features if parsing fails
           featuresArray = ['Feature parsing error'];
         }
-        
+
         return {
           id: row.id,
           name: row.name,
@@ -227,13 +227,13 @@ export const createPayUOrder = async (req: Request, res: Response): Promise<void
 
     // Get PayU configuration dynamically
     const PAYU_CONFIG = getPayUConfig();
-    
+
     // Check if configuration is valid
     if (!PAYU_CONFIG.merchantKey || !PAYU_CONFIG.merchantSalt) {
       console.error('❌ PayU configuration missing!');
       console.error('   Merchant Key:', PAYU_CONFIG.merchantKey || 'MISSING');
       console.error('   Merchant Salt:', PAYU_CONFIG.merchantSalt || 'MISSING');
-      
+
       res.status(500).json({
         status: 'error',
         message: 'Payment gateway configuration error. Please contact support.'
@@ -249,25 +249,25 @@ export const createPayUOrder = async (req: Request, res: Response): Promise<void
     // Generate transaction ID
     const txnId = `TXN${Date.now()}${Math.floor(Math.random() * 10000)}`;
     console.log('📝 Generated Transaction ID:', txnId);
-    
+
     // Prepare parameters for hash
     const productInfo = 'Magazine Subscription';
     const firstNameValue = firstName || 'User';
     const phoneValue = userPhone || '9999999999';
-    
+
     // UDF parameters (User Defined Fields) - PayU expects these
     const udf1 = userId || 'guest'; // User ID
     const udf2 = planId; // Plan ID
     const udf3 = 'monthly'; // Billing cycle
     const udf4 = userEmail; // Email
     const udf5 = phoneValue; // Phone
-    
+
     // CORRECTED: PayU hash format with UDF parameters
     // According to error: sha512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT)
     const hashStringV1 = `${PAYU_CONFIG.merchantKey}|${txnId}|${amount}|${productInfo}|${firstNameValue}|${userEmail}|${udf1}|${udf2}|${udf3}|${udf4}|${udf5}||||||${PAYU_CONFIG.merchantSalt}`;
-    
+
     console.log('🔐 Hash String V1 for SHA512:', hashStringV1);
-    
+
     // Calculate v1 hash (main hash)
     const hashV1 = crypto.createHash('sha512').update(hashStringV1).digest('hex');
     console.log('✅ Generated Hash V1:', hashV1);
@@ -373,12 +373,12 @@ export const createPayUOrder = async (req: Request, res: Response): Promise<void
 
 export const verifyPayUPayment = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { 
-      txnid, 
-      amount, 
-      productinfo, 
-      firstname, 
-      email, 
+    const {
+      txnid,
+      amount,
+      productinfo,
+      firstname,
+      email,
       status,
       hash,
       key,
@@ -403,14 +403,14 @@ export const verifyPayUPayment = async (req: Request, res: Response): Promise<vo
     });
 
     const db = getDatabase();
-    
+
     if (calculatedHash === hash && status === 'success') {
       // Payment successful
       console.log('✅ Payment successful for transaction:', txnid);
-      
+
       // Get order details from database
       let orderData: any;
-      
+
       if (db.collection) {
         const doc = await db.collection('payment_orders').doc(txnid).get();
         orderData = doc.exists ? doc.data() : null;
@@ -424,7 +424,7 @@ export const verifyPayUPayment = async (req: Request, res: Response): Promise<vo
 
       if (orderData) {
         console.log('📋 Found order:', orderData.plan_id, 'for user:', orderData.user_id);
-        
+
         // Update order status
         if (db.collection) {
           await db.collection('payment_orders').doc(txnid).update({
@@ -500,7 +500,7 @@ export const getPaymentStatus = async (req: Request, res: Response): Promise<voi
     console.log('📊 Fetching payment status for:', txnid);
 
     let paymentDetails;
-    
+
     if (db.collection) {
       const doc = await db.collection('payment_orders').doc(txnid).get();
       paymentDetails = doc.exists ? doc.data() : null;
@@ -539,12 +539,12 @@ export const getPaymentStatus = async (req: Request, res: Response): Promise<voi
 export const payuWebhook = async (req: Request, res: Response): Promise<void> => {
   try {
     const postData = req.body;
-    
+
     console.log('🌐 PayU Webhook received:', postData);
 
     // Get PayU configuration
     const PAYU_CONFIG = getPayUConfig();
-    
+
     // Verify hash
     const hashString = `${PAYU_CONFIG.merchantKey}|${postData.txnid}|${postData.amount}|${postData.productinfo}|${postData.firstname}|${postData.email}|||||||||||${PAYU_CONFIG.merchantSalt}`;
     const calculatedHash = SHA256(hashString).toString(encHex).toLowerCase();
@@ -552,12 +552,12 @@ export const payuWebhook = async (req: Request, res: Response): Promise<void> =>
     if (calculatedHash === postData.hash) {
       // Process webhook data
       console.log('✅ Webhook hash verified, processing...');
-      
+
       // Update your database here based on webhook data
       // You might want to update payment status, send email notifications, etc.
-      
+
       logger.info('PayU webhook processed successfully:', postData);
-      
+
       res.status(200).send('OK');
     } else {
       console.error('❌ Webhook hash mismatch');
@@ -630,7 +630,7 @@ export const getUserSubscriptions = async (req: Request, res: Response): Promise
          ORDER BY us.created_at DESC`,
         [userId]
       );
-      
+
       subscriptions = rows.map((row: any) => {
         let featuresArray: string[] = [];
         try {
@@ -640,7 +640,7 @@ export const getUserSubscriptions = async (req: Request, res: Response): Promise
         } catch (error) {
           featuresArray = [];
         }
-        
+
         return {
           ...row,
           plan_features: featuresArray,
@@ -690,7 +690,7 @@ export const getCurrentSubscription = async (req: Request, res: Response): Promi
         .orderBy('created_at', 'desc')
         .limit(1)
         .get();
-      
+
       if (!snapshot.empty) {
         const subscriptionDoc = snapshot.docs[0];
         currentSubscription = { id: subscriptionDoc.id, ...subscriptionDoc.data() };
@@ -722,7 +722,7 @@ export const getCurrentSubscription = async (req: Request, res: Response): Promi
          LIMIT 1`,
         [userId]
       );
-      
+
       if (rows.length > 0) {
         let featuresArray: string[] = [];
         try {
@@ -732,7 +732,7 @@ export const getCurrentSubscription = async (req: Request, res: Response): Promi
         } catch (error) {
           featuresArray = [];
         }
-        
+
         currentSubscription = {
           ...rows[0],
           plan_features: featuresArray
@@ -770,10 +770,10 @@ export const activateFreeSubscription = async (req: Request, res: Response): Pro
     console.log('🆓 Activating free subscription for user:', userId, 'plan:', planId);
 
     const db = getDatabase();
-    
+
     // Check if user already has an active subscription
     let existingSubscription;
-    
+
     if (db.collection) {
       // Firebase
       const snapshot = await db.collection('user_subscriptions')
@@ -955,6 +955,103 @@ export const cancelSubscription = async (req: Request, res: Response): Promise<v
       status: 'error',
       message: 'Failed to cancel subscription'
     });
+  }
+};
+
+// --- AUTHOR PLANS & HISTORY ---
+
+export const getAuthorSubscriptionPlans = async (req: Request, res: Response): Promise<void> => {
+  // Hardcoded plans as per requirement
+  const plans = [
+    {
+      id: 'author_free',
+      name: 'Free Plan',
+      description: 'Essential tools for writers',
+      price_monthly: 0,
+      price_yearly: 0,
+      features: [
+        'Pay-per-use Plagiarism Check',
+        'Standard Review Speed',
+        'Basic Analytics',
+        'Community Access'
+      ],
+      duration: 'monthly',
+      badge: 'None'
+    },
+    {
+      id: 'author_standard',
+      name: 'Standard Plan',
+      description: 'For regular contributors',
+      price_monthly: 199,
+      price_yearly: 1999,
+      features: [
+        '5 Free Plagiarism Checks/mo',
+        'Priority Review Speed',
+        'Bronze Author Badge',
+        'Standard Support',
+        'Detailed Analytics'
+      ],
+      duration: 'monthly',
+      badge: 'Bronze'
+    },
+    {
+      id: 'author_premium',
+      name: 'Premium Plan',
+      description: 'Maximum power & freedom',
+      price_monthly: 499,
+      price_yearly: 4999,
+      features: [
+        'Unlimited Plagiarism Checks',
+        'Instant/Priority Review',
+        'Gold Author Badge',
+        'Dedicated Support',
+        'Advanced Analytics & Insights'
+      ],
+      duration: 'monthly',
+      badge: 'Gold'
+    }
+  ];
+
+  res.status(200).json({
+    status: 'success',
+    data: { plans }
+  });
+};
+
+export const getUserPaymentHistory = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    const db = getDatabase();
+
+    if (!userId) {
+      res.status(400).json({ status: 'error', message: 'User ID required' });
+      return;
+    }
+
+    let history = [];
+
+    if (db.collection) {
+      const snapshot = await db.collection('payment_orders')
+        .where('user_id', '==', userId)
+        .orderBy('created_at', 'desc')
+        .get();
+      history = snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }));
+    } else {
+      const [rows]: any = await db.execute(
+        `SELECT * FROM payment_orders WHERE user_id = ? ORDER BY created_at DESC`,
+        [userId]
+      );
+      history = rows;
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: { history }
+    });
+
+  } catch (error: any) {
+    logger.error('Get payment history error:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to fetch payment history' });
   }
 };
 

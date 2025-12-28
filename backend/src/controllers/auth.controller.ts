@@ -74,23 +74,23 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
 
     // Check if user exists
     const [users]: any = await db.execute('SELECT id, email, name, is_email_verified FROM users WHERE email = ?', [email]);
-    
+
     // For security, don't reveal if user exists or not
     if (users.length === 0) {
-      res.status(200).json({ 
-        status: 'success', 
-        message: 'If an account exists with this email, you will receive an OTP shortly' 
+      res.status(200).json({
+        status: 'success',
+        message: 'If an account exists with this email, you will receive an OTP shortly'
       });
       return;
     }
 
     const user = users[0];
-    
+
     // Check if email is verified
     if (!user.is_email_verified) {
-      res.status(400).json({ 
-        status: 'error', 
-        message: 'Please verify your email first before resetting password' 
+      res.status(400).json({
+        status: 'error',
+        message: 'Please verify your email first before resetting password'
       });
       return;
     }
@@ -100,10 +100,10 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
     // Store OTP
-    otpStore.set(email, { 
-      otp, 
+    otpStore.set(email, {
+      otp,
       expiresAt,
-      userId: user.id 
+      userId: user.id
     });
 
     // Send OTP email
@@ -228,7 +228,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
 
     // Update password in database
     const hashedPassword = await bcrypt.hash(newPassword, 12);
-    
+
     await db.execute(
       'UPDATE users SET password = ? WHERE id = ?',
       [hashedPassword, tokenData.userId]
@@ -282,7 +282,7 @@ export const sendVerificationEmail = async (req: Request, res: Response): Promis
 
     // Send email
     const transporter = createTransporter();
-    
+
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
@@ -369,7 +369,13 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const { email, password, name, role = 'reader' } = req.body;
+    const { email, password, name, role = 'reader', termsAccepted } = req.body;
+
+    if (!termsAccepted) {
+      res.status(400).json({ status: 'error', message: 'You must accept the Terms & Conditions' });
+      return;
+    }
+
     const db: any = getDatabase();
 
     const [existingUsers]: any = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
@@ -379,11 +385,13 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
+    const termsAcceptedAt = new Date();
 
     // Create user with email not verified initially
+    // Also recording terms acceptance
     await db.execute(
-      'INSERT INTO users (id, email, password, name, role, profile_data, is_email_verified) VALUES (UUID(), ?, ?, ?, ?, ?, ?)',
-      [email, hashedPassword, name, role, JSON.stringify({}), false]
+      'INSERT INTO users (id, email, password, name, role, profile_data, is_email_verified, terms_accepted, terms_accepted_at) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
+      [email, hashedPassword, name, role, JSON.stringify({}), false, true, termsAcceptedAt]
     );
 
     // Send verification email
@@ -399,7 +407,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         subject: 'Verify Your Email - E-Magazine',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #4F46E5;">Welcome to E-Magazine!</h2>
+            <h2 style="color: #4F46E5;">Welcome to ReadMint!</h2>
             <p>Please use the following OTP to verify your email address:</p>
             <div style="background: #f8fafc; padding: 20px; text-align: center; margin: 20px 0;">
               <h1 style="color: #4F46E5; margin: 0; font-size: 32px; letter-spacing: 5px;">${otp}</h1>
@@ -407,7 +415,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
             <p>This OTP will expire in 10 minutes.</p>
             <p>If you didn't request this, please ignore this email.</p>
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-            <p style="color: #6b7280; font-size: 14px;">E-Magazine Team</p>
+            <p style="color: #6b7280; font-size: 14px;">ReadMint Team</p>
           </div>
         `,
       });
@@ -457,7 +465,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     const user = users[0];
-    
+
     try {
       user.profile_data = JSON.parse(user.profile_data || '{}');
     } catch {
@@ -466,8 +474,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     // Check if email is verified
     if (!user.is_email_verified) {
-      res.status(403).json({ 
-        status: 'error', 
+      res.status(403).json({
+        status: 'error',
         message: 'Please verify your email before logging in',
         requiresVerification: true
       });
@@ -515,7 +523,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 export const oauth = async (req: Request, res: Response): Promise<void> => {
   try {
     const { idToken, provider = 'google' } = req.body;
-    
+
     if (!idToken) {
       res.status(400).json({ status: 'error', message: 'idToken is required' });
       return;
@@ -527,8 +535,8 @@ export const oauth = async (req: Request, res: Response): Promise<void> => {
       decoded = await admin.auth().verifyIdToken(idToken);
     } catch (err: any) {
       console.error('Firebase token verification failed:', err.message);
-      res.status(401).json({ 
-        status: 'error', 
+      res.status(401).json({
+        status: 'error',
         message: 'Invalid Firebase ID token'
       });
       return;
@@ -550,29 +558,29 @@ export const oauth = async (req: Request, res: Response): Promise<void> => {
     // Find or create user in MySQL
     let user: any;
     const [existingUsers]: any = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
-    
+
     if (existingUsers.length > 0) {
       // User exists - update last login
       user = existingUsers[0];
-      
+
       await db.execute(
         'UPDATE users SET last_login = ? WHERE id = ?',
         [new Date(), user.id]
       );
     } else {
       // Create new user with default role 'reader'
-      const profileData = { 
+      const profileData = {
         providerUid,
         auth_provider: provider,
         ...(picture ? { avatar: picture } : {})
       };
-      
+
       // Insert new user with default role 'reader' - mark as verified if Firebase says so
       await db.execute(
         'INSERT INTO users (id, email, password, name, role, profile_data, auth_provider, is_email_verified, last_login) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
         [email, '', name, 'reader', JSON.stringify(profileData), provider, isEmailVerified, new Date()]
       );
-      
+
       // Get the newly created user
       const [newUsers]: any = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
       user = newUsers[0];
@@ -616,8 +624,8 @@ export const oauth = async (req: Request, res: Response): Promise<void> => {
   } catch (error: any) {
     console.error('OAuth error:', error);
     logger.error('OAuth error:', error);
-    res.status(500).json({ 
-      status: 'error', 
+    res.status(500).json({
+      status: 'error',
       message: 'Internal server error during OAuth authentication'
     });
   }
@@ -637,9 +645,9 @@ export const getCurrentUser = async (req: Request, res: Response): Promise<void>
     const user = users[0];
     user.profile_data = JSON.parse(user.profile_data || '{}');
 
-    res.status(200).json({ 
-      status: 'success', 
-      data: { 
+    res.status(200).json({
+      status: 'success',
+      data: {
         user: {
           id: user.id,
           email: user.email,
@@ -649,7 +657,7 @@ export const getCurrentUser = async (req: Request, res: Response): Promise<void>
           isEmailVerified: user.is_email_verified,
           createdAt: user.created_at
         }
-      } 
+      }
     });
   } catch (error: any) {
     console.error('Get current user error:', error);
@@ -670,7 +678,7 @@ export const resendVerification = async (req: Request, res: Response): Promise<v
     // Check if user exists
     const db: any = getDatabase();
     const [users]: any = await db.execute('SELECT id, is_email_verified FROM users WHERE email = ?', [email]);
-    
+
     if (users.length === 0) {
       res.status(404).json({ status: 'error', message: 'User not found' });
       return;

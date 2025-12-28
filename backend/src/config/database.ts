@@ -66,6 +66,10 @@ export const connectDatabase = async (): Promise<void> => {
   }
 };
 
+export const getStorageBucket = () => {
+  return admin.storage().bucket();
+};
+
 const initializeTables = async (): Promise<void> => {
   console.log('🔄 Starting MySQL table initialization...');
 
@@ -401,54 +405,83 @@ const initializeTables = async (): Promise<void> => {
     )
   `;
 
-  const createBookmarksTable = `
+  const createUserBookmarksTable = `
     CREATE TABLE IF NOT EXISTS user_bookmarks (
-      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
       user_id VARCHAR(36) NOT NULL,
-      content_id VARCHAR(36) NOT NULL,
-      saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      note TEXT NULL,
+      article_id VARCHAR(36) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, article_id),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
-      UNIQUE KEY uniq_user_content_bookmark (user_id, content_id),
-      INDEX idx_user_bookmarks (user_id),
-      INDEX idx_content_bookmarks (content_id)
-    )
+      FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE
+    );
   `;
 
   const createLikesTable = `
-    CREATE TABLE IF NOT EXISTS user_likes (
-      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    CREATE TABLE IF NOT EXISTS user_likes(
+      id VARCHAR(36) PRIMARY KEY DEFAULT(UUID()),
       user_id VARCHAR(36) NOT NULL,
       content_id VARCHAR(36) NOT NULL,
       liked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
-      UNIQUE KEY uniq_user_content_like (user_id, content_id),
-      INDEX idx_user_likes (user_id),
-      INDEX idx_content_likes (content_id)
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(content_id) REFERENCES content(id) ON DELETE CASCADE,
+      UNIQUE KEY uniq_user_content_like(user_id, content_id),
+      INDEX idx_user_likes(user_id),
+      INDEX idx_content_likes(content_id)
     )
   `;
 
-  const createRecommendationsTable = `
-    CREATE TABLE IF NOT EXISTS recommendations (
+  const createArticleCommentsTable = `
+    CREATE TABLE IF NOT EXISTS article_comments (
       id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      article_id VARCHAR(36) NOT NULL,
+      user_id VARCHAR(36) NOT NULL,
+      comment TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_comment_article (article_id),
+      INDEX idx_comment_user (user_id)
+    );
+  `;
+
+  const createRecommendationsTable = `
+    CREATE TABLE IF NOT EXISTS recommendations(
+      id VARCHAR(36) PRIMARY KEY DEFAULT(UUID()),
       user_id VARCHAR(36) NOT NULL,
       algorithm_version VARCHAR(50),
       items JSON,
       generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      INDEX idx_user_recommendations (user_id),
-      INDEX idx_generated_at (generated_at)
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_user_recommendations(user_id),
+      INDEX idx_generated_at(generated_at)
     )
+    `;
+
+  const createUserPurchasesTable = `
+    CREATE TABLE IF NOT EXISTS user_purchases (
+      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      user_id VARCHAR(36) NOT NULL,
+      article_id VARCHAR(36) NOT NULL,
+      price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      currency VARCHAR(10) DEFAULT 'INR',
+      purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      status ENUM('active', 'refunded', 'cancelled') DEFAULT 'active',
+      transaction_id VARCHAR(100), -- Link to payment_transactions if needed
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE,
+      UNIQUE KEY uniq_user_purchase (user_id, article_id),
+      INDEX idx_purchase_user (user_id),
+      INDEX idx_purchase_article (article_id)
+    );
   `;
 
   // -------------------------
   // Editor-related tables
   // -------------------------
   const createEditorsTable = `
-    CREATE TABLE IF NOT EXISTS editors (
-      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    CREATE TABLE IF NOT EXISTS editors(
+      id VARCHAR(36) PRIMARY KEY DEFAULT(UUID()),
       user_id VARCHAR(36) NOT NULL UNIQUE,
       display_name VARCHAR(255),
       profile_photo_url VARCHAR(1000),
@@ -459,69 +492,69 @@ const initializeTables = async (): Promise<void> => {
       is_active BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      INDEX idx_editor_user (user_id),
-      INDEX idx_is_active_editor (is_active)
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_editor_user(user_id),
+      INDEX idx_is_active_editor(is_active)
     )
-  `;
+    `;
 
   const createEditorAssignmentsTable = `
-    CREATE TABLE IF NOT EXISTS editor_assignments (
-      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    CREATE TABLE IF NOT EXISTS editor_assignments(
+      id VARCHAR(36) PRIMARY KEY DEFAULT(UUID()),
       editor_id VARCHAR(36) NOT NULL,
       article_id VARCHAR(36) NOT NULL,
       assigned_by VARCHAR(36),
       assigned_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       due_date TIMESTAMP NULL,
-      priority ENUM('High','Medium','Mid','Low') DEFAULT 'Medium',
-      status ENUM('assigned','in_progress','completed','cancelled') DEFAULT 'assigned',
+      priority ENUM('High', 'Medium', 'Mid', 'Low') DEFAULT 'Medium',
+      status ENUM('assigned', 'in_progress', 'completed', 'cancelled') DEFAULT 'assigned',
       notes TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      FOREIGN KEY (editor_id) REFERENCES editors(id) ON DELETE CASCADE,
-      FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE,
-      INDEX idx_editor_assignment (editor_id),
-      INDEX idx_article_assignment (article_id),
-      INDEX idx_status_assignment (status)
+      FOREIGN KEY(editor_id) REFERENCES editors(id) ON DELETE CASCADE,
+      FOREIGN KEY(article_id) REFERENCES content(id) ON DELETE CASCADE,
+      INDEX idx_editor_assignment(editor_id),
+      INDEX idx_article_assignment(article_id),
+      INDEX idx_status_assignment(status)
     )
-  `;
+    `;
 
   const createNotificationsTable = `
-    CREATE TABLE IF NOT EXISTS notifications (
-        id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
-        user_id VARCHAR(36) NOT NULL,
-        type VARCHAR(50) NOT NULL,
-        title VARCHAR(255),
-        message TEXT,
-        is_read BOOLEAN DEFAULT FALSE,
-        link VARCHAR(500),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        INDEX idx_notif_user (user_id),
-        INDEX idx_notif_read (is_read)
+    CREATE TABLE IF NOT EXISTS notifications(
+      id VARCHAR(36) PRIMARY KEY DEFAULT(UUID()),
+      user_id VARCHAR(36) NOT NULL,
+      type VARCHAR(50) NOT NULL,
+      title VARCHAR(255),
+      message TEXT,
+      is_read BOOLEAN DEFAULT FALSE,
+      link VARCHAR(500),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_notif_user(user_id),
+      INDEX idx_notif_read(is_read)
     )
-  `;
+    `;
 
   const createCommunicationsTable = `
-    CREATE TABLE IF NOT EXISTS communications (
-        id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
-        sender_id VARCHAR(36),
-        receiver_id VARCHAR(36),
-        message TEXT,
-        type ENUM('assignment', 'message', 'alert', 'system') DEFAULT 'message',
-        entity_type VARCHAR(50),
-        entity_id VARCHAR(36),
-        is_read BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_comm_sender (sender_id),
-        INDEX idx_comm_receiver (receiver_id),
-        INDEX idx_comm_entity (entity_type, entity_id)
+    CREATE TABLE IF NOT EXISTS communications(
+      id VARCHAR(36) PRIMARY KEY DEFAULT(UUID()),
+      sender_id VARCHAR(36),
+      receiver_id VARCHAR(36),
+      message TEXT,
+      type ENUM('assignment', 'message', 'alert', 'system') DEFAULT 'message',
+      entity_type VARCHAR(50),
+      entity_id VARCHAR(36),
+      is_read BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_comm_sender(sender_id),
+      INDEX idx_comm_receiver(receiver_id),
+      INDEX idx_comm_entity(entity_type, entity_id)
     )
-  `;
+    `;
 
   const createEditorActivityTable = `
-    CREATE TABLE IF NOT EXISTS editor_activity (
-      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    CREATE TABLE IF NOT EXISTS editor_activity(
+      id VARCHAR(36) PRIMARY KEY DEFAULT(UUID()),
       editor_id VARCHAR(36) NULL,
       article_id VARCHAR(36) NULL,
       action VARCHAR(100) NOT NULL,
@@ -529,16 +562,16 @@ const initializeTables = async (): Promise<void> => {
       ip_address VARCHAR(50),
       user_agent VARCHAR(1000),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (editor_id) REFERENCES editors(id) ON DELETE SET NULL,
-      FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE SET NULL,
-      INDEX idx_editor_activity (editor_id),
-      INDEX idx_article_activity (article_id)
+      FOREIGN KEY(editor_id) REFERENCES editors(id) ON DELETE SET NULL,
+      FOREIGN KEY(article_id) REFERENCES content(id) ON DELETE SET NULL,
+      INDEX idx_editor_activity(editor_id),
+      INDEX idx_article_activity(article_id)
     )
-  `;
+    `;
 
   const createVersionsTable = `
-    CREATE TABLE IF NOT EXISTS versions (
-      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    CREATE TABLE IF NOT EXISTS versions(
+      id VARCHAR(36) PRIMARY KEY DEFAULT(UUID()),
       article_id VARCHAR(36) NOT NULL,
       editor_id VARCHAR(36) NULL,
       title VARCHAR(500),
@@ -546,29 +579,29 @@ const initializeTables = async (): Promise<void> => {
       meta JSON,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       restored_from VARCHAR(36) NULL,
-      INDEX idx_version_article (article_id),
-      INDEX idx_version_editor (editor_id)
+      INDEX idx_version_article(article_id),
+      INDEX idx_version_editor(editor_id)
     )
-  `;
+    `;
 
   const createReviewerAssignmentsTable = `
-    CREATE TABLE IF NOT EXISTS reviewer_assignments (
-      id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    CREATE TABLE IF NOT EXISTS reviewer_assignments(
+      id VARCHAR(36) PRIMARY KEY DEFAULT(UUID()),
       reviewer_id VARCHAR(36) NOT NULL,
       article_id VARCHAR(36) NOT NULL,
       assigned_by VARCHAR(36),
       assigned_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       due_date TIMESTAMP NULL,
-      status ENUM('assigned','in_progress','completed','declined','cancelled') DEFAULT 'assigned',
+      status ENUM('assigned', 'in_progress', 'completed', 'declined', 'cancelled') DEFAULT 'assigned',
       notes TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE,
-      INDEX idx_reviewer_assignment (reviewer_id),
-      INDEX idx_article_rev_assignment (article_id),
-      INDEX idx_status_rev_assignment (status)
+      FOREIGN KEY(article_id) REFERENCES content(id) ON DELETE CASCADE,
+      INDEX idx_reviewer_assignment(reviewer_id),
+      INDEX idx_article_rev_assignment(article_id),
+      INDEX idx_status_rev_assignment(status)
     )
-  `;
+    `;
 
   try {
     // Core
@@ -633,13 +666,21 @@ const initializeTables = async (): Promise<void> => {
     await mysqlDb.execute(createReadingProgressTable);
     console.log('✅ Reading progress table created');
 
-    console.log('🔄 Creating user_bookmarks table...');
-    await mysqlDb.execute(createBookmarksTable);
-    console.log('✅ User bookmarks table created');
-
     console.log('🔄 Creating user_likes table...');
     await mysqlDb.execute(createLikesTable);
     console.log('✅ User likes table created');
+
+    console.log('🔄 Creating user_bookmarks table...');
+    await mysqlDb.execute(createUserBookmarksTable);
+    console.log('✅ User bookmarks table created');
+
+    console.log('🔄 Creating article_comments table...');
+    await mysqlDb.execute(createArticleCommentsTable);
+    console.log('✅ Article comments table created');
+
+    console.log('🔄 Creating user_purchases table...');
+    await mysqlDb.execute(createUserPurchasesTable);
+    console.log('✅ User purchases table created');
 
     console.log('🔄 Creating recommendations table...');
     await mysqlDb.execute(createRecommendationsTable);
@@ -668,50 +709,50 @@ const initializeTables = async (): Promise<void> => {
 
     console.log('🔄 Creating admin_audit_logs table...');
     await mysqlDb.execute(`
-      CREATE TABLE IF NOT EXISTS admin_audit_logs (
-        id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
-        admin_id VARCHAR(36) NOT NULL,
-        action VARCHAR(255) NOT NULL,
-        target_type VARCHAR(50),
-        target_id VARCHAR(36),
-        details JSON,
-        ip_address VARCHAR(45),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_admin_log (admin_id),
-        INDEX idx_action_log (action)
-      )
+      CREATE TABLE IF NOT EXISTS admin_audit_logs(
+      id VARCHAR(36) PRIMARY KEY DEFAULT(UUID()),
+      admin_id VARCHAR(36) NOT NULL,
+      action VARCHAR(255) NOT NULL,
+      target_type VARCHAR(50),
+      target_id VARCHAR(36),
+      details JSON,
+      ip_address VARCHAR(45),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_admin_log(admin_id),
+      INDEX idx_action_log(action)
+    )
     `);
     console.log('✅ Admin audit logs table created');
 
     console.log('🔄 Creating incidents table...');
     await mysqlDb.execute(`
-      CREATE TABLE IF NOT EXISTS incidents (
-        id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
-        title VARCHAR(255) NOT NULL,
-        description TEXT,
-        status ENUM('open', 'investigating', 'resolved', 'dismissed') DEFAULT 'open',
-        priority ENUM('low', 'medium', 'high', 'critical') DEFAULT 'medium',
-        submission_id VARCHAR(36),
-        reported_by VARCHAR(36),
-        assigned_to VARCHAR(36),
-        resolution_notes TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (submission_id) REFERENCES content(id) ON DELETE SET NULL,
-        INDEX idx_incident_status (status),
-        INDEX idx_incident_priority (priority)
-      )
+      CREATE TABLE IF NOT EXISTS incidents(
+      id VARCHAR(36) PRIMARY KEY DEFAULT(UUID()),
+      title VARCHAR(255) NOT NULL,
+      description TEXT,
+      status ENUM('open', 'investigating', 'resolved', 'dismissed') DEFAULT 'open',
+      priority ENUM('low', 'medium', 'high', 'critical') DEFAULT 'medium',
+      submission_id VARCHAR(36),
+      reported_by VARCHAR(36),
+      assigned_to VARCHAR(36),
+      resolution_notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY(submission_id) REFERENCES content(id) ON DELETE SET NULL,
+      INDEX idx_incident_status(status),
+      INDEX idx_incident_priority(priority)
+    )
     `);
     console.log('✅ Incidents table created');
 
     console.log('🔄 Creating system_settings table...');
     await mysqlDb.execute(`
-      CREATE TABLE IF NOT EXISTS system_settings (
-        setting_key VARCHAR(100) PRIMARY KEY,
-        setting_value JSON,
-        description VARCHAR(255),
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )
+      CREATE TABLE IF NOT EXISTS system_settings(
+      setting_key VARCHAR(100) PRIMARY KEY,
+      setting_value JSON,
+      description VARCHAR(255),
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
     `);
     console.log('✅ System settings table created');
 
@@ -730,15 +771,15 @@ const initializeTables = async (): Promise<void> => {
 
     console.log('🔄 Creating article_co_authors table...');
     await mysqlDb.execute(`
-      CREATE TABLE IF NOT EXISTS article_co_authors (
-        id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
-        article_id VARCHAR(36) NOT NULL,
-        name VARCHAR(255) NOT NULL,
-        email VARCHAR(255),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (article_id) REFERENCES content(id) ON DELETE CASCADE,
-        INDEX idx_co_author_article (article_id)
-      )
+      CREATE TABLE IF NOT EXISTS article_co_authors(
+      id VARCHAR(36) PRIMARY KEY DEFAULT(UUID()),
+      article_id VARCHAR(36) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      email VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(article_id) REFERENCES content(id) ON DELETE CASCADE,
+      INDEX idx_co_author_article(article_id)
+    )
     `);
     console.log('✅ Article co-authors table created');
 
@@ -783,6 +824,44 @@ const initializeTables = async (): Promise<void> => {
         await mysqlDb.execute("ALTER TABLE content ADD COLUMN co_authors JSON");
       }
     } catch (e) { console.log('Notice: content.co_authors migration skipped', (e as any).message); }
+
+    // 3. Fix content column size (LONGTEXT) and ensure summary/tags exist
+    try {
+      console.log('🔄 ensuring content is LONGTEXT...');
+      await mysqlDb.execute("ALTER TABLE content MODIFY COLUMN content LONGTEXT");
+    } catch (e) { console.log('Notice: content modify to LONGTEXT failed', (e as any).message); }
+
+    try {
+      const [cols]: any = await mysqlDb.execute("SHOW COLUMNS FROM content LIKE 'summary'");
+      if (!cols || cols.length === 0) {
+        await mysqlDb.execute("ALTER TABLE content ADD COLUMN summary TEXT");
+      } else {
+        await mysqlDb.execute("ALTER TABLE content MODIFY COLUMN summary TEXT");
+      }
+    } catch (e) { console.log('Notice: content.summary migration failed', (e as any).message); }
+
+    try {
+      const [cols]: any = await mysqlDb.execute("SHOW COLUMNS FROM content LIKE 'tags'");
+      if (!cols || cols.length === 0) {
+        await mysqlDb.execute("ALTER TABLE content ADD COLUMN tags JSON");
+      }
+    } catch (e) { console.log('Notice: content.tags migration failed', (e as any).message); }
+
+    // 4. Fix user_bookmarks column name if needed (old schema used content_id)
+    try {
+      const [cols]: any = await mysqlDb.execute("SHOW COLUMNS FROM user_bookmarks LIKE 'content_id'");
+      if (cols && cols.length > 0) {
+        console.log('⚠️ Detect old schema in user_bookmarks. Dropping table to force recreation...');
+        await mysqlDb.execute("DROP TABLE user_bookmarks");
+        // Re-create immediately
+        console.log('🔄 Re-creating user_bookmarks table...');
+        await mysqlDb.execute(createUserBookmarksTable);
+        console.log('✅ User bookmarks table re-created with correct schema');
+      }
+    } catch (e) {
+      console.log('Notice: user_bookmarks drop failed', (e as any).message);
+    }
+
 
     console.log('✅ Migrations completed');
 
@@ -865,8 +944,8 @@ const seedDefaultPlans = async (): Promise<void> => {
 
       for (const plan of defaultPlans) {
         await mysqlDb.execute(
-          `INSERT INTO subscription_plans (id, name, description, price_monthly, price_yearly, features, duration, created_at)
-           VALUES (UUID(), ?, ?, ?, ?, ?, ?, NOW())`,
+          `INSERT INTO subscription_plans(id, name, description, price_monthly, price_yearly, features, duration, created_at)
+  VALUES(UUID(), ?, ?, ?, ?, ?, ?, NOW())`,
           [plan.name, plan.description, plan.price_monthly, plan.price_yearly, plan.features, plan.duration]
         );
       }
@@ -874,9 +953,9 @@ const seedDefaultPlans = async (): Promise<void> => {
       console.log('✅ Default subscription plans seeded');
 
       const [plansCount]: any = await mysqlDb.execute('SELECT COUNT(*) as count FROM subscription_plans');
-      console.log(`📊 Total subscription plans: ${plansCount && plansCount[0] ? plansCount[0].count : 0}`);
+      console.log(`📊 Total subscription plans: ${plansCount && plansCount[0] ? plansCount[0].count : 0} `);
     } else {
-      console.log(`📊 Subscription plans already exist (${existingPlans && existingPlans[0] ? existingPlans[0].count : 'unknown'} plans found)`);
+      console.log(`📊 Subscription plans already exist(${existingPlans && existingPlans[0] ? existingPlans[0].count : 'unknown'} plans found)`);
     }
   } catch (error) {
     console.error('❌ Error seeding default plans:', error);
@@ -888,7 +967,7 @@ const verifyTableCreation = async (): Promise<void> => {
   try {
     console.log('🔍 Verifying MySQL table creation...');
     const [tables]: any = await mysqlDb.execute(
-      `SELECT TABLE_NAME FROM information_schema.tables WHERE table_schema = ?`,
+      `SELECT TABLE_NAME FROM information_schema.tables WHERE table_schema = ? `,
       [process.env.DB_NAME]
     );
 
@@ -934,7 +1013,7 @@ const verifyTableCreation = async (): Promise<void> => {
     console.log('📊 Table creation status:');
     expectedTables.forEach((table) => {
       if (tableNames.includes(table)) {
-        console.log(`   ✅ ${table}`);
+        console.log(`   ✅ ${table} `);
       } else {
         console.log(`   ❌ ${table} (missing)`);
       }
@@ -1038,7 +1117,7 @@ export const getDatabaseSchema = async (): Promise<any> => {
       `SELECT TABLE_NAME, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME
        FROM information_schema.tables
        WHERE table_schema = ?
-       ORDER BY TABLE_NAME`,
+  ORDER BY TABLE_NAME`,
       [process.env.DB_NAME]
     );
 
@@ -1049,7 +1128,7 @@ export const getDatabaseSchema = async (): Promise<any> => {
         `SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY, EXTRA
          FROM information_schema.columns
          WHERE table_schema = ? AND table_name = ?
-         ORDER BY ORDINAL_POSITION`,
+  ORDER BY ORDINAL_POSITION`,
         [process.env.DB_NAME, table.TABLE_NAME]
       );
 

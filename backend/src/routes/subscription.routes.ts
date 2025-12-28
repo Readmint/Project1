@@ -8,7 +8,9 @@ import {
   getUserSubscriptions,
   getCurrentSubscription,
   activateFreeSubscription,
-  cancelSubscription
+  cancelSubscription,
+  getAuthorSubscriptionPlans,
+  getUserPaymentHistory
 } from '../controllers/subscription.controller';
 
 const router = express.Router();
@@ -39,5 +41,11 @@ router.post('/free', activateFreeSubscription);
 
 // Cancel subscription
 router.post('/cancel/:subscriptionId', cancelSubscription);
+
+// NEW: Author Plans
+router.get('/plans/author', getAuthorSubscriptionPlans);
+
+// NEW: Payment History
+router.get('/history/:userId', getUserPaymentHistory);
 
 export default router;

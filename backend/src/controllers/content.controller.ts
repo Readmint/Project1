@@ -229,3 +229,93 @@ export const getPublicReviews = async (req: Request, res: Response): Promise<voi
     });
   }
 };
+
+export const updateDesign = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { designData, pages } = req.body; // designData is the JSON layout, pages is page count
+
+    if (!designData) {
+      res.status(400).json({ status: 'error', message: 'No design data provided' });
+      return;
+    }
+
+    const db: any = getDatabase();
+
+    // Check if article exists
+    const [articles]: any = await db.execute('SELECT id FROM content WHERE id = ?', [id]);
+    if (articles.length === 0) {
+      res.status(404).json({ status: 'error', message: 'Article not found' });
+      return;
+    }
+
+    // Update design_data
+    // Note: pages count might be stored in metadata or separate column if needed, 
+    // for now we'll wrap it in the design_data JSON or update a metadata field.
+    // Let's assume designData object contains pages info or we just store exactly what's sent.
+
+    await db.execute(
+      'UPDATE content SET design_data = ?, updated_at = NOW() WHERE id = ?',
+      [JSON.stringify(designData), id]
+    );
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Design saved successfully'
+    });
+  } catch (error: any) {
+    console.error('Update design error:', error);
+    logger.error('Update design error:', error);
+    res.status(500).json({ status: 'error', message: 'Internal server error' });
+  }
+};
+
+export const submitDesign = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { designData } = req.body; // Optional - allow saving upon submit
+
+    const db: any = getDatabase();
+
+    // Check if article exists
+    const [articles]: any = await db.execute('SELECT id, status, title, author_id FROM content WHERE id = ?', [id]);
+    if (articles.length === 0) {
+      res.status(404).json({ status: 'error', message: 'Article not found' });
+      return;
+    }
+
+    const article = articles[0];
+
+    // Status transition: Assuming logic is Editor -> [Submit] -> Reviewer (Under Review)
+    // Or if currently 'submitted', maybe 'edited'?? 
+    // Let's set it to 'under_review' which usually triggers reviewer visibility
+
+    // If designData is provided, save it first
+    if (designData) {
+      await db.execute(
+        'UPDATE content SET design_data = ?, status = ?, updated_at = NOW() WHERE id = ?',
+        [JSON.stringify(designData), 'under_review', id]
+      );
+    } else {
+      await db.execute(
+        'UPDATE content SET status = ?, updated_at = NOW() WHERE id = ?',
+        ['under_review', id]
+      );
+    }
+
+    // Create workflow event
+    await db.execute(
+      'INSERT INTO workflow_events (article_id, from_status, to_status, note) VALUES (?, ?, ?, ?)',
+      [id, article.status, 'under_review', 'Design submitted by Editor for review']
+    );
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Design submitted for review successfully'
+    });
+  } catch (error: any) {
+    console.error('Submit design error:', error);
+    logger.error('Submit design error:', error);
+    res.status(500).json({ status: 'error', message: 'Internal server error' });
+  }
+};

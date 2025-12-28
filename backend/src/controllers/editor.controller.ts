@@ -79,6 +79,30 @@ export const getEditorProfile = async (req: Request, res: Response): Promise<voi
       profile.fields = profile.fields || [];
     }
 
+    // Calculate stats
+    try {
+      const [statsRows]: any = await db.execute(
+        `SELECT COUNT(*) as count FROM editor_assignments WHERE editor_id = ? AND status = 'completed'`,
+        [profile.id]
+      );
+      const reviewedCount = statsRows[0]?.count || 0;
+
+      // Merge into profile.stats
+      let currentStats = {};
+      try {
+        if (profile.stats) {
+          currentStats = typeof profile.stats === 'string' ? JSON.parse(profile.stats) : profile.stats;
+        }
+      } catch (e) { }
+
+      profile.stats = {
+        ...currentStats,
+        articles: reviewedCount
+      };
+    } catch (err) {
+      logger.warn('Failed to calculate editor stats', err);
+    }
+
     res.status(200).json({ status: "success", data: profile });
   } catch (err: any) {
     logger.error("getEditorProfile error", err);
