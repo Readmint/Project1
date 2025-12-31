@@ -1,0 +1,22 @@
+import { Request, Response } from 'express';
+export declare const adminLogin: (req: Request, res: Response) => Promise<void>;
+export declare const createAdmin: (req: Request, res: Response) => Promise<void>;
+export declare const verifyAdmin: (req: Request, res: Response) => Promise<void>;
+export declare const getPlatformHealth: (req: Request, res: Response) => Promise<void>;
+export declare const getSystemUsers: (req: Request, res: Response) => Promise<void>;
+export declare const manageUserRole: (req: Request, res: Response) => Promise<void>;
+export declare const createUser: (req: Request, res: Response) => Promise<void>;
+export declare const getAllContent: (req: Request, res: Response) => Promise<void>;
+export declare const adminContentAction: (req: Request, res: Response) => Promise<void>;
+export declare const getPlagiarismMonitor: (req: Request, res: Response) => Promise<void>;
+export declare const verifyPlagiarismReport: (req: Request, res: Response) => Promise<void>;
+export declare const getAuditLogs: (req: Request, res: Response) => Promise<void>;
+export declare const getIncidents: (req: Request, res: Response) => Promise<void>;
+export declare const createIncident: (req: Request, res: Response) => Promise<void>;
+export declare const updateIncident: (req: Request, res: Response) => Promise<void>;
+export declare const createAnnouncement: (req: Request, res: Response) => Promise<void>;
+export declare const getSystemSettings: (req: Request, res: Response) => Promise<void>;
+export declare const updateSystemSettings: (req: Request, res: Response) => Promise<void>;
+export declare const getAdvancedAnalytics: (req: Request, res: Response) => Promise<void>;
+export declare const getAdminStats: (req: Request, res: Response) => Promise<void>;
+//# sourceMappingURL=admin.controller.d.ts.map
