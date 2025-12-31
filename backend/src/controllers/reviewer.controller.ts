@@ -1,47 +1,62 @@
 
 import { Request, Response } from 'express';
-import { getDatabase } from '../config/database';
+import { executeQuery, getDoc, createDoc, updateDoc } from '../utils/firestore-helpers';
+import { logger } from '../utils/logger';
 import { sendEmail } from '../utils/mailer';
+import { getSignedUrl } from '../utils/storage';
 
 export const getAssignments = async (req: Request, res: Response): Promise<void> => {
     try {
-        const userId = (req as any).user?.userId; // This is the UUID from users table
-        const db: any = getDatabase();
+        const userId = (req as any).user?.userId;
 
-        // Join reviewer_assignments with content and users (author)
-        // reviewer_assignments.reviewer_id matches users.id because in assignReviewer we used user.id
-        const query = `
-            SELECT 
-                ra.id as assignment_id,
-                ra.status as assignment_status,
-                ra.assigned_date,
-                ra.due_date,
-                c.id as article_id,
-                c.title,
-                c.category_id,
-                cat.name as category_name,
-                u.name as author_name,
-                u.id as author_id,
-                c.status as article_status,
-                creator.name as manager_name,
-                creator.id as manager_id,
-                e_user.name as editor_name,
-                e_user.id as editor_id
-            FROM reviewer_assignments ra
-            JOIN content c ON ra.article_id = c.id
-            JOIN users u ON c.author_id = u.id
-            LEFT JOIN categories cat ON c.category_id = cat.category_id
-            LEFT JOIN users creator ON ra.assigned_by = creator.id
-            LEFT JOIN editor_assignments ea ON c.id = ea.article_id AND ea.status = 'assigned'
-            LEFT JOIN editors e ON ea.editor_id = e.id
-            LEFT JOIN users e_user ON e.user_id = e_user.id
-            WHERE ra.reviewer_id = ?
-            ORDER BY ra.assigned_date DESC
-        `;
+        // Fetch assignments for reviewer
+        const assignments = await executeQuery('reviewer_assignments', [
+            { field: 'reviewer_id', op: '==', value: userId }
+        ], undefined, { field: 'assigned_date', dir: 'desc' });
 
-        const [assignments]: any = await db.execute(query, [userId]);
+        const formatted = await Promise.all(assignments.map(async (a: any) => {
+            // Fetch Article
+            const article: any = await getDoc('content', a.article_id);
+            if (!article) return null; // Skip if article missing
 
-        const formatted = assignments.map((a: any) => {
+            // Fetch Author
+            let authorName = 'Unknown';
+            if (article.author_id) {
+                const author: any = await getDoc('users', article.author_id);
+                if (author) authorName = author.name;
+            }
+
+            // Fetch Manager (assigned_by)
+            let managerName = 'Unknown';
+            let managerId = null;
+            if (a.assigned_by) {
+                const manager: any = await getDoc('users', a.assigned_by);
+                if (manager) {
+                    managerName = manager.name;
+                    managerId = manager.id;
+                }
+            }
+
+            // Fetch Editor Assigment for this article (optional, finding ANY active editor)
+            let editorName = null;
+            let editorId = null;
+            const editorAssigns = await executeQuery('editor_assignments', [
+                { field: 'article_id', op: '==', value: a.article_id },
+                { field: 'status', op: '==', value: 'assigned' }
+            ]);
+
+            if (editorAssigns.length > 0) {
+                const ea: any = editorAssigns[0];
+                const editor: any = await getDoc('editors', ea.editor_id);
+                if (editor && editor.user_id) {
+                    const eUser: any = await getDoc('users', editor.user_id);
+                    if (eUser) {
+                        editorName = eUser.name;
+                        editorId = eUser.id;
+                    }
+                }
+            }
+
             // Calculate Priority
             let priority = 'Normal';
             if (a.due_date) {
@@ -55,25 +70,25 @@ export const getAssignments = async (req: Request, res: Response): Promise<void>
             }
 
             return {
-                id: a.assignment_id,
+                id: a.id,
                 articleId: a.article_id,
-                title: a.title,
-                author: { name: a.author_name, id: a.author_id, role: 'Author' },
-                category: a.category_name || 'Uncategorized',
-                status: a.assignment_status,
-                articleStatus: a.article_status,
+                title: article.title,
+                author: { name: authorName, id: article.author_id, role: 'Author' },
+                category: article.category_id || 'Uncategorized', // category name fetch skipped for speed
+                status: a.status,
+                articleStatus: article.status,
                 assignedDate: new Date(a.assigned_date).toLocaleDateString(),
                 dueDate: a.due_date ? new Date(a.due_date).toLocaleDateString() : 'No Deadline',
                 priority,
-                manager: a.manager_name ? { name: a.manager_name, id: a.manager_id, role: 'Content Manager' } : null,
-                editor: a.editor_name ? { name: a.editor_name, id: a.editor_id, role: 'Editor' } : null
+                manager: managerId ? { name: managerName, id: managerId, role: 'Content Manager' } : null,
+                editor: editorName ? { name: editorName, id: editorId, role: 'Editor' } : null
             };
-        });
+        }));
 
-        res.status(200).json({ status: 'success', data: formatted });
+        res.status(200).json({ status: 'success', data: formatted.filter(i => i !== null) });
 
     } catch (error: any) {
-        console.error('Get reviewer assignments error:', error);
+        logger.error('Get reviewer assignments error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch assignments' });
     }
 };
@@ -81,13 +96,10 @@ export const getAssignments = async (req: Request, res: Response): Promise<void>
 export const getReviewerStats = async (req: Request, res: Response): Promise<void> => {
     try {
         const userId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
-        const [rows]: any = await db.execute(`
-            SELECT status, due_date 
-            FROM reviewer_assignments
-            WHERE reviewer_id = ?
-        `, [userId]);
+        const assignments = await executeQuery('reviewer_assignments', [
+            { field: 'reviewer_id', op: '==', value: userId }
+        ]);
 
         const result = {
             total: 0,
@@ -99,7 +111,7 @@ export const getReviewerStats = async (req: Request, res: Response): Promise<voi
 
         const now = new Date();
 
-        rows.forEach((r: any) => {
+        assignments.forEach((r: any) => {
             result.total++;
 
             if (r.status === 'completed') {
@@ -107,7 +119,6 @@ export const getReviewerStats = async (req: Request, res: Response): Promise<voi
             } else if (r.status === 'assigned' || r.status === 'in_progress') {
                 result.pending++;
 
-                // Track 'under_evaluation' specifically if needed, or just map 'in_progress' to it
                 if (r.status === 'in_progress') {
                     result.under_evaluation++;
                 }
@@ -126,77 +137,64 @@ export const getReviewerStats = async (req: Request, res: Response): Promise<voi
 
         res.status(200).json({ status: 'success', data: result });
     } catch (error: any) {
-        console.error('Get reviewer stats error:', error);
+        logger.error('Get reviewer stats error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch stats' });
     }
 };
-
-import { getStorageBucket, getSignedUrl } from "../utils/storage";
 
 export const getReviewContent = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params; // Article ID
         const userId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
         // 1. Verify Assignment
-        const [assignment]: any = await db.execute(
-            'SELECT id, status FROM reviewer_assignments WHERE article_id = ? AND reviewer_id = ?',
-            [id, userId]
-        );
+        const assignments = await executeQuery('reviewer_assignments', [
+            { field: 'article_id', op: '==', value: id },
+            { field: 'reviewer_id', op: '==', value: userId }
+        ]);
 
-        if (assignment.length === 0) {
+        if (assignments.length === 0) {
             res.status(403).json({ status: 'error', message: 'Not authorized for this review' });
             return;
         }
 
         // 2. Fetch Content
-        const [contentRows]: any = await db.execute(`
-            SELECT c.id, c.title, c.content as body, c.category_id, cat.name as category_name
-            FROM content c
-            LEFT JOIN categories cat ON c.category_id = cat.category_id
-            WHERE c.id = ?
-        `, [id]);
+        const article: any = await getDoc('content', id);
 
-        if (contentRows.length === 0) {
+        if (!article) {
             res.status(404).json({ status: 'error', message: 'Article not found' });
             return;
         }
 
-        const article = contentRows[0];
-        let fileUrl = null;
-
-        // 3. Fetch Attachments & Handle URLs
+        // 3. Fetch Attachments
         let attachments: any[] = [];
         try {
-            const [attRows]: any = await db.execute(
-                'SELECT id, filename, storage_path, public_url, mime_type, size_bytes FROM attachments WHERE article_id = ? ORDER BY uploaded_at ASC',
-                [id]
-            );
+            const attRows = await executeQuery('attachments', [{ field: 'article_id', op: '==', value: id }]);
+            // Sort manually
+            attRows.sort((a: any, b: any) => new Date(a.uploaded_at).getTime() - new Date(b.uploaded_at).getTime());
 
-            for (const att of (attRows || [])) {
+            for (const attObj of attRows) {
+                const att: any = attObj;
                 let url = att.public_url;
                 if (!url && att.storage_path) {
                     try {
                         const gcsPath = att.storage_path.startsWith('gcs/') ? att.storage_path.slice(4) : att.storage_path;
-                        // Attempt to sign
                         try {
-                            const signed = await getSignedUrl(gcsPath, 'read', 7 * 24 * 60 * 60 * 1000);
-                            url = typeof signed === 'string' ? signed : (signed as any).url || (signed as any).publicUrl;
+                            const signed: any = await getSignedUrl(gcsPath, 'read', 7 * 24 * 60 * 60 * 1000);
+                            url = typeof signed === 'string' ? signed : signed.url || signed.publicUrl;
                         } catch (err) {
-                            // Fallback to public URL assumption if signing fails (e.g. no creds)
                             console.warn(`Signing failed for ${att.filename}, assuming public bucket access`);
                             const bucketName = process.env.FIREBASE_STORAGE_BUCKET || 'readmint-app.firebasestorage.app';
                             url = `https://storage.googleapis.com/${bucketName}/${encodeURIComponent(gcsPath)}`;
                         }
                     } catch (e) {
-                        console.warn('Error processing attachment path', e);
+                        logger.warn('Error processing attachment path', e);
                     }
                 }
                 attachments.push({ ...att, url });
             }
         } catch (e) {
-            console.warn('Error fetching attachments for review', e);
+            logger.warn('Error fetching attachments for review', e);
         }
 
         res.status(200).json({
@@ -209,7 +207,7 @@ export const getReviewContent = async (req: Request, res: Response): Promise<voi
         });
 
     } catch (error: any) {
-        console.error('Get review content error:', error);
+        logger.error('Get review content error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch content' });
     }
 };
@@ -218,111 +216,117 @@ export const updateAssignmentStatus = async (req: Request, res: Response): Promi
     try {
         const { assignmentId, status, feedback } = req.body; // status: 'accepted', 'rejected', 'completed'
         const userId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
         // Verify ownership
-        const [exists]: any = await db.execute(
-            'SELECT * FROM reviewer_assignments WHERE id = ? AND reviewer_id = ?',
-            [assignmentId, userId]
-        );
+        const assignment: any = await getDoc('reviewer_assignments', assignmentId);
 
-        if (exists.length === 0) {
-            res.status(404).json({ status: 'error', message: 'Assignment not found' });
+        if (!assignment || assignment.reviewer_id !== userId) {
+            res.status(404).json({ status: 'error', message: 'Assignment not found or unauthorized' });
             return;
         }
 
-        const assignment = exists[0];
         const articleId = assignment.article_id;
 
         // Update status
-        await db.execute(
-            'UPDATE reviewer_assignments SET status = ? WHERE id = ?',
-            [status, assignmentId]
-        );
+        await updateDoc('reviewer_assignments', assignmentId, { status });
 
         // Notify Content Manager (assigned_by)
         const managerId = assignment.assigned_by;
         if (managerId) {
-            await db.execute(
-                `INSERT INTO notifications (id, user_id, type, title, message, link, created_at)
-                 VALUES (UUID(), ?, 'review_update', 'Review Status Updated', ?, ?, NOW())`,
-                [managerId, `Reviewer updated status to ${status} for article ${articleId}`, `/cm-dashboard/reviewer-assignments`]
-            );
+            await createDoc('notifications', {
+                user_id: managerId,
+                type: 'review_update',
+                title: 'Review Status Updated',
+                message: `Reviewer updated status to ${status} for article ${articleId}`,
+                link: `/cm-dashboard/reviewer-assignments`,
+                created_at: new Date()
+            });
 
-            // Use 'message' type instead of 'status_update' to avoid truncation/enum errors
-            await db.execute(
-                `INSERT INTO communications (id, sender_id, receiver_id, message, type, entity_type, entity_id, created_at)
-                 VALUES (UUID(), ?, ?, ?, 'message', 'article', ?, NOW())`,
-                [userId, managerId, `Detailed Feedback/Status: ${status}. ${feedback || ''}`, articleId]
-            );
+            await createDoc('communications', {
+                sender_id: userId,
+                receiver_id: managerId,
+                message: `Detailed Feedback/Status: ${status}. ${feedback || ''}`,
+                type: 'message',
+                entity_type: 'article',
+                entity_id: articleId,
+                created_at: new Date()
+            });
         }
 
         res.status(200).json({ status: 'success', message: 'Status updated successfully' });
 
     } catch (error: any) {
-        console.error('Update reviewer assignment error:', error);
+        logger.error('Update reviewer assignment error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to update assignment' });
     }
 };
-
-
 
 export const getCommunications = async (req: Request, res: Response): Promise<void> => {
     try {
         const { articleId } = req.query;
         const userId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
         // 1. Verify access (reviewer must be assigned to this article)
         if (articleId) {
-            const [access]: any = await db.execute(
-                'SELECT id FROM reviewer_assignments WHERE article_id = ? AND reviewer_id = ?',
-                [articleId, userId]
-            );
+            const access = await executeQuery('reviewer_assignments', [
+                { field: 'article_id', op: '==', value: articleId },
+                { field: 'reviewer_id', op: '==', value: userId }
+            ]);
             if (access.length === 0) {
                 res.status(403).json({ status: 'error', message: 'Not authorized for this article' });
                 return;
             }
         }
 
-        // 2. Fetch logs (where user is sender OR receiver OR it's a broadcast/log related to that article? 
-        // For simplicity, fetch messages where this user is sender/receiver, optionally filtered by article)
-        // AND ensure if it's article-scoped, we see it?
-        // Let's stick to Sender/Receiver logic for direct messages.
+        // 2. Fetch logs
+        // Current executeQuery helper doesn't support complex OR conditions natively in single query without multiple queries + merging.
+        // We need: (sender_id == userId OR receiver_id == userId)
+        // We'll fetch both and merge
+        const sent = await executeQuery('communications', [{ field: 'sender_id', op: '==', value: userId }]);
+        const received = await executeQuery('communications', [{ field: 'receiver_id', op: '==', value: userId }]);
 
-        let query = `
-            SELECT 
-                c.id, c.message, c.created_at,
-                s.name as sender_name, s.id as sender_id, s.role as sender_role,
-                r.name as receiver_name, r.id as receiver_id
-            FROM communications c
-            JOIN users s ON c.sender_id = s.id
-            JOIN users r ON c.receiver_id = r.id
-            WHERE (c.sender_id = ? OR c.receiver_id = ?)
-        `;
-        const params = [userId, userId];
+        // Merge and dedup
+        const allLogs = [...sent, ...received];
+        // Deduplicate by ID
+        const uniqueLogs = Array.from(new Map(allLogs.map(item => [item.id, item])).values());
+
+
+        let filteredLogs: any[] = uniqueLogs;
 
         if (articleId) {
-            query += ` AND c.entity_type = 'article' AND c.entity_id = ?`;
-            params.push(articleId as string);
+            filteredLogs = filteredLogs.filter((l: any) => l.entity_type === 'article' && l.entity_id === articleId);
         }
 
-        query += ` ORDER BY c.created_at ASC`;
+        // Sort
+        filteredLogs.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-        const [logs]: any = await db.execute(query, params);
+        // Manual join for names (users)
+        // To avoid N+1, fetch unique user IDs involved
+        const userIds = new Set<string>();
+        filteredLogs.forEach((l: any) => { userIds.add(l.sender_id); userIds.add(l.receiver_id); });
+
+        const userMap = new Map<string, any>();
+        for (const uid of userIds) {
+            const u: any = await getDoc('users', uid);
+            if (u) userMap.set(uid, u);
+        }
 
         // Format for frontend
-        const formatted = logs.map((l: any) => ({
-            id: l.id,
-            text: l.message,
-            from: l.sender_id === userId ? 'You' : l.sender_name,
-            tag: l.sender_role, // Using role as tag for now
-            timestamp: l.created_at
-        }));
+        const formatted = filteredLogs.map((l: any) => {
+            const sender = userMap.get(l.sender_id);
+            // const receiver = userMap.get(l.receiver_id);
+            return {
+                id: l.id,
+                text: l.message,
+                from: l.sender_id === userId ? 'You' : (sender ? sender.name : 'Unknown'),
+                tag: sender ? sender.role : 'User',
+                timestamp: l.created_at
+            };
+        });
 
         res.status(200).json({ status: 'success', data: formatted });
     } catch (error: any) {
-        console.error('Get reviewer comms error:', error);
+        logger.error('Get reviewer comms error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch messages' });
     }
 };
@@ -331,19 +335,18 @@ export const sendMessage = async (req: Request, res: Response): Promise<void> =>
     try {
         const { receiverId, message, articleId } = req.body;
         const senderId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
         // Get Names
-        const [sender]: any = await db.execute('SELECT name FROM users WHERE id = ?', [senderId]);
-        const senderName = sender[0]?.name || 'Reviewer';
+        const sender: any = await getDoc('users', senderId);
+        const senderName = sender?.name || 'Reviewer';
 
-        const [receiver]: any = await db.execute('SELECT name, email FROM users WHERE id = ?', [receiverId]);
-        if (receiver.length === 0) {
+        const receiver: any = await getDoc('users', receiverId);
+        if (!receiver) {
             res.status(404).json({ status: 'error', message: 'User not found' });
             return;
         }
-        const receiverEmail = receiver[0].email;
-        const receiverName = receiver[0].name;
+        const receiverEmail = receiver.email;
+        const receiverName = receiver.name;
 
         // Send Email
         const subject = `New Message from ${senderName} regarding Article ${articleId || ''}`;
@@ -356,15 +359,19 @@ export const sendMessage = async (req: Request, res: Response): Promise<void> =>
         await sendEmail(receiverEmail, subject, body);
 
         // Log
-        await db.execute(
-            `INSERT INTO communications (id, sender_id, receiver_id, message, type, entity_type, entity_id, created_at)
-             VALUES (UUID(), ?, ?, ?, 'message', 'article', ?, NOW())`,
-            [senderId, receiverId, message, articleId || null]
-        );
+        await createDoc('communications', {
+            sender_id: senderId,
+            receiver_id: receiverId,
+            message,
+            type: 'message',
+            entity_type: 'article',
+            entity_id: articleId || null,
+            created_at: new Date()
+        });
 
         res.status(200).json({ status: 'success', message: 'Message sent' });
     } catch (error: any) {
-        console.error('Send reviewer message error:', error);
+        logger.error('Send reviewer message error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to send message' });
     }
 };
@@ -374,15 +381,14 @@ export const checkPlagiarism = async (req: Request, res: Response): Promise<void
     try {
         const { id } = req.params; // Article ID
         const userId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
         // 1. Verify Assignment
-        const [assignment]: any = await db.execute(
-            'SELECT id FROM reviewer_assignments WHERE article_id = ? AND reviewer_id = ?',
-            [id, userId]
-        );
+        const assignments = await executeQuery('reviewer_assignments', [
+            { field: 'article_id', op: '==', value: id },
+            { field: 'reviewer_id', op: '==', value: userId }
+        ]);
 
-        if (assignment.length === 0) {
+        if (assignments.length === 0) {
             res.status(403).json({ status: 'error', message: 'Not authorized' });
             return;
         }
@@ -402,17 +408,19 @@ export const checkPlagiarism = async (req: Request, res: Response): Promise<void
             scanned_at: new Date().toISOString()
         };
 
-        // Upsert report
-        await db.execute(
-            `INSERT INTO plagiarism_reports (id, article_id, run_by, created_at, similarity_summary, status)
-             VALUES (UUID(), ?, ?, NOW(), ?, 'completed')`,
-            [id, userId, JSON.stringify(report)]
-        );
+        // Upsert report: just create new one
+        await createDoc('plagiarism_reports', {
+            article_id: id,
+            run_by: userId,
+            similarity_summary: report,
+            status: 'completed',
+            created_at: new Date()
+        });
 
         res.status(200).json({ status: 'success', message: 'Scan completed', data: report });
 
     } catch (error: any) {
-        console.error('Plagiarism check error:', error);
+        logger.error('Plagiarism check error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to run plagiarism check' });
     }
 };
@@ -420,28 +428,28 @@ export const checkPlagiarism = async (req: Request, res: Response): Promise<void
 export const getPlagiarismStatus = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params; // Article ID
-        const db: any = getDatabase();
 
-        const [rows]: any = await db.execute(
-            'SELECT similarity_summary, created_at, status FROM plagiarism_reports WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
-            [id]
-        );
+        const reports = await executeQuery('plagiarism_reports', [
+            { field: 'article_id', op: '==', value: id }
+        ], 1, { field: 'created_at', dir: 'desc' });
 
-        if (rows.length === 0) {
+        if (reports.length === 0) {
             res.status(200).json({ status: 'success', data: null });
             return;
         }
 
-        // Parse JSON if needed (though mysql2 usually handles JSON columns, safest to check)
-        let summary = rows[0].similarity_summary;
+        const row: any = reports[0];
+
+        // Parse JSON if needed (Firestore stores object, but just in case)
+        let summary = row.similarity_summary;
         if (typeof summary === 'string') {
             try { summary = JSON.parse(summary); } catch (e) { }
         }
 
-        res.status(200).json({ status: 'success', data: { ...rows[0], similarity_summary: summary } });
+        res.status(200).json({ status: 'success', data: { ...row, similarity_summary: summary } });
 
     } catch (error: any) {
-        console.error('Get plagiarism status error:', error);
+        logger.error('Get plagiarism status error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch report' });
     }
 };

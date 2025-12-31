@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 
 import { logger } from './utils/logger';
 import { connectDatabase } from './config/database';
-// removed: import { connectMongo } from './config/mongodb';
+
 
 import { errorHandler } from './middleware/errorHandler';
 
@@ -93,7 +93,7 @@ app.use(errorHandler);
 const startServer = async () => {
   try {
     await connectDatabase();
-    // connectMongo removed - using Firebase Storage only
+
 
     app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`);
@@ -106,6 +106,8 @@ const startServer = async () => {
   }
 };
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
 
 export default app;

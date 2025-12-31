@@ -2,9 +2,9 @@ import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { getDatabase } from '../config/database';
 import { logger } from '../utils/logger';
 import { sendEmail } from '../utils/mailer';
+import { executeQuery, getDoc, createDoc, updateDoc, deleteDoc, getCollection } from '../utils/firestore-helpers';
 
 const requireAuth = (req: Request, res: Response): boolean => {
     if (!req.user || !req.user.userId) {
@@ -31,11 +31,10 @@ export const createPartner = async (req: Request, res: Response): Promise<void> 
         }
 
         const { email, password, name, organization_name, type = 'university' } = req.body;
-        const db: any = getDatabase();
 
         // Check if user exists
-        const [existing]: any = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
-        if (existing.length > 0) {
+        const existingUsers = await executeQuery('users', [{ field: 'email', op: '==', value: email }]);
+        if (existingUsers.length > 0) {
             res.status(409).json({ status: 'error', message: 'User already exists' });
             return;
         }
@@ -45,18 +44,25 @@ export const createPartner = async (req: Request, res: Response): Promise<void> 
         const partnerId = uuidv4();
 
         // Create User (role = partner) linked to this partner (so they manage it)
-        await db.execute(
-            `INSERT INTO users (id, email, password, name, role, partner_id, is_email_verified, created_at)
-       VALUES (?, ?, ?, ?, 'partner', ?, ?, NOW())`,
-            [userId, email, hashedPassword, name, partnerId, true]
-        );
+        await createDoc('users', {
+            id: userId,
+            email,
+            password: hashedPassword,
+            name,
+            role: 'partner',
+            partner_id: partnerId,
+            is_email_verified: true,
+            created_at: new Date()
+        }, userId);
 
         // Create Partner Record
-        await db.execute(
-            `INSERT INTO partners (id, name, type, admin_user_id, created_at)
-       VALUES (?, ?, ?, ?, NOW())`,
-            [partnerId, organization_name, type, userId]
-        );
+        await createDoc('partners', {
+            id: partnerId,
+            name: organization_name,
+            type,
+            admin_user_id: userId,
+            created_at: new Date()
+        }, partnerId);
 
         res.status(201).json({
             status: 'success',
@@ -81,11 +87,9 @@ export const createManagedUser = async (req: Request, res: Response): Promise<vo
             return;
         }
 
-        const db: any = getDatabase();
-
         // Get partner_id of the requester
-        const [pRows]: any = await db.execute('SELECT partner_id FROM users WHERE id = ?', [userId]);
-        const partnerId = pRows[0]?.partner_id;
+        const requester: any = await getDoc('users', userId as string);
+        const partnerId = requester?.partner_id as string;
 
         if (!partnerId) {
             res.status(400).json({ status: 'error', message: 'User is not linked to a partner organization' });
@@ -99,8 +103,8 @@ export const createManagedUser = async (req: Request, res: Response): Promise<vo
             return;
         }
 
-        const [existing]: any = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
-        if (existing.length > 0) {
+        const existingUsers = await executeQuery('users', [{ field: 'email', op: '==', value: email }]);
+        if (existingUsers.length > 0) {
             res.status(409).json({ status: 'error', message: 'User already exists' });
             return;
         }
@@ -108,19 +112,28 @@ export const createManagedUser = async (req: Request, res: Response): Promise<vo
         const hashedPassword = await bcrypt.hash(password, 12);
         const newUserId = uuidv4();
 
-        await db.execute(
-            `INSERT INTO users (id, email, password, name, role, partner_id, is_email_verified, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-            [newUserId, email, hashedPassword, name, role, partnerId, true]
-        );
+        await createDoc('users', {
+            id: newUserId,
+            email,
+            password: hashedPassword,
+            name,
+            role,
+            partner_id: partnerId,
+            is_email_verified: true,
+            created_at: new Date()
+        }, newUserId);
 
         // If author, verify in authors table (create basic profile if missing)
         if (role === 'author') {
-            const authorId = uuidv4();
-            await db.execute(
-                `INSERT INTO authors (id, user_id, display_name, joined_date) VALUES (?, ?, ?, NOW())`,
-                [authorId, newUserId, name]
-            );
+            // Use userId as author doc ID for new system
+            await createDoc('authors', {
+                user_id: newUserId,
+                display_name: name,
+                joined_date: new Date()
+            }, newUserId);
+
+            // Allow backward compat if queried by ID? 
+            // The system now prefers getDoc('authors', userId).
         }
 
         res.status(201).json({
@@ -139,10 +152,9 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
     try {
         if (!requireAuth(req, res)) return;
         const { userId } = req.user!;
-        const db: any = getDatabase();
 
-        const [pRows]: any = await db.execute('SELECT partner_id FROM users WHERE id = ?', [userId]);
-        const partnerId = pRows[0]?.partner_id;
+        const requester: any = await getDoc('users', userId as string);
+        const partnerId = requester?.partner_id as string;
 
         if (!partnerId) {
             res.status(403).json({ status: 'error', message: 'User not associated with a partner' });
@@ -152,15 +164,20 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         const { title, description, start_date, end_date } = req.body;
         const eventId = uuidv4();
 
-        await db.execute(
-            `INSERT INTO partner_events (id, partner_id, title, description, start_date, end_date, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'upcoming', NOW())`,
-            [eventId, partnerId, title, description, start_date, end_date]
-        );
+        await createDoc('partner_events', {
+            id: eventId,
+            partner_id: partnerId,
+            title,
+            description,
+            start_date,
+            end_date,
+            status: 'upcoming',
+            created_at: new Date()
+        }, eventId);
 
         // Notify Admins
         try {
-            const [admins]: any = await db.execute("SELECT email FROM users WHERE role = 'admin'");
+            const admins = await executeQuery('users', [{ field: 'role', op: '==', value: 'admin' }]);
             if (admins && admins.length > 0) {
                 const adminEmails = admins.map((a: any) => a.email);
                 const subject = `New Partner Event Scheduled: ${title}`;
@@ -198,32 +215,29 @@ export const listEvents = async (req: Request, res: Response): Promise<void> => 
     try {
         if (!requireAuth(req, res)) return;
         const { userId, role } = req.user!;
-        const db: any = getDatabase();
 
         let partnerId: string | null = null;
 
+        const requester: any = await getDoc('users', userId as string);
+
         // If partner, get their own events
         if (role === 'partner') {
-            const [pRows]: any = await db.execute('SELECT partner_id FROM users WHERE id = ?', [userId]);
-            partnerId = pRows[0]?.partner_id;
+            partnerId = requester?.partner_id as string;
         }
         // If author/reader, get events of their partner
         else if (['author', 'reader'].includes(role || '')) {
-            const [pRows]: any = await db.execute('SELECT partner_id FROM users WHERE id = ?', [userId]);
-            partnerId = pRows[0]?.partner_id;
+            partnerId = requester?.partner_id as string;
         }
 
         if (!partnerId) {
-            // If no partner linked, return empty or all public (depending on logic, user asked for 'multiple author option... create events related to publishing')
-            // For now return empty if not linked
+            // If no partner linked, return empty
             res.status(200).json({ status: 'success', data: [] });
             return;
         }
 
-        const [events]: any = await db.execute(
-            `SELECT * FROM partner_events WHERE partner_id = ? ORDER BY created_at DESC`,
-            [partnerId]
-        );
+        const events = await executeQuery('partner_events', [{ field: 'partner_id', op: '==', value: partnerId }]);
+        // Sort in memory
+        events.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
         res.status(200).json({ status: 'success', data: events });
 
@@ -237,15 +251,14 @@ export const getPartnerStats = async (req: Request, res: Response): Promise<void
     try {
         if (!requireAuth(req, res)) return;
         const { userId, role } = req.user!;
-        const db: any = getDatabase();
 
         if (role !== 'partner') {
             res.status(403).json({ status: 'error', message: 'Forbidden' });
             return;
         }
 
-        const [pRows]: any = await db.execute('SELECT partner_id FROM users WHERE id = ?', [userId]);
-        const partnerId = pRows[0]?.partner_id;
+        const requester: any = await getDoc('users', userId as string);
+        const partnerId = requester?.partner_id as string;
 
         if (!partnerId) {
             res.status(400).json({ status: 'error', message: 'No partner link' });
@@ -253,24 +266,36 @@ export const getPartnerStats = async (req: Request, res: Response): Promise<void
         }
 
         // Stats: Count users, Count events, Count submissions
-        const [userCount]: any = await db.execute('SELECT COUNT(*) as count FROM users WHERE partner_id = ?', [partnerId]);
-        const [eventCount]: any = await db.execute('SELECT COUNT(*) as count FROM partner_events WHERE partner_id = ?', [partnerId]);
+        const users = await executeQuery('users', [{ field: 'partner_id', op: '==', value: partnerId }]);
+        const events = await executeQuery('partner_events', [{ field: 'partner_id', op: '==', value: partnerId }]);
 
-        // submissions check content where author is linked to partner
-        // OR content linked to partner events
-        const [subCount]: any = await db.execute(`
-            SELECT COUNT(c.id) as count 
-            FROM content c
-            JOIN users u ON c.author_id = u.id
-            WHERE u.partner_id = ?
-        `, [partnerId]);
+        let submissionsCount = 0;
+
+        // Filter users who are authors
+        const authors = users.filter((u: any) => u.role === 'author');
+
+        // For each author, get their stats from author_stats (more efficient than counting all content)
+        // Or if author_stats doesn't exist, count content?
+        // Let's try author_stats first.
+        for (const authorUser of authors) {
+            // Try fetching stat by userId (preferred) or via querying author_id
+            let stats: any = await getDoc('author_stats', authorUser.id);
+            if (!stats) {
+                const statRows = await executeQuery('author_stats', [{ field: 'author_id', op: '==', value: authorUser.id }]);
+                if (statRows.length > 0) stats = statRows[0];
+            }
+
+            if (stats && stats.articles_published) {
+                submissionsCount += (Number(stats.articles_published) || 0);
+            }
+        }
 
         res.status(200).json({
             status: 'success',
             data: {
-                users: userCount[0].count,
-                events: eventCount[0].count,
-                submissions: subCount[0].count
+                users: users.length,
+                events: events.length,
+                submissions: submissionsCount
             }
         });
 
@@ -290,19 +315,37 @@ export const getAllPartners = async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        const db: any = getDatabase();
+        // Fetch partners
+        const partners = await executeQuery('partners', []);
 
-        // Fetch partners joined with their admin user details (name, email)
-        const [rows]: any = await db.execute(`
-            SELECT p.id, p.name, p.type, p.created_at, u.email as admin_email, u.name as admin_name
-            FROM partners p
-            LEFT JOIN users u ON p.admin_user_id = u.id
-            ORDER BY p.created_at DESC
-        `);
+        // Manual join for admin user details
+        const results = await Promise.all(partners.map(async (p: any) => {
+            let adminName = null;
+            let adminEmail = null;
+            if (p.admin_user_id) {
+                const u: any = await getDoc('users', p.admin_user_id);
+                if (u) {
+                    adminName = u.name;
+                    adminEmail = u.email;
+                }
+            }
+
+            return {
+                id: p.id,
+                name: p.name,
+                type: p.type,
+                created_at: p.created_at,
+                admin_name: adminName,
+                admin_email: adminEmail
+            };
+        }));
+
+        // Sort desc
+        results.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
         res.status(200).json({
             status: 'success',
-            data: rows
+            data: results
         });
 
     } catch (err: any) {

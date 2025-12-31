@@ -1,37 +1,30 @@
+
 import { Request, Response } from 'express';
-import { getDatabase } from '../config/database';
+// import { getDatabase } from '../config/database'; 
 import { logger } from '../utils/logger';
+import { executeQuery, getDoc, createDoc, updateDoc } from '../utils/firestore-helpers';
 
 export const getCategories = async (req: Request, res: Response): Promise<void> => {
   try {
-    const db = getDatabase();
-    let categories;
+    const categories = await executeQuery('categories', [], undefined, { field: 'name', dir: 'asc' });
 
-    if ((db as any).collection) {
-      // Firestore branch — narrow type and explicitly type `doc`
-      const firestoreDb = db as FirebaseFirestore.Firestore;
-      const categoriesSnapshot = await firestoreDb.collection('categories').get();
-
-      categories = categoriesSnapshot.docs.map(
-        (doc: FirebaseFirestore.QueryDocumentSnapshot) => ({
-          id: doc.id,
-          ...(doc.data() as Record<string, any>)
-        })
-      );
-    } else {
-      // MySQL - Get categories
-      const [rows]: any = await db.execute(`
-        SELECT c1.*, c2.name as parent_category_name
-        FROM categories c1
-        LEFT JOIN categories c2 ON c1.parent_category_id = c2.id
-        ORDER BY c1.name
-      `);
-      categories = rows;
-    }
+    // Parent category name logic (Manual Join)
+    // If categories have parent_category_id
+    const validCategories = await Promise.all(categories.map(async (c: any) => {
+      let parentName = null;
+      if (c.parent_category_id) {
+        const p: any = await getDoc('categories', c.parent_category_id);
+        if (p) parentName = p.name;
+      }
+      return {
+        ...c,
+        parent_category_name: parentName
+      };
+    }));
 
     res.status(200).json({
       status: 'success',
-      data: { categories }
+      data: { categories: validCategories }
     });
   } catch (error) {
     logger.error('Get categories error:', error);
@@ -44,85 +37,57 @@ export const getCategories = async (req: Request, res: Response): Promise<void> 
 
 export const getMagazines = async (req: Request, res: Response): Promise<void> => {
   try {
-    // parse and type query params
     const category = (req.query.category as string) || undefined;
     const page = Number(req.query.page ?? 1);
     const limit = Number(req.query.limit ?? 12);
-    const offset = (page - 1) * limit;
+    // Offset logic invalid for Firestore in simple terms, but `executeQuery` mimics limit/order.
+    // Real Firestore pagination requires cursors. 
+    // For now, we will fetch ALMOST ALL or use limit logic from helpers.
+    // Helper supports 'limit'. But offset is tricky. 
+    // We will use the 'getAll and slice' approach since we lack cursors for now, assuming N < 1000.
 
-    const db = getDatabase();
-    let magazines: any[] = [];
-    let totalCount = 0;
-
-    if ((db as any).collection) {
-      const firestoreDb = db as FirebaseFirestore.Firestore;
-
-      // Build Firestore query with typed variable
-      let query: FirebaseFirestore.Query = firestoreDb
-        .collection('content')
-        .where('status', '==', 'published');
-
-      if (category) {
-        // Assuming category is stored as a string id in `category_id`
-        query = query.where('category_id', '==', category);
-      }
-
-      // Get total count (Firestore doesn't have COUNT aggregation on all SDKs;
-      // this approach fetches documents — ok for small datasets; consider using count() aggregation if available)
-      const totalSnapshot = await query.get();
-      totalCount = totalSnapshot.size;
-
-      // apply ordering + pagination (offset + limit)
-      const magazinesSnapshot = await query
-        .orderBy('created_at', 'desc')
-        .offset(offset)
-        .limit(limit)
-        .get();
-
-      magazines = magazinesSnapshot.docs.map(
-        (doc: FirebaseFirestore.QueryDocumentSnapshot) => ({
-          id: doc.id,
-          ...(doc.data() as Record<string, any>)
-        })
-      );
-    } else {
-      // MySQL - Get magazines with filters
-      let baseQuery = `
-        FROM content c 
-        LEFT JOIN users u ON c.author_id = u.id 
-        LEFT JOIN categories cat ON c.category_id = cat.id 
-        WHERE c.status = 'published'
-      `;
-
-      const queryParams: any[] = [];
-
-      if (category) {
-        baseQuery += ' AND c.category_id = ?';
-        queryParams.push(category);
-      }
-
-      // Get total count
-      const [countRows]: any = await db.execute(`SELECT COUNT(*) as total ${baseQuery}`, queryParams);
-      totalCount = countRows[0].total || 0;
-
-      // Get paginated results
-      const [rows]: any = await db.execute(
-        `
-        SELECT c.*, u.name as author_name, cat.name as category_name 
-        ${baseQuery}
-        ORDER BY c.created_at DESC 
-        LIMIT ? OFFSET ?
-      `,
-        [...queryParams, limit, offset]
-      );
-
-      magazines = rows;
+    // Build filters
+    const filters: any[] = [{ field: 'status', op: '==', value: 'published' }];
+    if (category) {
+      filters.push({ field: 'category_id', op: '==', value: category });
     }
+
+    // Fetch all for pagination (efficient count? no, just fetch all for now or use count helper)
+    // We need data, not just count.
+
+    let allMags = await executeQuery('content', filters, undefined, { field: 'created_at', dir: 'desc' });
+
+    // Sort logic (already sorted by helpers)
+
+    const totalCount = allMags.length;
+    const startIndex = (page - 1) * limit;
+    const paginatedMags = allMags.slice(startIndex, startIndex + limit);
+
+    // Expand details (Author Name, Category Name)
+    const expandedMags = await Promise.all(paginatedMags.map(async (m: any) => {
+      let authorName = 'Unknown';
+      if (m.author_id) {
+        const u: any = await getDoc('users', m.author_id);
+        if (u) authorName = u.name;
+      }
+      let categoryName = 'Uncategorized';
+      if (m.category_id) {
+        const c: any = await getDoc('categories', m.category_id);
+        if (c) categoryName = c.name;
+        else categoryName = m.category_id;
+      }
+
+      return {
+        ...m,
+        author_name: authorName,
+        category_name: categoryName
+      };
+    }));
 
     res.status(200).json({
       status: 'success',
       data: {
-        magazines,
+        magazines: expandedMags,
         pagination: {
           page,
           limit,
@@ -131,6 +96,7 @@ export const getMagazines = async (req: Request, res: Response): Promise<void> =
         }
       }
     });
+
   } catch (error) {
     logger.error('Get magazines error:', error);
     res.status(500).json({
@@ -142,44 +108,45 @@ export const getMagazines = async (req: Request, res: Response): Promise<void> =
 
 export const getAuthors = async (req: Request, res: Response): Promise<void> => {
   try {
-    const db = getDatabase();
-    let authors;
+    // In Firestore, we use 'author_stats' for pre-aggregated data or fetch users and aggregate manually.
+    // Let's use 'author_stats' if available (created in featured controller). 
+    // If not, we fetch 'users' where role IN [author, editor].
 
-    if ((db as any).collection) {
-      const firestoreDb = db as FirebaseFirestore.Firestore;
-      const authorsSnapshot = await firestoreDb
-        .collection('users')
-        .where('role', 'in', ['author', 'editor'])
-        .get();
+    // Fetch users
+    const authors = await executeQuery('users', []);
+    const validAuthors = authors.filter((u: any) => ['author', 'editor'].includes(u.role));
 
-      authors = authorsSnapshot.docs.map(
-        (doc: FirebaseFirestore.QueryDocumentSnapshot) => ({
-          id: doc.id,
-          ...(doc.data() as Record<string, any>)
-        })
-      );
-    } else {
-      // MySQL - Get authors with stats
-      const [rows]: any = await db.execute(`
-        SELECT u.*, 
-               COUNT(c.id) as published_articles,
-               SUM(c.likes_count) as total_likes
-        FROM users u 
-        LEFT JOIN content c ON u.id = c.author_id AND c.status = 'published'
-        WHERE u.role IN ('author', 'editor')
-        GROUP BY u.id
-        ORDER BY total_likes DESC
-      `);
+    // To get stats (published_articles, total_likes), we need to query 'content' or 'author_stats'.
+    // Querying 'content' for each author is N+1. 
+    // Use `author_stats` collection if it exists.
+    // Fallback: Fetch ALL published content and aggregate in memory.
 
-      authors = rows.map((row: any) => ({
-        ...row,
-        profile_data: JSON.parse(row.profile_data || '{}')
-      }));
-    }
+    const allContent = await executeQuery('content', [{ field: 'status', op: '==', value: 'published' }]);
+
+    const statsMap = new Map<string, { articles: number, likes: number }>();
+
+    allContent.forEach((c: any) => {
+      if (c.author_id) {
+        const current = statsMap.get(c.author_id) || { articles: 0, likes: 0 };
+        current.articles += 1;
+        current.likes += (c.likes_count || 0);
+        statsMap.set(c.author_id, current);
+      }
+    });
+
+    const annotatedAuthors = validAuthors.map((u: any) => {
+      const stats = statsMap.get(u.id) || { articles: 0, likes: 0 };
+      return {
+        ...u,
+        published_articles: stats.articles,
+        total_likes: stats.likes,
+        profile_data: u.profile_data || {} // Firestore stores object
+      };
+    }).sort((a: any, b: any) => b.total_likes - a.total_likes);
 
     res.status(200).json({
       status: 'success',
-      data: { authors }
+      data: { authors: annotatedAuthors }
     });
   } catch (error) {
     logger.error('Get authors error:', error);
@@ -233,38 +200,37 @@ export const getPublicReviews = async (req: Request, res: Response): Promise<voi
 export const updateDesign = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { designData, pages } = req.body; // designData is the JSON layout, pages is page count
+    const { designData, pages } = req.body;
 
     if (!designData) {
       res.status(400).json({ status: 'error', message: 'No design data provided' });
       return;
     }
 
-    const db: any = getDatabase();
-
-    // Check if article exists
-    const [articles]: any = await db.execute('SELECT id FROM content WHERE id = ?', [id]);
-    if (articles.length === 0) {
+    const article: any = await getDoc('content', id);
+    if (!article) {
       res.status(404).json({ status: 'error', message: 'Article not found' });
       return;
     }
 
-    // Update design_data
-    // Note: pages count might be stored in metadata or separate column if needed, 
-    // for now we'll wrap it in the design_data JSON or update a metadata field.
-    // Let's assume designData object contains pages info or we just store exactly what's sent.
+    // designData is passed as JSON object (or string?). 
+    // Firestore stores objects natively.
+    // Ensure we store it as object/map.
+    let dataToStore = designData;
+    if (typeof designData === 'string') {
+      try { dataToStore = JSON.parse(designData); } catch (e) { }
+    }
 
-    await db.execute(
-      'UPDATE content SET design_data = ?, updated_at = NOW() WHERE id = ?',
-      [JSON.stringify(designData), id]
-    );
+    await updateDoc('content', id, {
+      design_data: dataToStore,
+      updated_at: new Date()
+    });
 
     res.status(200).json({
       status: 'success',
       message: 'Design saved successfully'
     });
   } catch (error: any) {
-    console.error('Update design error:', error);
     logger.error('Update design error:', error);
     res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
@@ -273,48 +239,43 @@ export const updateDesign = async (req: Request, res: Response): Promise<void> =
 export const submitDesign = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { designData } = req.body; // Optional - allow saving upon submit
+    const { designData } = req.body;
 
-    const db: any = getDatabase();
-
-    // Check if article exists
-    const [articles]: any = await db.execute('SELECT id, status, title, author_id FROM content WHERE id = ?', [id]);
-    if (articles.length === 0) {
+    const article: any = await getDoc('content', id);
+    if (!article) {
       res.status(404).json({ status: 'error', message: 'Article not found' });
       return;
     }
 
-    const article = articles[0];
+    const updates: any = {
+      status: 'under_review', // Transition to under_review
+      updated_at: new Date()
+    };
 
-    // Status transition: Assuming logic is Editor -> [Submit] -> Reviewer (Under Review)
-    // Or if currently 'submitted', maybe 'edited'?? 
-    // Let's set it to 'under_review' which usually triggers reviewer visibility
-
-    // If designData is provided, save it first
     if (designData) {
-      await db.execute(
-        'UPDATE content SET design_data = ?, status = ?, updated_at = NOW() WHERE id = ?',
-        [JSON.stringify(designData), 'under_review', id]
-      );
-    } else {
-      await db.execute(
-        'UPDATE content SET status = ?, updated_at = NOW() WHERE id = ?',
-        ['under_review', id]
-      );
+      let dataToStore = designData;
+      if (typeof designData === 'string') {
+        try { dataToStore = JSON.parse(designData); } catch (e) { }
+      }
+      updates.design_data = dataToStore;
     }
 
+    await updateDoc('content', id, updates);
+
     // Create workflow event
-    await db.execute(
-      'INSERT INTO workflow_events (article_id, from_status, to_status, note) VALUES (?, ?, ?, ?)',
-      [id, article.status, 'under_review', 'Design submitted by Editor for review']
-    );
+    await createDoc('workflow_events', {
+      article_id: id,
+      from_status: article.status,
+      to_status: 'under_review',
+      note: 'Design submitted by Editor for review',
+      created_at: new Date()
+    });
 
     res.status(200).json({
       status: 'success',
       message: 'Design submitted for review successfully'
     });
   } catch (error: any) {
-    console.error('Submit design error:', error);
     logger.error('Submit design error:', error);
     res.status(500).json({ status: 'error', message: 'Internal server error' });
   }

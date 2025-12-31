@@ -7,6 +7,7 @@ import { logger } from '../utils/logger';
 import admin from 'firebase-admin';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
+import { getCollection, executeQuery, createDoc, updateDoc, getDoc } from '../utils/firestore-helpers';
 
 // Allow TypeScript to use require in mixed module setups
 declare const require: any;
@@ -70,10 +71,9 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
     }
 
     const { email } = req.body;
-    const db: any = getDatabase();
 
-    // Check if user exists
-    const [users]: any = await db.execute('SELECT id, email, name, is_email_verified FROM users WHERE email = ?', [email]);
+    // Firestore: Check if user exists
+    const users = await executeQuery('users', [{ field: 'email', op: '==', value: email }]);
 
     // For security, don't reveal if user exists or not
     if (users.length === 0) {
@@ -84,7 +84,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const user = users[0];
+    const user: any = users[0];
 
     // Check if email is verified
     if (!user.is_email_verified) {
@@ -205,7 +205,6 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
     }
 
     const { email, resetToken, newPassword } = req.body;
-    const db: any = getDatabase();
 
     // Verify reset token
     const tokenData = resetTokenStore.get(resetToken);
@@ -229,10 +228,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
     // Update password in database
     const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-    await db.execute(
-      'UPDATE users SET password = ? WHERE id = ?',
-      [hashedPassword, tokenData.userId]
-    );
+    await updateDoc('users', tokenData.userId, { password: hashedPassword });
 
     // Clear reset token
     resetTokenStore.delete(resetToken);
@@ -345,11 +341,11 @@ export const verifyEmail = async (req: Request, res: Response): Promise<void> =>
     otpStore.delete(email);
 
     // Update user as verified in database
-    const db: any = getDatabase();
-    await db.execute(
-      'UPDATE users SET is_email_verified = ? WHERE email = ?',
-      [true, email]
-    );
+    // Find user by email first
+    const users = await executeQuery('users', [{ field: 'email', op: '==', value: email }]);
+    if (users.length > 0) {
+      await updateDoc('users', users[0].id, { is_email_verified: true });
+    }
 
     res.status(200).json({
       status: 'success',
@@ -376,9 +372,8 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const db: any = getDatabase();
-
-    const [existingUsers]: any = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
+    // Firestore: Check existing user
+    const existingUsers = await executeQuery('users', [{ field: 'email', op: '==', value: email }]);
     if (existingUsers.length > 0) {
       res.status(409).json({ status: 'error', message: 'User already exists with this email' });
       return;
@@ -388,11 +383,16 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const termsAcceptedAt = new Date();
 
     // Create user with email not verified initially
-    // Also recording terms acceptance
-    await db.execute(
-      'INSERT INTO users (id, email, password, name, role, profile_data, is_email_verified, terms_accepted, terms_accepted_at) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
-      [email, hashedPassword, name, role, JSON.stringify({}), false, true, termsAcceptedAt]
-    );
+    await createDoc('users', {
+      email,
+      password: hashedPassword,
+      name,
+      role,
+      profile_data: {},
+      is_email_verified: false,
+      terms_accepted: true,
+      terms_accepted_at: termsAcceptedAt
+    }); // ID will be auto-generated
 
     // Send verification email
     const otp = generateOTP();
@@ -456,21 +456,16 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     const { email, password } = req.body;
-    const db: any = getDatabase();
 
-    const [users]: any = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+    // Firestore fetch
+    const users = await executeQuery('users', [{ field: 'email', op: '==', value: email }]);
+
     if (users.length === 0) {
       res.status(401).json({ status: 'error', message: 'Invalid credentials' });
       return;
     }
 
-    const user = users[0];
-
-    try {
-      user.profile_data = JSON.parse(user.profile_data || '{}');
-    } catch {
-      user.profile_data = {};
-    }
+    const user: any = users[0];
 
     // Check if email is verified
     if (!user.is_email_verified) {
@@ -553,20 +548,15 @@ export const oauth = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const db: any = getDatabase();
-
-    // Find or create user in MySQL
+    // Find or create user in Firestore
     let user: any;
-    const [existingUsers]: any = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+    const existingUsers = await executeQuery('users', [{ field: 'email', op: '==', value: email }]);
 
     if (existingUsers.length > 0) {
       // User exists - update last login
       user = existingUsers[0];
 
-      await db.execute(
-        'UPDATE users SET last_login = ? WHERE id = ?',
-        [new Date(), user.id]
-      );
+      await updateDoc('users', user.id, { last_login: new Date() });
     } else {
       // Create new user with default role 'reader'
       const profileData = {
@@ -575,22 +565,19 @@ export const oauth = async (req: Request, res: Response): Promise<void> => {
         ...(picture ? { avatar: picture } : {})
       };
 
-      // Insert new user with default role 'reader' - mark as verified if Firebase says so
-      await db.execute(
-        'INSERT INTO users (id, email, password, name, role, profile_data, auth_provider, is_email_verified, last_login) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)',
-        [email, '', name, 'reader', JSON.stringify(profileData), provider, isEmailVerified, new Date()]
-      );
+      // Insert new user
+      const newUser = await createDoc('users', {
+        email,
+        password: '', // No password for OAuth
+        name,
+        role: 'reader',
+        profile_data: profileData,
+        auth_provider: provider,
+        is_email_verified: isEmailVerified,
+        last_login: new Date()
+      });
 
-      // Get the newly created user
-      const [newUsers]: any = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
-      user = newUsers[0];
-    }
-
-    // Parse profile_data
-    try {
-      user.profile_data = JSON.parse(user.profile_data || '{}');
-    } catch {
-      user.profile_data = {};
+      user = newUser;
     }
 
     const jwtSecret = process.env.JWT_SECRET;
@@ -634,16 +621,18 @@ export const oauth = async (req: Request, res: Response): Promise<void> => {
 export const getCurrentUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user.userId;
-    const db: any = getDatabase();
 
-    const [users]: any = await db.execute('SELECT id, email, name, role, profile_data, is_email_verified, created_at FROM users WHERE id = ?', [userId]);
-    if (users.length === 0) {
+    const user: any = await getDoc('users', userId);
+
+    if (!user) {
       res.status(404).json({ status: 'error', message: 'User not found' });
       return;
     }
 
-    const user = users[0];
-    user.profile_data = JSON.parse(user.profile_data || '{}');
+    // In Firestore we store profile_data as Object directly usually, but check if string
+    if (typeof user.profile_data === 'string') {
+      try { user.profile_data = JSON.parse(user.profile_data); } catch { }
+    }
 
     res.status(200).json({
       status: 'success',
@@ -676,15 +665,15 @@ export const resendVerification = async (req: Request, res: Response): Promise<v
     }
 
     // Check if user exists
-    const db: any = getDatabase();
-    const [users]: any = await db.execute('SELECT id, is_email_verified FROM users WHERE email = ?', [email]);
+    const users = await executeQuery('users', [{ field: 'email', op: '==', value: email }]);
 
     if (users.length === 0) {
       res.status(404).json({ status: 'error', message: 'User not found' });
       return;
     }
 
-    if (users[0].is_email_verified) {
+    const user = users[0] as any;
+    if (user.is_email_verified) {
       res.status(400).json({ status: 'error', message: 'Email is already verified' });
       return;
     }

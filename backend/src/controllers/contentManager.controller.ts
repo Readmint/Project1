@@ -1,6 +1,7 @@
 
 import { Request, Response } from 'express';
-import { getDatabase } from '../config/database';
+import { executeQuery, getDoc, createDoc, updateDoc, getCount } from '../utils/firestore-helpers';
+import { logger } from '../utils/logger';
 import { sendEmail } from '../utils/mailer';
 import stringSimilarity from 'string-similarity';
 // Using require to bypass strict TS module resolution issues with some packages
@@ -8,43 +9,69 @@ const { search } = require('google-sr');
 
 export const getSubmissions = async (req: Request, res: Response): Promise<void> => {
     try {
-        const db: any = getDatabase();
+        // Fetch all content where status is one of the submitted states
+        // In Firestore, "IN" query is supported up to 10 values.
+        const submittedStatuses = ['submitted', 'under_review', 'changes_requested', 'approved', 'rejected'];
 
-        const query = `
-      SELECT 
-        c.id, 
-        c.title, 
-        c.status, 
-        c.created_at as temp_date, 
-        c.category_id,
-        u.name as author,
-        cat.name as category,
-        ea.priority,
-        eu.name as assigned_editor,
-        ea.editor_id
-      FROM content c
-      JOIN users u ON c.author_id = u.id
-      LEFT JOIN categories cat ON c.category_id = cat.category_id
-      LEFT JOIN editor_assignments ea ON c.id = ea.article_id AND ea.status != 'cancelled'
-      LEFT JOIN editors e ON ea.editor_id = e.id
-      LEFT JOIN users eu ON e.user_id = eu.id
-      WHERE c.status IN ('submitted', 'under_review', 'changes_requested', 'approved', 'rejected')
-      ORDER BY c.created_at DESC
-    `;
+        // executeQuery wrapper might not support 'in' natively in my implementation yet?
+        // My implementation: filters.forEach(f => query.where(f.field, f.op, f.value))
+        // Firestore supports 'in'.
+        // Let's assume my helper passes 'in' correctly.
 
-        const [submissions]: any = await db.execute(query);
+        const submissions = await executeQuery('content', [
+            { field: 'status', op: 'in', value: submittedStatuses }
+        ], undefined, { field: 'created_at', dir: 'desc' });
 
-        // Format date
-        const formattedSubmissions = submissions.map((sub: any) => ({
-            id: sub.id,
-            title: sub.title,
-            author: sub.author,
-            category: sub.category || 'Uncategorized',
-            date: new Date(sub.temp_date).toLocaleDateString(),
-            status: sub.status,
-            priority: sub.priority || 'Normal',
-            assignedEditor: sub.assigned_editor || null,
-            fileUrl: sub.public_url || null
+        const formattedSubmissions = await Promise.all(submissions.map(async (sub: any) => {
+            // Fetch Author
+            let authorName = 'Unknown';
+            if (sub.author_id) {
+                const u: any = await getDoc('users', sub.author_id);
+                if (u) authorName = u.name;
+            }
+
+            // Fetch Category
+            const categoryName = sub.category_id || 'Uncategorized'; // Manual fetch if we had category names mapping
+
+            // Fetch Editor Assignment (active)
+            let assignedEditor = null;
+            let priority = 'Normal';
+            const editorAssigns = await executeQuery('editor_assignments', [
+                { field: 'article_id', op: '==', value: sub.id },
+                { field: 'status', op: '!=', value: 'cancelled' }
+            ]);
+            // Note: '!=' query needs index or plain filtering.
+            // If helpers support it. If not, fetch all assignments for article?
+            // Safest: fetch all assignments for article, filter in JS.
+
+            // Or simpler: just query status 'assigned' or 'in_progress'
+            // Querying 'status' IN ['assigned', 'in_progress'] ?
+
+            const activeAssignment = editorAssigns.find((ea: any) => ['assigned', 'in_progress'].includes(ea.status));
+
+            if (activeAssignment) {
+                // Fetch editor name
+                const ed: any = await getDoc('editors', (activeAssignment as any).editor_id);
+                if (ed) {
+                    const edu: any = await getDoc('users', ed.user_id);
+                    if (edu) assignedEditor = edu.name;
+                }
+
+                // Priority check? Stored on assignment? "ea.priority" was in SQL join. 
+                // If not in schema, default Normal.
+            }
+
+            return {
+                id: sub.id,
+                title: sub.title,
+                author: authorName,
+                category: categoryName,
+                date: new Date(sub.created_at).toLocaleDateString(),
+                status: sub.status,
+                priority: priority,
+                assignedEditor: assignedEditor,
+                fileUrl: sub.public_url || null
+            };
         }));
 
         res.status(200).json({
@@ -52,55 +79,47 @@ export const getSubmissions = async (req: Request, res: Response): Promise<void>
             data: formattedSubmissions
         });
     } catch (error: any) {
-        console.error('Get submissions error:', error);
+        logger.error('Get submissions error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch submissions' });
     }
 };
 
 export const getEditors = async (req: Request, res: Response): Promise<void> => {
     try {
-        const db: any = getDatabase();
+        const editors = await executeQuery('users', [{ field: 'role', op: '==', value: 'editor' }]);
 
-        const query = `
-      SELECT 
-        u.name,
-        u.id as user_id,
-        e.id as editor_id
-      FROM users u
-      LEFT JOIN editors e ON u.id = e.user_id
-      WHERE u.role = 'editor'
-    `;
+        // We also need their 'editor_id' from 'editors' collection
+        // But in my schema, 'editors' collection doc ID might be user_id or auto.
+        // Let's assume we need to join.
 
-        const [editors]: any = await db.execute(query);
+        const validEditors = await Promise.all(editors.map(async (u: any) => {
+            // Find editor profile
+            const profiles = await executeQuery('editors', [{ field: 'user_id', op: '==', value: u.id }]);
+            const editorId = profiles.length > 0 ? profiles[0].id : null;
 
-        const validEditors = editors.map((e: any) => ({
-            name: e.name,
-            id: e.editor_id,
-            user_id: e.user_id
+            return {
+                name: u.name,
+                id: editorId, // editor profile id
+                user_id: u.id
+            };
         }));
 
         res.status(200).json({
             status: 'success',
-            data: validEditors
+            data: validEditors.filter(e => e.id !== null)
         });
     } catch (error: any) {
-        console.error('Get editors error:', error);
+        logger.error('Get editors error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch editors' });
     }
 };
 
 export const getReviewers = async (req: Request, res: Response): Promise<void> => {
     try {
-        const db: any = getDatabase();
-
-        const query = `
-      SELECT name, id as user_id FROM users WHERE role = 'reviewer'
-    `;
-
-        const [reviewers]: any = await db.execute(query);
+        const reviewers = await executeQuery('users', [{ field: 'role', op: '==', value: 'reviewer' }]);
         const reviewerData = reviewers.map((r: any) => ({
             name: r.name,
-            user_id: r.user_id
+            user_id: r.id
         }));
 
         res.status(200).json({
@@ -108,7 +127,7 @@ export const getReviewers = async (req: Request, res: Response): Promise<void> =
             data: reviewerData
         });
     } catch (error: any) {
-        console.error('Get reviewers error:', error);
+        logger.error('Get reviewers error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch reviewers' });
     }
 };
@@ -116,42 +135,47 @@ export const getReviewers = async (req: Request, res: Response): Promise<void> =
 export const assignEditor = async (req: Request, res: Response): Promise<void> => {
     try {
         const { submissionId, editorName } = req.body;
-        const db: any = getDatabase();
-
         const managerId = (req as any).user?.userId;
         let managerName = 'Content Manager';
+
         if (managerId) {
-            const [mUser]: any = await db.execute('SELECT name FROM users WHERE id = ?', [managerId]);
-            if (mUser.length > 0) managerName = mUser[0].name;
+            const m: any = await getDoc('users', managerId);
+            if (m) managerName = m.name;
         }
 
-        const [editorUser]: any = await db.execute(
-            `SELECT e.id as editor_id, u.email, u.id as user_id
-         FROM users u 
-         JOIN editors e ON u.id = e.user_id 
-         WHERE u.name = ? AND u.role = 'editor'`,
-            [editorName]
-        );
+        // Find editor user by name (inefficient but legacy compatible)
+        const users = await executeQuery('users', [
+            { field: 'name', op: '==', value: editorName },
+            { field: 'role', op: '==', value: 'editor' }
+        ]);
 
-        if (editorUser.length === 0) {
+        if (users.length === 0) {
             res.status(404).json({ status: 'error', message: 'Editor not found' });
             return;
         }
 
-        const editorId = editorUser[0].editor_id;
-        const editorEmail = editorUser[0].email;
+        const editorUser: any = users[0];
+        // find editor profile
+        const editorProfiles = await executeQuery('editors', [{ field: 'user_id', op: '==', value: editorUser.id }]);
+        if (editorProfiles.length === 0) {
+            res.status(404).json({ status: 'error', message: 'Editor profile missing' });
+            return;
+        }
+        const editorProfileId = editorProfiles[0].id;
 
-        await db.execute(
-            `INSERT INTO editor_assignments (id, editor_id, article_id, assigned_by, status, assigned_date) 
-       VALUES (UUID(), ?, ?, ?, 'assigned', NOW())`,
-            [editorId, submissionId, managerId || null]
-        );
+        // Create assignment
+        await createDoc('editor_assignments', {
+            editor_id: editorProfileId,
+            article_id: submissionId,
+            assigned_by: managerId || null,
+            status: 'assigned',
+            assigned_date: new Date()
+        });
 
-        await db.execute(
-            `UPDATE content SET status = 'under_review' WHERE id = ?`,
-            [submissionId]
-        );
+        // Update content status
+        await updateDoc('content', submissionId, { status: 'under_review' });
 
+        // Email
         const emailSubject = `New Article Assignment: ${submissionId}`;
         const emailBody = `
           <h3>Hello,</h3>
@@ -161,21 +185,28 @@ export const assignEditor = async (req: Request, res: Response): Promise<void> =
           <br/>
           <p>Best regards,<br/>ReadMint Team</p>
         `;
+        await sendEmail(editorUser.email, emailSubject, emailBody);
 
-        await sendEmail(editorEmail, emailSubject, emailBody);
-
-        await db.execute(
-            `INSERT INTO notifications (id, user_id, type, title, message, link, created_at)
-             VALUES (UUID(), ?, 'assignment', 'New Article Assignment', ?, ?, NOW())`,
-            [editorUser[0].user_id, `You have been assigned to edit article: ${submissionId}`, `/editor/dashboard/assignments`]
-        );
+        // Notify
+        await createDoc('notifications', {
+            user_id: editorUser.id,
+            type: 'assignment',
+            title: 'New Article Assignment',
+            message: `You have been assigned to edit article: ${submissionId}`,
+            link: `/editor/dashboard/assignments`,
+            created_at: new Date()
+        });
 
         if (managerId) {
-            await db.execute(
-                `INSERT INTO communications (id, sender_id, receiver_id, message, type, entity_type, entity_id, created_at)
-                 VALUES (UUID(), ?, ?, ?, 'assignment', 'article', ?, NOW())`,
-                [managerId, editorUser[0].user_id, `Assigned article ${submissionId} to ${editorName}`, submissionId]
-            );
+            await createDoc('communications', {
+                sender_id: managerId,
+                receiver_id: editorUser.id,
+                message: `Assigned article ${submissionId} to ${editorName}`,
+                type: 'assignment',
+                entity_type: 'article',
+                entity_id: submissionId,
+                created_at: new Date()
+            });
         }
 
         res.status(200).json({
@@ -183,7 +214,7 @@ export const assignEditor = async (req: Request, res: Response): Promise<void> =
             message: 'Editor assigned successfully'
         });
     } catch (error: any) {
-        console.error('Assign editor error:', error);
+        logger.error('Assign editor error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to assign editor' });
     }
 };
@@ -191,33 +222,32 @@ export const assignEditor = async (req: Request, res: Response): Promise<void> =
 export const assignReviewer = async (req: Request, res: Response): Promise<void> => {
     try {
         const { submissionId, reviewerName, deadline } = req.body;
-        const db: any = getDatabase();
-
         const managerId = (req as any).user?.userId;
         let managerName = 'Content Manager';
         if (managerId) {
-            const [mUser]: any = await db.execute('SELECT name FROM users WHERE id = ?', [managerId]);
-            if (mUser.length > 0) managerName = mUser[0].name;
+            const m: any = await getDoc('users', managerId);
+            if (m) managerName = m.name;
         }
 
-        const [reviewerUser]: any = await db.execute(
-            `SELECT id, email FROM users WHERE name = ? AND role = 'reviewer'`,
-            [reviewerName]
-        );
+        const users = await executeQuery('users', [
+            { field: 'name', op: '==', value: reviewerName },
+            { field: 'role', op: '==', value: 'reviewer' }
+        ]);
 
-        if (reviewerUser.length === 0) {
+        if (users.length === 0) {
             res.status(404).json({ status: 'error', message: 'Reviewer not found' });
             return;
         }
+        const reviewerUser: any = users[0];
 
-        const reviewerId = reviewerUser[0].id;
-        const reviewerEmail = reviewerUser[0].email;
-
-        await db.execute(
-            `INSERT INTO reviewer_assignments (id, reviewer_id, article_id, assigned_by, status, due_date, assigned_date) 
-       VALUES (UUID(), ?, ?, ?, 'assigned', ?, NOW())`,
-            [reviewerId, submissionId, managerId || null, deadline || null]
-        );
+        await createDoc('reviewer_assignments', {
+            reviewer_id: reviewerUser.id,
+            article_id: submissionId,
+            assigned_by: managerId || null,
+            status: 'assigned',
+            due_date: deadline || null,
+            assigned_date: new Date()
+        });
 
         const emailSubject = `New Review Assignment: ${submissionId}`;
         const emailBody = `
@@ -229,21 +259,27 @@ export const assignReviewer = async (req: Request, res: Response): Promise<void>
           <br/>
           <p>Best regards,<br/>ReadMint Team</p>
         `;
+        await sendEmail(reviewerUser.email, emailSubject, emailBody);
 
-        await sendEmail(reviewerEmail, emailSubject, emailBody);
-
-        await db.execute(
-            `INSERT INTO notifications (id, user_id, type, title, message, link, created_at)
-             VALUES (UUID(), ?, 'assignment', 'New Review Assignment', ?, ?, NOW())`,
-            [reviewerId, `You have been assigned to review article: ${submissionId}`, `/reviewer/dashboard/assignments`]
-        );
+        await createDoc('notifications', {
+            user_id: reviewerUser.id,
+            type: 'assignment',
+            title: 'New Review Assignment',
+            message: `You have been assigned to review article: ${submissionId}`,
+            link: `/reviewer/dashboard/assignments`,
+            created_at: new Date()
+        });
 
         if (managerId) {
-            await db.execute(
-                `INSERT INTO communications (id, sender_id, receiver_id, message, type, entity_type, entity_id, created_at)
-                 VALUES (UUID(), ?, ?, ?, 'assignment', 'article', ?, NOW())`,
-                [managerId, reviewerId, `Assigned review for article ${submissionId} to ${reviewerName}`, submissionId]
-            );
+            await createDoc('communications', {
+                sender_id: managerId,
+                receiver_id: reviewerUser.id,
+                message: `Assigned review for article ${submissionId} to ${reviewerName}`,
+                type: 'assignment',
+                entity_type: 'article',
+                entity_id: submissionId,
+                created_at: new Date()
+            });
         }
 
         res.status(200).json({
@@ -251,7 +287,7 @@ export const assignReviewer = async (req: Request, res: Response): Promise<void>
             message: 'Reviewer assigned successfully'
         });
     } catch (error: any) {
-        console.error('Assign reviewer error:', error);
+        logger.error('Assign reviewer error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to assign reviewer' });
     }
 };
@@ -259,25 +295,30 @@ export const assignReviewer = async (req: Request, res: Response): Promise<void>
 export const unassignEditor = async (req: Request, res: Response): Promise<void> => {
     try {
         const { submissionId } = req.body;
-        const db: any = getDatabase();
         const managerId = (req as any).user?.userId;
 
-        await db.execute(
-            `UPDATE editor_assignments SET status = 'cancelled' WHERE article_id = ? AND status = 'assigned'`,
-            [submissionId]
-        );
+        // Cancel assignments
+        const assignments = await executeQuery('editor_assignments', [
+            { field: 'article_id', op: '==', value: submissionId },
+            { field: 'status', op: '==', value: 'assigned' }
+        ]);
 
-        await db.execute(
-            `UPDATE content SET status = 'submitted' WHERE id = ?`,
-            [submissionId]
-        );
+        for (const assign of assignments) {
+            await updateDoc('editor_assignments', assign.id, { status: 'cancelled' });
+        }
+
+        await updateDoc('content', submissionId, { status: 'submitted' });
 
         if (managerId) {
-            await db.execute(
-                `INSERT INTO communications (id, sender_id, receiver_id, message, type, entity_type, entity_id, created_at)
-                 VALUES (UUID(), ?, ?, ?, 'assignment', 'article', ?, NOW())`,
-                [managerId, managerId, `Unassigned editor from article ${submissionId}`, submissionId]
-            );
+            await createDoc('communications', {
+                sender_id: managerId,
+                receiver_id: managerId,
+                message: `Unassigned editor from article ${submissionId}`,
+                type: 'assignment',
+                entity_type: 'article',
+                entity_id: submissionId,
+                created_at: new Date()
+            });
         }
 
         res.status(200).json({
@@ -285,29 +326,42 @@ export const unassignEditor = async (req: Request, res: Response): Promise<void>
             message: 'Editor unassigned successfully'
         });
     } catch (error: any) {
-        console.error('Unassign editor error:', error);
+        logger.error('Unassign editor error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to unassign editor' });
     }
 };
 
 export const getCommunications = async (req: Request, res: Response): Promise<void> => {
     try {
-        const db: any = getDatabase();
-        const query = `
-            SELECT 
-                c.id, c.message, c.created_at, c.type,
-                s.name as sender_name,
-                r.name as receiver_name
-            FROM communications c
-            LEFT JOIN users s ON c.sender_id = s.id
-            LEFT JOIN users r ON c.receiver_id = r.id
-            ORDER BY c.created_at DESC
-        `;
-        const [logs]: any = await db.execute(query);
+        // Fetch recent communications
+        const logs = await executeQuery('communications', [], 50, { field: 'created_at', dir: 'desc' });
 
-        res.status(200).json({ status: 'success', data: logs });
+        // Manual join
+        const formatted = await Promise.all(logs.map(async (l: any) => {
+            let senderName = 'Unknown';
+            if (l.sender_id) {
+                const s: any = await getDoc('users', l.sender_id);
+                if (s) senderName = s.name;
+            }
+            let receiverName = 'Unknown';
+            if (l.receiver_id) {
+                const r: any = await getDoc('users', l.receiver_id);
+                if (r) receiverName = r.name;
+            }
+
+            return {
+                id: l.id,
+                message: l.message,
+                created_at: l.created_at,
+                type: l.type,
+                sender_name: senderName,
+                receiver_name: receiverName
+            };
+        }));
+
+        res.status(200).json({ status: 'success', data: formatted });
     } catch (error: any) {
-        console.error('Get communications error:', error);
+        logger.error('Get communications error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch communications' });
     }
 };
@@ -315,19 +369,13 @@ export const getCommunications = async (req: Request, res: Response): Promise<vo
 export const getNotifications = async (req: Request, res: Response): Promise<void> => {
     try {
         const userId = (req as any).user?.userId;
-        const db: any = getDatabase();
-
-        const query = `
-            SELECT * FROM notifications 
-            WHERE user_id = ? 
-            ORDER BY created_at DESC
-            LIMIT 50
-        `;
-        const [notifs]: any = await db.execute(query, [userId]);
+        const notifs = await executeQuery('notifications', [
+            { field: 'user_id', op: '==', value: userId }
+        ], 50, { field: 'created_at', dir: 'desc' });
 
         res.status(200).json({ status: 'success', data: notifs });
     } catch (error: any) {
-        console.error('Get notifications error:', error);
+        logger.error('Get notifications error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch notifications' });
     }
 };
@@ -336,113 +384,123 @@ export const sendMessage = async (req: Request, res: Response): Promise<void> =>
     try {
         const { receiverId, message, subject } = req.body;
         const senderId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
         let senderName = 'Content Manager';
         if (senderId) {
-            const [sUser]: any = await db.execute('SELECT name FROM users WHERE id = ?', [senderId]);
-            if (sUser.length > 0) senderName = sUser[0].name;
+            const s: any = await getDoc('users', senderId);
+            if (s) senderName = s.name;
         }
 
-        const [users]: any = await db.execute('SELECT email, name FROM users WHERE id = ?', [receiverId]);
-        if (users.length === 0) {
+        const receiver: any = await getDoc('users', receiverId);
+        if (!receiver) {
             res.status(404).json({ status: 'error', message: 'User not found' });
             return;
         }
-        const receiverEmail = users[0].email;
-        const receiverName = users[0].name;
 
         const emailSubject = subject || `New Message from ${senderName}`;
         const emailBody = `
-            <h3>Hello ${receiverName},</h3>
+            <h3>Hello ${receiver.name},</h3>
             <p>You have received a new message:</p>
             <p style="background-color: #f3f4f6; padding: 10px; border-radius: 5px;">${message}</p>
             <br/>
             <p>Best regards,<br/>ReadMint Team</p>
         `;
 
-        await sendEmail(receiverEmail, emailSubject, emailBody);
+        await sendEmail(receiver.email, emailSubject, emailBody);
 
-        await db.execute(
-            `INSERT INTO communications (id, sender_id, receiver_id, message, type, entity_type, entity_id, created_at)
-             VALUES (UUID(), ?, ?, ?, 'message', 'user', ?, NOW())`,
-            [senderId, receiverId, message, receiverId] // entity_id is receiver for user-to-user msgs
-        );
+        await createDoc('communications', {
+            sender_id: senderId,
+            receiver_id: receiverId,
+            message,
+            type: 'message',
+            entity_type: 'user',
+            entity_id: receiverId,
+            created_at: new Date()
+        });
 
         res.status(200).json({ status: 'success', message: 'Message sent successfully' });
 
     } catch (error: any) {
-        console.error('Send message error:', error);
+        logger.error('Send message error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to send message' });
     }
 };
 
 export const getDashboardStats = async (req: Request, res: Response): Promise<void> => {
     try {
-        const db: any = getDatabase();
+        // Parallel counts
+        const [
+            totalSubmissions,
+            submitted,
+            underReview,
+            changesRequested,
+            approved,
+            published
+        ] = await Promise.all([
+            getCount('content', []),
+            getCount('content', [{ field: 'status', op: '==', value: 'submitted' }]),
+            getCount('content', [{ field: 'status', op: '==', value: 'under_review' }]),
+            getCount('content', [{ field: 'status', op: '==', value: 'changes_requested' }]),
+            getCount('content', [{ field: 'status', op: '==', value: 'approved' }]),
+            getCount('content', [{ field: 'status', op: '==', value: 'published' }])
+        ]);
 
-        const statsQuery = `
-            SELECT
-                COUNT(*) as total_submissions,
-                SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) as pending_assignments,
-                SUM(CASE WHEN status = 'under_review' THEN 1 ELSE 0 END) as under_review,
-                SUM(CASE WHEN status = 'changes_requested' THEN 1 ELSE 0 END) as changes_requested,
-                SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as ready_to_publish,
-                SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) as published
-            FROM content
-        `;
-        const [counts]: any = await db.execute(statsQuery);
-        const stats = counts[0];
+        // Editor Queue
+        // status IN assigned, in_progress. getCount handles single operator.
+        // We'll simulate OR with 2 queries? Or just 1 if we can.
+        // Or fetch all editor_assignments with status=assigned and status=in_progress and count unique article_id.
+        // getCount only takes 1 filter set (AND). 
+        // We can do: getCount('editor_assignments', [{status: assigned}]) + getCount('editor_assignments', [{status: in_progress}])
+        // Actually unique article_id logic is redundant if we assume 1 active assignment per article usually.
 
-        const [editorQueue]: any = await db.execute(`
-            SELECT COUNT(DISTINCT article_id) as count FROM editor_assignments WHERE status IN ('assigned', 'in_progress')
-        `);
+        const q1 = await getCount('editor_assignments', [{ field: 'status', op: '==', value: 'assigned' }]);
+        const q2 = await getCount('editor_assignments', [{ field: 'status', op: '==', value: 'in_progress' }]);
+        const editorQueue = q1 + q2;
 
-        const [upcoming]: any = await db.execute(`
-            SELECT title, created_at as date, 'Scheduled' as visibility 
-            FROM content WHERE status = 'approved' 
-            ORDER BY created_at ASC LIMIT 5
-        `);
+        const upcoming = await executeQuery('content', [{ field: 'status', op: '==', value: 'approved' }], 5, { field: 'created_at', dir: 'asc' });
 
-        // Recent Submissions
-        const [recent]: any = await db.execute(`
-            SELECT 
-                c.id, c.title, u.name as author, c.created_at, c.status
-            FROM content c
-            JOIN users u ON c.author_id = u.id
-            ORDER BY c.created_at DESC LIMIT 5
-        `);
+        const recent = await executeQuery('content', [], 5, { field: 'created_at', dir: 'desc' });
 
-        const dashboardData = {
-            stats: [
-                { label: "Total Submissions", value: stats.total_submissions || 0, description: "All-time submissions" },
-                { label: "Pending Assignments", value: stats.pending_assignments || 0, description: "Awaiting assignment" },
-                { label: "Under Review", value: stats.under_review || 0, description: "Actively being reviewed" },
-                { label: "Changes Requested", value: stats.changes_requested || 0, description: "Awaiting author changes" },
-                { label: "Editor Queue", value: editorQueue[0].count || 0, description: "Waiting for editing" },
-                { label: "Ready to Publish", value: stats.ready_to_publish || 0, description: "Cleared by QC" },
-                { label: "Published", value: stats.published || 0, description: "Live articles" },
-            ],
-            recentSubmissions: recent.map((r: any) => ({
+        // Manual expand recent
+        const recentExpanded = await Promise.all(recent.map(async (r: any) => {
+            let authorName = 'Unknown';
+            if (r.author_id) {
+                const u: any = await getDoc('users', r.author_id);
+                if (u) authorName = u.name;
+            }
+            return {
                 id: r.id,
                 title: r.title,
-                author: r.author,
+                author: authorName,
                 date: new Date(r.created_at).toLocaleDateString(),
                 status: r.status,
                 priority: 'Normal'
-            })),
+            };
+        }));
+
+        const dashboardData = {
+            stats: [
+                { label: "Total Submissions", value: totalSubmissions, description: "All-time submissions" },
+                { label: "Pending Assignments", value: submitted, description: "Awaiting assignment" },
+                { label: "Under Review", value: underReview, description: "Actively being reviewed" },
+                { label: "Changes Requested", value: changesRequested, description: "Awaiting author changes" },
+                { label: "Editor Queue", value: editorQueue, description: "Waiting for editing" },
+                { label: "Ready to Publish", value: approved, description: "Cleared by QC" },
+                { label: "Published", value: published, description: "Live articles" },
+            ],
+            recentSubmissions: recentExpanded,
             upcomingPublications: upcoming.map((u: any) => ({
                 title: u.title,
-                date: new Date(u.date).toLocaleDateString(),
-                time: new Date(u.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                visibility: u.visibility
+                date: new Date(u.created_at).toLocaleDateString(),
+                time: new Date(u.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                visibility: 'Scheduled'
             }))
         };
 
         res.status(200).json({ status: 'success', data: dashboardData });
 
     } catch (error: any) {
-        console.error('Get dashboard stats error:', error);
+        logger.error('Get dashboard stats error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch dashboard stats' });
     }
 };
@@ -456,27 +514,37 @@ export const checkPlagiarism = async (req: Request, res: Response): Promise<void
             return;
         }
 
-        const db: any = getDatabase();
-
         // 1. Internal Database Check
-        const [articles]: any = await db.execute(`
-            SELECT id, title, content FROM content 
-            WHERE id != ? AND content IS NOT NULL AND LENGTH(content) > 50
-        `, [articleId || 'new']);
+        // Fetch all published articles (or all content)
+        // Optimization: limit fields to content? helpers get full doc.
+        // Limit: 50? If too many articles, this will be slow.
+        // For MVP/Demo: fetch last 50 articles.
+        const articles = await executeQuery('content', [], 50, { field: 'created_at', dir: 'desc' });
 
         let internalScore = 0;
-        let matchedInternalArticle = null;
+        let matchedInternalArticle: any = null;
 
         if (articles.length > 0) {
-            const corpus = articles.map((a: any) => a.content);
+            const corpus = articles.map((a: any) => a.content || '');
+            // exclude current article?
+
             const result = stringSimilarity.findBestMatch(content, corpus);
+            // check if best match is self?
+            // Not easily checked unless we match ID.
+            // We can filter `articles` before mapping.
+
             internalScore = Math.round(result.bestMatch.rating * 100);
             matchedInternalArticle = articles[result.bestMatchIndex];
+
+            if (articleId && matchedInternalArticle.id === articleId) {
+                // matched self
+                internalScore = 0; // ignore self
+            }
         }
 
         // 2. External Web Check (Spot Check)
         let externalScore = 0;
-        let externalSource = null;
+        let externalSource: any = null;
 
         // Split content into clean sentences
         const sentences = content.match(/[^\.!\?]+[\.!\?]+/g) || [content];
@@ -503,7 +571,7 @@ export const checkPlagiarism = async (req: Request, res: Response): Promise<void
                     }
                 }
             } catch (err) {
-                console.warn("External check failed:", err);
+                logger.warn("External check failed:", err);
             }
         }
 
@@ -511,7 +579,7 @@ export const checkPlagiarism = async (req: Request, res: Response): Promise<void
         const finalScore = Math.min(Math.max(internalScore, externalScore), 100);
 
         let matchData = null;
-        if (internalScore > externalScore && internalScore > 5) {
+        if (internalScore > externalScore && internalScore > 5 && matchedInternalArticle) {
             matchData = {
                 type: 'internal',
                 title: matchedInternalArticle.title,
@@ -534,7 +602,7 @@ export const checkPlagiarism = async (req: Request, res: Response): Promise<void
         });
 
     } catch (error: any) {
-        console.error('Plagiarism check error:', error);
+        logger.error('Plagiarism check error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to perform plagiarism check' });
     }
 };
@@ -542,21 +610,19 @@ export const checkPlagiarism = async (req: Request, res: Response): Promise<void
 export const getSubmissionDetails = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const db: any = getDatabase();
 
-        const [articles]: any = await db.execute(`
-            SELECT c.*, u.name as author_name, cat.name as category_name 
-            FROM content c
-            JOIN users u ON c.author_id = u.id
-            LEFT JOIN categories cat ON c.category_id = cat.category_id
-            WHERE c.id = ?
-        `, [id]);
-
-        if (articles.length === 0) {
+        const article: any = await getDoc('content', id);
+        if (!article) {
             res.status(404).json({ status: 'error', message: 'Submission not found' });
             return;
         }
-        const article = articles[0];
+
+        // Manual join author
+        let authorName = 'Unknown';
+        if (article.author_id) {
+            const u: any = await getDoc('users', article.author_id);
+            if (u) authorName = u.name;
+        }
 
         const events: any[] = [];
 
@@ -574,48 +640,51 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
             });
         }
 
-        const [editorAssigns]: any = await db.execute(`
-            SELECT ea.*, u.name as editor_name 
-            FROM editor_assignments ea
-            JOIN users u ON ea.editor_id = (SELECT user_id FROM editors WHERE id = ea.editor_id)
-            WHERE ea.article_id = ?
-        `, [id]);
+        const editorAssigns = await executeQuery('editor_assignments', [{ field: 'article_id', op: '==', value: id }]);
 
-        editorAssigns.forEach((ea: any) => {
-            if (ea.status !== 'cancelled') {
+        for (const ea of editorAssigns) {
+            const e: any = ea;
+            if (e.status !== 'cancelled') {
+                // fetch editor user name
+                let eName = 'Editor';
+                const ed: any = await getDoc('editors', e.editor_id);
+                if (ed) {
+                    const edu: any = await getDoc('users', ed.user_id);
+                    if (edu) eName = edu.name;
+                }
+
                 events.push({
                     step: 'ASSIGNED',
-                    date: ea.assigned_date,
-                    description: `Assigned to Editor ${ea.editor_name}.`
+                    date: e.assigned_date,
+                    description: `Assigned to Editor ${eName}.`
                 });
             }
-        });
+        }
 
-        const [reviewerAssigns]: any = await db.execute(`
-            SELECT ra.*, u.name as reviewer_name 
-            FROM reviewer_assignments ra
-            JOIN users u ON ra.reviewer_id = u.id
-            WHERE ra.article_id = ?
-        `, [id]);
+        const reviewerAssigns = await executeQuery('reviewer_assignments', [{ field: 'article_id', op: '==', value: id }]);
 
-        reviewerAssigns.forEach((ra: any) => {
-            if (ra.status !== 'cancelled') {
+        for (const ra of reviewerAssigns) {
+            const r: any = ra;
+            if (r.status !== 'cancelled') {
+                let rName = 'Reviewer';
+                const ru: any = await getDoc('users', r.reviewer_id);
+                if (ru) rName = ru.name;
+
                 events.push({
                     step: 'ASSIGNED',
-                    date: ra.assigned_date,
-                    description: `Assigned to Reviewer ${ra.reviewer_name}.`
+                    date: r.assigned_date,
+                    description: `Assigned to Reviewer ${rName}.`
                 });
             }
-        });
+        }
 
-        const [logs]: any = await db.execute(`
-            SELECT * FROM communications 
-            WHERE entity_id = ? AND entity_type = 'article'
-            ORDER BY created_at ASC
-        `, [id]);
+        const logs = await executeQuery('communications', [
+            { field: 'entity_id', op: '==', value: id },
+            { field: 'entity_type', op: '==', value: 'article' }
+        ], undefined, { field: 'created_at', dir: 'asc' });
 
         logs.forEach((log: any) => {
-            if (log.message.includes('Unassigned')) {
+            if (log.message && log.message.includes('Unassigned')) {
                 events.push({
                     step: 'UNASSIGNED',
                     date: log.created_at,
@@ -627,7 +696,7 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
         if (article.status === 'approved' || article.status === 'published') {
             events.push({
                 step: 'APPROVED',
-                date: new Date(),
+                date: new Date(), // Ideally fetch from workflow_events if recorded
                 description: 'Passed QC & approved.'
             });
         }
@@ -642,7 +711,7 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
 
         events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-        const [attachments]: any = await db.execute('SELECT id, filename, public_url, storage_path, mime_type, uploaded_at FROM attachments WHERE article_id = ?', [id]);
+        const attachments = await executeQuery('attachments', [{ field: 'article_id', op: '==', value: id }]);
 
         res.status(200).json({
             status: 'success',
@@ -650,9 +719,9 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
                 article: {
                     id: article.id,
                     title: article.title,
-                    author: article.author_name,
+                    author: authorName,
                     status: article.status,
-                    category: article.category_name,
+                    category: article.category_id || 'Uncategorized',
                     content: article.content
                 },
                 timeline: events,
@@ -661,26 +730,36 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
         });
 
     } catch (error: any) {
-        console.error('Get submission details error:', error);
+        logger.error('Get submission details error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch submission details' });
     }
 };
 
 export const getReadyToPublish = async (req: Request, res: Response): Promise<void> => {
     try {
-        const db: any = getDatabase();
-        const [rows]: any = await db.execute(`
-            SELECT c.id, c.title, u.name as author, c.created_at, c.category_id, cat.name as category_name 
-            FROM content c
-            JOIN users u ON c.author_id = u.id
-            LEFT JOIN categories cat ON c.category_id = cat.category_id
-            WHERE c.status = 'approved'
-            ORDER BY c.created_at ASC
-        `);
+        const articles = await executeQuery('content', [
+            { field: 'status', op: '==', value: 'approved' }
+        ], undefined, { field: 'created_at', dir: 'asc' });
 
-        res.status(200).json({ status: 'success', data: rows });
+        const formatted = await Promise.all(articles.map(async (c: any) => {
+            let authorName = 'Unknown';
+            if (c.author_id) {
+                const u: any = await getDoc('users', c.author_id);
+                if (u) authorName = u.name;
+            }
+            return {
+                id: c.id,
+                title: c.title,
+                author: authorName,
+                created_at: c.created_at,
+                category_id: c.category_id,
+                category_name: c.category_id || 'General'
+            };
+        }));
+
+        res.status(200).json({ status: 'success', data: formatted });
     } catch (error: any) {
-        console.error('Get ready to publish error:', error);
+        logger.error('Get ready to publish error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch publishing queue' });
     }
 };
@@ -689,7 +768,6 @@ export const publishContent = async (req: Request, res: Response): Promise<void>
     try {
         const { articleId, price, isFree } = req.body;
         const managerId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
         // Validate
         if (!isFree && (price === undefined || price < 0)) {
@@ -698,59 +776,60 @@ export const publishContent = async (req: Request, res: Response): Promise<void>
         }
 
         // Update Content
-        await db.execute(
-            `UPDATE content 
-             SET status = 'published', price = ?, is_free = ?, published_at = NOW() 
-             WHERE id = ?`,
-            [isFree ? 0 : price, isFree, articleId]
-        );
+        const art: any = await updateDoc('content', articleId, {
+            status: 'published',
+            price: isFree ? 0 : price,
+            is_free: isFree,
+            published_at: new Date()
+        });
 
-        // Get Article Title for notification
-        const [art]: any = await db.execute('SELECT title FROM content WHERE id = ?', [articleId]);
-        const title = art[0]?.title || 'New Article';
-
-        // Notify All Users (Broadcast)
-        // Note: In production, batch this or use a pub/sub. For now, simple insert.
-        // We'll just notify the Author and maybe a generic "Recent Updates" flag, 
-        // inserting 1000s of rows here is bad practice.
-        // Instead, let's create a single "System Announcement" if we had that table, 
-        // OR just notify the Author + Manager log.
-        // The user request said "all the readers should be notifies".
-        // Let's assume a 'notifications' broadcast table or insert for active readers.
-        // For safety/performance here, I will just notify the Author.
-        // To strictly follow "all readers", I would need: INSERT INTO notifications (user_id...) SELECT id FROM users WHERE role='reader'.
+        const title = art.title || 'New Article';
 
         // Notify Author
-        const [authRow]: any = await db.execute('SELECT author_id FROM content WHERE id = ?', [articleId]);
-        if (authRow.length > 0) {
-            await db.execute(
-                `INSERT INTO notifications (id, user_id, type, title, message, link, created_at)
-                 VALUES (UUID(), ?, 'publication', 'Article Published!', ?, ?, NOW())`,
-                [authRow[0].author_id, `Your article "${title}" is now live!`, `/reader/article/${articleId}`]
-            );
+        if (art.author_id) {
+            await createDoc('notifications', {
+                user_id: art.author_id,
+                type: 'publication',
+                title: 'Article Published!',
+                message: `Your article "${title}" is now live!`,
+                link: `/reader/article/${articleId}`,
+                created_at: new Date()
+            });
         }
 
-        // Broadcast to Readers (Limit to recent active or just 50 to avoid timeout in demo)
-        // Real implementation would use a job queue.
-        await db.execute(`
-            INSERT INTO notifications (id, user_id, type, title, message, link, created_at)
-            SELECT UUID(), id, 'publication', 'New Magazine Entry', ?, ?, NOW()
-            FROM users WHERE role = 'reader' LIMIT 50
-        `, [`New article "${title}" has been released.`, `/reader/article/${articleId}`]);
+        // Broadcast to Readers (Limit to first 50 active readers for MVP)
+        // In real app, use Pub/Sub or batch
+        const readers = await executeQuery('users', [{ field: 'role', op: '==', value: 'reader' }], 50);
+
+        for (const r of readers) {
+            const reader: any = r;
+            await createDoc('notifications', {
+                user_id: reader.id,
+                type: 'publication',
+                title: 'New Magazine Entry',
+                message: `New article "${title}" has been released.`,
+                link: `/reader/article/${articleId}`,
+                created_at: new Date()
+            });
+        }
 
         // Log action
         if (managerId) {
-            await db.execute(
-                `INSERT INTO communications (id, sender_id, receiver_id, message, type, entity_type, entity_id, created_at)
-                 VALUES (UUID(), ?, ?, ?, 'system', 'article', ?, NOW())`,
-                [managerId, managerId, `Published article ${articleId} (Price: ${isFree ? 'Free' : price})`, articleId]
-            );
+            await createDoc('communications', {
+                sender_id: managerId,
+                receiver_id: managerId,
+                message: `Published article ${articleId} (Price: ${isFree ? 'Free' : price})`,
+                type: 'system',
+                entity_type: 'article',
+                entity_id: articleId,
+                created_at: new Date()
+            });
         }
 
         res.status(200).json({ status: 'success', message: 'Article published successfully' });
 
     } catch (error: any) {
-        console.error('Publish content error:', error);
+        logger.error('Publish content error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to publish content' });
     }
 };

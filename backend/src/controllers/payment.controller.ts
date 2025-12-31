@@ -1,7 +1,8 @@
 
 import { Request, Response } from 'express';
-import { getDatabase } from '../config/database';
 import sha512 from 'js-sha512';
+import { executeQuery, getDoc, createDoc, updateDoc } from '../utils/firestore-helpers';
+import { logger } from '../utils/logger';
 
 const PAYU_KEY = process.env.PAYU_KEY || 'test_key'; // user provided env
 const PAYU_SALT = process.env.PAYU_SALT || 'test_salt';
@@ -12,23 +13,21 @@ export const initiatePayment = async (req: Request, res: Response): Promise<void
     try {
         const { amount, productInfo, firstname, email, phone } = req.body;
         const userId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
         // 1. Create Order in DB
         const txnid = 'Txn' + new Date().getTime(); // Simple transaction ID
         const finalAmount = parseFloat(amount).toFixed(2);
 
-        // Store preliminary order info (assuming single item checkout for simplicity or "Cart Cleanup" later)
-        // In a clear architecture, we'd iterate items. Here assuming 'productInfo' contains article ID(s).
-        // For the "Cart" flow, we might need a separate 'createOrder' step.
-        // Let's assume standard PayU flow: We generate hash, frontend submits form.
-        // We need to track this 'txnid' -> 'user_id' mapping.
-
-        await db.execute(
-            `INSERT INTO orders (id, user_id, total_amount, status, transaction_id, created_at)
-             VALUES (UUID(), ?, ?, 'pending', ?, NOW())`,
-            [userId, finalAmount, txnid]
-        );
+        // Store preliminary order info
+        await createDoc('orders', {
+            id: txnid, // use txnid as doc id for easy lookup
+            user_id: userId,
+            total_amount: finalAmount,
+            status: 'pending',
+            transaction_id: txnid,
+            product_info: productInfo,
+            created_at: new Date()
+        }, txnid);
 
         // 2. Generate Hash
         // Formula: sha512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|...|udf10|salt)
@@ -52,7 +51,7 @@ export const initiatePayment = async (req: Request, res: Response): Promise<void
         });
 
     } catch (error: any) {
-        console.error('Initiate payment error:', error);
+        logger.error('Initiate payment error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to initiate payment' });
     }
 };
@@ -60,7 +59,6 @@ export const initiatePayment = async (req: Request, res: Response): Promise<void
 export const handlePaymentSuccess = async (req: Request, res: Response): Promise<void> => {
     try {
         const { txnid, mihpayid, status, hash, amount, productinfo, email, firstname } = req.body;
-        const db: any = getDatabase();
 
         // 1. Verify Hash
         // Formula: sha512(salt|status||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key)
@@ -74,29 +72,45 @@ export const handlePaymentSuccess = async (req: Request, res: Response): Promise
         }
 
         // 2. Update Order Status
-        await db.execute(
-            `UPDATE orders SET status = 'success' WHERE transaction_id = ?`,
-            [txnid]
-        );
+        // txnid is doc id
+        await updateDoc('orders', txnid, {
+            status: 'success',
+            payment_id: mihpayid, // store gateway ID
+            updated_at: new Date()
+        });
 
         // 3. Grant Access (Insert into user_purchases)
-        // We need to retrieve the user_id and article_ids associated with this transaction.
-        // For simplicity in this flow, assuming 'productinfo' stores a comma-separated list of article IDs.
-        // Or query the 'orders' table if we linked it properly.
-        // Let's fetch the order to get user_id.
-        const [orders]: any = await db.execute('SELECT user_id, id as order_id FROM orders WHERE transaction_id = ?', [txnid]);
+        // Retrieve order to get user_id (if not passed in UDFs, assuming we fetch from DB)
+        const order: any = await getDoc('orders', txnid);
 
-        if (orders.length > 0) {
-            const userId = orders[0].user_id; // PayU might not pass user_id back directly unless in UDF
+        if (order) {
+            const userId = order.user_id;
             const articleIds = productinfo.split(','); // Assuming productinfo = "article1_id,article2_id"
 
             for (const articleId of articleIds) {
-                // Check if valid UUID to prevent injection
-                if (articleId.length > 10) {
-                    await db.execute(
-                        `INSERT IGNORE INTO user_purchases (user_id, article_id) VALUES (?, ?)`,
-                        [userId, articleId.trim()]
-                    );
+                const aid = articleId.trim();
+                // Check if valid UUID/ID length to prevent junk keys
+                if (aid.length > 5) {
+                    // Create purchase record
+                    // Use a unique ID or auto-ID. Since one user can buy multiple times?
+                    // Actually, if they buy same book twice, it's fine.
+                    // But we want to query "does user own X?".
+                    // Avoid duplicates?
+                    // Query existing first?
+                    // Firestore reads are cheap enough for check.
+                    const existing = await executeQuery('user_purchases', [
+                        { field: 'user_id', op: '==', value: userId },
+                        { field: 'article_id', op: '==', value: aid }
+                    ]);
+
+                    if (existing.length === 0) {
+                        await createDoc('user_purchases', {
+                            user_id: userId,
+                            article_id: aid,
+                            order_id: txnid,
+                            purchased_at: new Date()
+                        });
+                    }
                 }
             }
         }
@@ -105,7 +119,7 @@ export const handlePaymentSuccess = async (req: Request, res: Response): Promise
         res.redirect(`${FRONTEND_URL}/checkout/success?txnid=${txnid}`);
 
     } catch (error: any) {
-        console.error('Payment success handler error:', error);
+        logger.error('Payment success handler error:', error);
         res.redirect(`${FRONTEND_URL}/checkout/failed?reason=exception`);
     }
 };
@@ -113,16 +127,15 @@ export const handlePaymentSuccess = async (req: Request, res: Response): Promise
 export const handlePaymentFailure = async (req: Request, res: Response): Promise<void> => {
     try {
         const { txnid } = req.body;
-        const db: any = getDatabase();
 
-        await db.execute(
-            `UPDATE orders SET status = 'failed' WHERE transaction_id = ?`,
-            [txnid]
-        );
+        await updateDoc('orders', txnid, {
+            status: 'failed',
+            updated_at: new Date()
+        });
 
         res.redirect(`${FRONTEND_URL}/checkout/failed`);
     } catch (error: any) {
-        console.error('Payment failure handler error:', error);
+        logger.error('Payment failure handler error:', error);
         res.redirect(`${FRONTEND_URL}/checkout/failed`);
     }
 };

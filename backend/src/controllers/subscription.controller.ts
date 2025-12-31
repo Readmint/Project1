@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
-import { getDatabase } from '../config/database';
 import { logger } from '../utils/logger';
 import SHA256 from 'crypto-js/sha256';
 import encHex from 'crypto-js/enc-hex';
+import { executeQuery, getDoc, createDoc, updateDoc, deleteDoc } from '../utils/firestore-helpers';
 
 // PayU Configuration Interface
 interface PayUConfig {
@@ -21,7 +21,7 @@ interface SubscriptionPlan {
   description: string;
   price_monthly: number;
   price_yearly: number;
-  features: string[];
+  features: string[] | string; // Handled as array or string in legacy, we prefer array
   duration: string;
 }
 
@@ -84,60 +84,7 @@ const getPayUConfig = (): PayUConfig => {
 
 export const getSubscriptionPlans = async (req: Request, res: Response): Promise<void> => {
   try {
-    const db = getDatabase();
-    let subscriptionPlans: SubscriptionPlan[];
-
-    if (db.collection) {
-      // Firebase - Get subscription plans
-      const plansSnapshot = await db.collection('subscription_plans').get();
-      subscriptionPlans = plansSnapshot.docs.map((doc: any) => ({
-        id: doc.id,
-        ...doc.data()
-      })) as SubscriptionPlan[];
-    } else {
-      // MySQL - Get subscription plans
-      const [rows]: any = await db.execute('SELECT * FROM subscription_plans ORDER BY price_monthly ASC');
-
-      // Fix the JSON parsing with better error handling
-      subscriptionPlans = rows.map((row: any) => {
-        let featuresArray: string[] = [];
-
-        try {
-          if (row.features) {
-            if (typeof row.features === 'string') {
-              // Check if it's already a JSON string
-              if (row.features.trim().startsWith('[') && row.features.trim().endsWith(']')) {
-                // Parse as JSON
-                featuresArray = JSON.parse(row.features);
-              } else if (row.features.includes(',')) {
-                // Split comma-separated string
-                featuresArray = row.features.split(',').map((f: string) => f.trim());
-              } else {
-                // Single feature
-                featuresArray = [row.features.trim()];
-              }
-            } else if (Array.isArray(row.features)) {
-              // Already an array
-              featuresArray = row.features;
-            }
-          }
-        } catch (error) {
-          console.warn(`⚠️ Failed to parse features for plan ${row.id}:`, row.features);
-          // Default features if parsing fails
-          featuresArray = ['Feature parsing error'];
-        }
-
-        return {
-          id: row.id,
-          name: row.name,
-          description: row.description,
-          price_monthly: row.price_monthly || 0,
-          price_yearly: row.price_yearly || 0,
-          features: featuresArray,
-          duration: row.duration || 'monthly'
-        };
-      }) as SubscriptionPlan[];
-    }
+    let subscriptionPlans: any[] = await executeQuery('subscription_plans', [], undefined, { field: 'price_monthly', dir: 'asc' });
 
     // If no plans in database, return default plans
     if (!subscriptionPlans || subscriptionPlans.length === 0) {
@@ -190,6 +137,19 @@ export const getSubscriptionPlans = async (req: Request, res: Response): Promise
           duration: 'monthly'
         }
       ];
+    } else {
+      // Ensure features parsing if it was stored as string
+      subscriptionPlans = subscriptionPlans.map(plan => {
+        let features = plan.features;
+        if (typeof features === 'string') {
+          try {
+            features = JSON.parse(features);
+          } catch (e) {
+            features = [features];
+          }
+        }
+        return { ...plan, features };
+      });
     }
 
     // Log for debugging
@@ -290,7 +250,6 @@ export const createPayUOrder = async (req: Request, res: Response): Promise<void
     console.log('📦 Hash String to send:', hashString);
 
     // Save order to database
-    const db = getDatabase();
     const orderData: PaymentOrder = {
       txnid: txnId,
       plan_id: planId,
@@ -304,19 +263,8 @@ export const createPayUOrder = async (req: Request, res: Response): Promise<void
     };
 
     try {
-      if (db.collection) {
-        // Firebase
-        await db.collection('payment_orders').doc(txnId).set(orderData);
-        console.log('💾 Order saved to Firebase');
-      } else {
-        // MySQL
-        await db.execute(
-          `INSERT INTO payment_orders (id, txnid, plan_id, user_id, amount, email, phone, firstname, status, created_at) 
-           VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
-          [txnId, planId, userId, amount, userEmail, phoneValue, firstNameValue, new Date()]
-        );
-        console.log('💾 Order saved to MySQL');
-      }
+      await createDoc('payment_orders', orderData, txnId);
+      console.log('💾 Order saved to Firebase');
     } catch (dbError: any) {
       console.error('⚠️ Database save error (continuing):', dbError.message);
       // Continue even if database save fails
@@ -402,64 +350,37 @@ export const verifyPayUPayment = async (req: Request, res: Response): Promise<vo
       match: calculatedHash === hash
     });
 
-    const db = getDatabase();
-
     if (calculatedHash === hash && status === 'success') {
       // Payment successful
       console.log('✅ Payment successful for transaction:', txnid);
 
       // Get order details from database
-      let orderData: any;
-
-      if (db.collection) {
-        const doc = await db.collection('payment_orders').doc(txnid).get();
-        orderData = doc.exists ? doc.data() : null;
-      } else {
-        const [rows]: any = await db.execute(
-          'SELECT * FROM payment_orders WHERE txnid = ?',
-          [txnid]
-        );
-        orderData = rows[0];
-      }
+      const orderData: any = await getDoc('payment_orders', txnid);
 
       if (orderData) {
         console.log('📋 Found order:', orderData.plan_id, 'for user:', orderData.user_id);
 
         // Update order status
-        if (db.collection) {
-          await db.collection('payment_orders').doc(txnid).update({
-            status: 'completed',
-            payment_date: new Date(addedon),
-            updated_at: new Date()
-          });
+        await updateDoc('payment_orders', txnid, {
+          status: 'completed',
+          payment_date: new Date(addedon || new Date()),
+          updated_at: new Date()
+        });
 
-          // Create subscription
-          const subscriptionData: UserSubscription = {
-            user_id: orderData.user_id,
-            plan_id: orderData.plan_id,
-            status: 'active',
-            payment_txn_id: txnid,
-            amount: parseFloat(amount),
-            start_date: new Date(),
-            end_date: calculateEndDate('monthly'),
-            created_at: new Date()
-          };
+        // Create subscription
+        const subscriptionData: UserSubscription = {
+          user_id: orderData.user_id,
+          plan_id: orderData.plan_id,
+          status: 'active',
+          payment_txn_id: txnid,
+          amount: parseFloat(amount),
+          start_date: new Date(),
+          end_date: calculateEndDate('monthly'),
+          created_at: new Date()
+        };
 
-          const subscriptionRef = await db.collection('user_subscriptions').add(subscriptionData);
-          console.log('✅ Subscription created with ID:', subscriptionRef.id);
-        } else {
-          await db.execute(
-            `UPDATE payment_orders SET status = 'completed', payment_date = ?, updated_at = ? WHERE txnid = ?`,
-            [new Date(addedon), new Date(), txnid]
-          );
-
-          await db.execute(
-            `INSERT INTO user_subscriptions (id, user_id, plan_id, status, payment_txn_id, amount, start_date, end_date, created_at)
-             VALUES (UUID(), ?, ?, 'active', ?, ?, ?, ?, ?)`,
-            [orderData.user_id, orderData.plan_id, txnid, amount, new Date(), calculateEndDate('monthly'), new Date()]
-          );
-          console.log('✅ Subscription created in MySQL');
-        }
+        const subscriptionRef = await createDoc('user_subscriptions', subscriptionData);
+        console.log('✅ Subscription created with ID:', subscriptionRef.id);
 
         // Return success response to PayU
         res.send('Payment successful. Redirecting...');
@@ -470,18 +391,12 @@ export const verifyPayUPayment = async (req: Request, res: Response): Promise<vo
     } else {
       // Payment failed
       console.error('❌ Payment failed for transaction:', txnid, 'Status:', status);
-      if (db.collection) {
-        await db.collection('payment_orders').doc(txnid).update({
-          status: 'failed',
-          error_message: error_Message || error,
-          updated_at: new Date()
-        });
-      } else {
-        await db.execute(
-          `UPDATE payment_orders SET status = 'failed', error_message = ?, updated_at = ? WHERE txnid = ?`,
-          [error_Message || error, new Date(), txnid]
-        );
-      }
+
+      await updateDoc('payment_orders', txnid, {
+        status: 'failed',
+        error_message: error_Message || error,
+        updated_at: new Date()
+      });
       res.send('Payment failed. Redirecting...');
     }
 
@@ -495,22 +410,10 @@ export const verifyPayUPayment = async (req: Request, res: Response): Promise<vo
 export const getPaymentStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const { txnid } = req.params;
-    const db = getDatabase();
 
     console.log('📊 Fetching payment status for:', txnid);
 
-    let paymentDetails;
-
-    if (db.collection) {
-      const doc = await db.collection('payment_orders').doc(txnid).get();
-      paymentDetails = doc.exists ? doc.data() : null;
-    } else {
-      const [rows]: any = await db.execute(
-        'SELECT * FROM payment_orders WHERE txnid = ?',
-        [txnid]
-      );
-      paymentDetails = rows[0];
-    }
+    const paymentDetails: any = await getDoc('payment_orders', txnid);
 
     if (!paymentDetails) {
       res.status(404).json({
@@ -535,7 +438,7 @@ export const getPaymentStatus = async (req: Request, res: Response): Promise<voi
   }
 };
 
-// Webhook for PayU (optional but recommended)
+// Webhook for PayU
 export const payuWebhook = async (req: Request, res: Response): Promise<void> => {
   try {
     const postData = req.body;
@@ -552,12 +455,7 @@ export const payuWebhook = async (req: Request, res: Response): Promise<void> =>
     if (calculatedHash === postData.hash) {
       // Process webhook data
       console.log('✅ Webhook hash verified, processing...');
-
-      // Update your database here based on webhook data
-      // You might want to update payment status, send email notifications, etc.
-
       logger.info('PayU webhook processed successfully:', postData);
-
       res.status(200).send('OK');
     } else {
       console.error('❌ Webhook hash mismatch');
@@ -573,7 +471,6 @@ export const payuWebhook = async (req: Request, res: Response): Promise<void> =>
 export const getUserSubscriptions = async (req: Request, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
-    const db = getDatabase();
 
     if (!userId) {
       res.status(400).json({
@@ -585,75 +482,28 @@ export const getUserSubscriptions = async (req: Request, res: Response): Promise
 
     console.log('📊 Fetching subscriptions for user:', userId);
 
-    let subscriptions;
+    let subscriptions: any[] = await executeQuery('user_subscriptions', [{ field: 'user_id', op: '==', value: userId }]);
+    // Sort in memory by created_at desc
+    subscriptions.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-    if (db.collection) {
-      // Firebase - Get user subscriptions
-      const snapshot = await db.collection('user_subscriptions')
-        .where('user_id', '==', userId)
-        .orderBy('created_at', 'desc')
-        .get();
-      subscriptions = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+    // Get plan details for each subscription
+    if (subscriptions.length > 0) {
+      // Fetch all plans to join map
+      const plans = await executeQuery('subscription_plans', []);
+      const plansMap = new Map();
+      plans.forEach((p: any) => plansMap.set(p.id, p));
 
-      // Get plan details for each subscription
-      if (subscriptions.length > 0) {
-        const plansSnapshot = await db.collection('subscription_plans').get();
-        const plansMap = new Map();
-        plansSnapshot.docs.forEach((doc: any) => {
-          plansMap.set(doc.id, doc.data());
-        });
-
-        subscriptions = subscriptions.map((sub: any) => ({
-          ...sub,
-          plan_details: plansMap.get(sub.plan_id) || null
-        }));
-      }
-    } else {
-      // MySQL - Get user subscriptions with plan details
-      const [rows]: any = await db.execute(
-        `SELECT 
-          us.*,
-          sp.name as plan_name,
-          sp.description as plan_description,
-          sp.price_monthly,
-          sp.price_yearly,
-          sp.features as plan_features,
-          sp.duration as plan_duration,
-          CASE 
-            WHEN us.end_date IS NULL THEN 'active'
-            WHEN us.end_date > NOW() THEN 'active'
-            ELSE 'expired'
-          END as current_status
-         FROM user_subscriptions us
-         LEFT JOIN subscription_plans sp ON us.plan_id = sp.id
-         WHERE us.user_id = ?
-         ORDER BY us.created_at DESC`,
-        [userId]
-      );
-
-      subscriptions = rows.map((row: any) => {
-        let featuresArray: string[] = [];
-        try {
-          if (row.plan_features && typeof row.plan_features === 'string') {
-            featuresArray = JSON.parse(row.plan_features);
-          }
-        } catch (error) {
-          featuresArray = [];
-        }
-
-        return {
-          ...row,
-          plan_features: featuresArray,
-          status: row.current_status // Use calculated status
-        };
-      });
+      subscriptions = subscriptions.map((sub: any) => ({
+        ...sub,
+        plan_details: plansMap.get(sub.plan_id) || null
+      }));
     }
 
-    console.log(`✅ Found ${subscriptions?.length || 0} subscriptions for user`);
+    console.log(`✅ Found ${subscriptions.length} subscriptions for user`);
 
     res.status(200).json({
       status: 'success',
-      data: { subscriptions: subscriptions || [] }
+      data: { subscriptions: subscriptions }
     });
   } catch (error: any) {
     logger.error('Get user subscriptions error:', error);
@@ -668,7 +518,6 @@ export const getUserSubscriptions = async (req: Request, res: Response): Promise
 export const getCurrentSubscription = async (req: Request, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
-    const db = getDatabase();
 
     if (!userId) {
       res.status(400).json({
@@ -680,65 +529,26 @@ export const getCurrentSubscription = async (req: Request, res: Response): Promi
 
     console.log('🔍 Finding current subscription for user:', userId);
 
-    let currentSubscription;
+    let currentSubscription: any = null;
 
-    if (db.collection) {
-      // Firebase - Get active subscription
-      const snapshot = await db.collection('user_subscriptions')
-        .where('user_id', '==', userId)
-        .where('status', '==', 'active')
-        .orderBy('created_at', 'desc')
-        .limit(1)
-        .get();
+    // Fetch active subscriptions
+    const activeSubs = await executeQuery('user_subscriptions', [
+      { field: 'user_id', op: '==', value: userId },
+      { field: 'status', op: '==', value: 'active' }
+    ]);
 
-      if (!snapshot.empty) {
-        const subscriptionDoc = snapshot.docs[0];
-        currentSubscription = { id: subscriptionDoc.id, ...subscriptionDoc.data() };
+    // Sort desc by created_at
+    activeSubs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-        // Get plan details
-        const planDoc = await db.collection('subscription_plans').doc(currentSubscription.plan_id).get();
-        if (planDoc.exists) {
-          currentSubscription.plan_details = planDoc.data();
-        }
-        console.log('✅ Found active Firebase subscription');
+    if (activeSubs.length > 0) {
+      const sub: any = activeSubs[0];
+      currentSubscription = { ...sub };
+      // Fetch plan details
+      const plan = await getDoc('subscription_plans', sub.plan_id);
+      if (plan) {
+        currentSubscription.plan_details = plan;
       }
-    } else {
-      // MySQL - Get active subscription with plan details
-      const [rows]: any = await db.execute(
-        `SELECT 
-          us.*,
-          sp.name as plan_name,
-          sp.description as plan_description,
-          sp.price_monthly,
-          sp.price_yearly,
-          sp.features as plan_features,
-          sp.duration as plan_duration
-         FROM user_subscriptions us
-         LEFT JOIN subscription_plans sp ON us.plan_id = sp.id
-         WHERE us.user_id = ? 
-           AND us.status = 'active'
-           AND (us.end_date IS NULL OR us.end_date > NOW())
-         ORDER BY us.created_at DESC
-         LIMIT 1`,
-        [userId]
-      );
-
-      if (rows.length > 0) {
-        let featuresArray: string[] = [];
-        try {
-          if (rows[0].plan_features && typeof rows[0].plan_features === 'string') {
-            featuresArray = JSON.parse(rows[0].plan_features);
-          }
-        } catch (error) {
-          featuresArray = [];
-        }
-
-        currentSubscription = {
-          ...rows[0],
-          plan_features: featuresArray
-        };
-        console.log('✅ Found active MySQL subscription');
-      }
+      console.log('✅ Found active Firebase subscription');
     }
 
     res.status(200).json({
@@ -769,31 +579,13 @@ export const activateFreeSubscription = async (req: Request, res: Response): Pro
 
     console.log('🆓 Activating free subscription for user:', userId, 'plan:', planId);
 
-    const db = getDatabase();
-
     // Check if user already has an active subscription
-    let existingSubscription;
+    const activeSubs = await executeQuery('user_subscriptions', [
+      { field: 'user_id', op: '==', value: userId },
+      { field: 'status', op: '==', value: 'active' }
+    ]);
 
-    if (db.collection) {
-      // Firebase
-      const snapshot = await db.collection('user_subscriptions')
-        .where('user_id', '==', userId)
-        .where('status', '==', 'active')
-        .get();
-      existingSubscription = !snapshot.empty;
-    } else {
-      // MySQL
-      const [rows]: any = await db.execute(
-        `SELECT id FROM user_subscriptions 
-         WHERE user_id = ? 
-           AND status = 'active'
-           AND (end_date IS NULL OR end_date > NOW())`,
-        [userId]
-      );
-      existingSubscription = rows.length > 0;
-    }
-
-    if (existingSubscription) {
+    if (activeSubs.length > 0) {
       console.log('⚠️ User already has active subscription');
       res.status(400).json({
         status: 'error',
@@ -803,19 +595,7 @@ export const activateFreeSubscription = async (req: Request, res: Response): Pro
     }
 
     // Check if plan is free
-    let plan: any;
-    if (db.collection) {
-      const planDoc = await db.collection('subscription_plans').doc(planId).get();
-      if (planDoc.exists) {
-        plan = planDoc.data();
-      }
-    } else {
-      const [rows]: any = await db.execute(
-        'SELECT price_monthly FROM subscription_plans WHERE id = ?',
-        [planId]
-      );
-      plan = rows[0];
-    }
+    const plan: any = await getDoc('subscription_plans', planId);
 
     if (!plan) {
       console.error('❌ Plan not found:', planId);
@@ -845,17 +625,8 @@ export const activateFreeSubscription = async (req: Request, res: Response): Pro
       created_at: new Date()
     };
 
-    if (db.collection) {
-      const subscriptionRef = await db.collection('user_subscriptions').add(subscriptionData);
-      console.log('✅ Free subscription activated in Firebase:', subscriptionRef.id);
-    } else {
-      await db.execute(
-        `INSERT INTO user_subscriptions (id, user_id, plan_id, status, start_date, end_date, created_at)
-         VALUES (UUID(), ?, ?, 'active', ?, NULL, ?)`,
-        [userId, planId, new Date(), new Date()]
-      );
-      console.log('✅ Free subscription activated in MySQL');
-    }
+    const subscriptionRef = await createDoc('user_subscriptions', subscriptionData);
+    console.log('✅ Free subscription activated in Firebase:', subscriptionRef.id);
 
     res.status(200).json({
       status: 'success',
@@ -886,38 +657,8 @@ export const cancelSubscription = async (req: Request, res: Response): Promise<v
 
     console.log('🚫 Cancelling subscription:', subscriptionId, 'for user:', userId);
 
-    const db = getDatabase();
-
     // Verify ownership
-    let subscription: any;
-    if (db.collection) {
-      const doc = await db.collection('user_subscriptions').doc(subscriptionId).get();
-      if (doc.exists) {
-        subscription = doc.data();
-        if (subscription.user_id !== userId) {
-          console.error('❌ Unauthorized cancellation attempt');
-          res.status(403).json({
-            status: 'error',
-            message: 'Not authorized to cancel this subscription'
-          });
-          return;
-        }
-      }
-    } else {
-      const [rows]: any = await db.execute(
-        'SELECT * FROM user_subscriptions WHERE id = ? AND user_id = ?',
-        [subscriptionId, userId]
-      );
-      if (rows.length === 0) {
-        console.error('❌ Subscription not found');
-        res.status(404).json({
-          status: 'error',
-          message: 'Subscription not found'
-        });
-        return;
-      }
-      subscription = rows[0];
-    }
+    const subscription: any = await getDoc('user_subscriptions', subscriptionId);
 
     if (!subscription) {
       console.error('❌ Subscription not found');
@@ -928,22 +669,21 @@ export const cancelSubscription = async (req: Request, res: Response): Promise<v
       return;
     }
 
-    // Update subscription status
-    if (db.collection) {
-      await db.collection('user_subscriptions').doc(subscriptionId).update({
-        status: 'cancelled',
-        updated_at: new Date()
+    if (subscription.user_id !== userId) {
+      console.error('❌ Unauthorized cancellation attempt');
+      res.status(403).json({
+        status: 'error',
+        message: 'Not authorized to cancel this subscription'
       });
-      console.log('✅ Subscription cancelled in Firebase');
-    } else {
-      await db.execute(
-        `UPDATE user_subscriptions 
-         SET status = 'cancelled', updated_at = NOW()
-         WHERE id = ? AND user_id = ?`,
-        [subscriptionId, userId]
-      );
-      console.log('✅ Subscription cancelled in MySQL');
+      return;
     }
+
+    // Update subscription status
+    await updateDoc('user_subscriptions', subscriptionId, {
+      status: 'cancelled',
+      updated_at: new Date()
+    });
+    console.log('✅ Subscription cancelled in Firebase');
 
     res.status(200).json({
       status: 'success',
@@ -1021,28 +761,15 @@ export const getAuthorSubscriptionPlans = async (req: Request, res: Response): P
 export const getUserPaymentHistory = async (req: Request, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
-    const db = getDatabase();
 
     if (!userId) {
       res.status(400).json({ status: 'error', message: 'User ID required' });
       return;
     }
 
-    let history = [];
-
-    if (db.collection) {
-      const snapshot = await db.collection('payment_orders')
-        .where('user_id', '==', userId)
-        .orderBy('created_at', 'desc')
-        .get();
-      history = snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }));
-    } else {
-      const [rows]: any = await db.execute(
-        `SELECT * FROM payment_orders WHERE user_id = ? ORDER BY created_at DESC`,
-        [userId]
-      );
-      history = rows;
-    }
+    let history = await executeQuery('payment_orders', [{ field: 'user_id', op: '==', value: userId }]);
+    // Sort desc
+    history.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     res.status(200).json({
       status: 'success',
@@ -1081,5 +808,7 @@ export default {
   getUserSubscriptions,
   getCurrentSubscription,
   activateFreeSubscription,
-  cancelSubscription
+  cancelSubscription,
+  getAuthorSubscriptionPlans,
+  getUserPaymentHistory
 };

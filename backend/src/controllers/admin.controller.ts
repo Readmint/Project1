@@ -2,10 +2,11 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import { validationResult } from 'express-validator';
-import { getDatabase } from '../config/database';
+// import { getDatabase } from '../config/database';
 import { logger } from '../utils/logger';
 import nodemailer from 'nodemailer';
 import { sendEmail } from '../utils/mailer';
+import { executeQuery, getDoc, createDoc, updateDoc, deleteDoc, getCollection } from '../utils/firestore-helpers';
 
 // Helper for JWT signing
 const safeSign = (payload: object | string | Buffer, secretOrPrivateKey: jwt.Secret, options?: jwt.SignOptions): string => {
@@ -24,8 +25,6 @@ const generateOTP = (): string => {
     return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-const adminOtpStore = new Map();
-
 const createTransporter = () => {
     return nodemailer.createTransport({
         service: 'gmail',
@@ -39,12 +38,15 @@ const createTransporter = () => {
 // Helper to log admin actions
 const logAdminAction = async (adminId: string, action: string, targetType: string, targetId: string, details: any, ip: string = '') => {
     try {
-        const db: any = getDatabase();
-        await db.execute(
-            `INSERT INTO admin_audit_logs (id, admin_id, action, target_type, target_id, details, ip_address, created_at)
-             VALUES (UUID(), ?, ?, ?, ?, ?, ?, NOW())`,
-            [adminId, action, targetType, targetId, JSON.stringify(details), ip]
-        );
+        await createDoc('admin_audit_logs', {
+            admin_id: adminId,
+            action,
+            target_type: targetType,
+            target_id: targetId,
+            details: details, // Firestore handles objects
+            ip_address: ip,
+            created_at: new Date()
+        });
     } catch (err) {
         console.error('Failed to log admin action:', err);
     }
@@ -57,15 +59,14 @@ const logAdminAction = async (adminId: string, action: string, targetType: strin
 export const adminLogin = async (req: Request, res: Response): Promise<void> => {
     try {
         const { email, password } = req.body;
-        const db: any = getDatabase();
 
-        const [users]: any = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+        const users = await executeQuery('users', [{ field: 'email', op: '==', value: email }]);
         if (users.length === 0) {
             res.status(401).json({ status: 'error', message: 'Invalid credentials' });
             return;
         }
 
-        const user = users[0];
+        const user: any = users[0];
 
         if (user.role !== 'admin') {
             res.status(403).json({ status: 'error', message: 'Unauthorized access. Admin privileges required.' });
@@ -102,9 +103,8 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
 export const createAdmin = async (req: Request, res: Response): Promise<void> => {
     try {
         const { email, password, name } = req.body;
-        const db: any = getDatabase();
 
-        const [existingUsers]: any = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
+        const existingUsers = await executeQuery('users', [{ field: 'email', op: '==', value: email }]);
         if (existingUsers.length > 0) {
             res.status(409).json({ status: 'error', message: 'User already exists' });
             return;
@@ -112,14 +112,25 @@ export const createAdmin = async (req: Request, res: Response): Promise<void> =>
 
         const hashedPassword = await bcrypt.hash(password, 12);
 
-        await db.execute(
-            'INSERT INTO users (id, email, password, name, role, is_email_verified, created_at) VALUES (UUID(), ?, ?, ?, "admin", false, NOW())',
-            [email, hashedPassword, name || 'Admin User']
-        );
+        await createDoc('users', {
+            email,
+            password: hashedPassword,
+            name: name || 'Admin User',
+            role: 'admin',
+            is_email_verified: false,
+            created_at: new Date()
+        });
 
         const otp = generateOTP();
         const expiresAt = Date.now() + 10 * 60 * 1000;
-        adminOtpStore.set(email, { otp, expiresAt });
+
+        // Use Firestore for OTPs
+        await createDoc('admin_otps', {
+            email,
+            otp,
+            expires_at: new Date(expiresAt),
+            created_at: new Date()
+        });
 
         try {
             const transporter = createTransporter();
@@ -160,31 +171,40 @@ export const createAdmin = async (req: Request, res: Response): Promise<void> =>
 export const verifyAdmin = async (req: Request, res: Response): Promise<void> => {
     try {
         const { email, otp } = req.body;
-        const storedData = adminOtpStore.get(email);
 
-        if (!storedData) {
-            res.status(400).json({ status: 'error', message: 'OTP not found or expired' });
-            return;
-        }
+        // Check OTP in Firestore
+        // Get latest OTP for email
+        // Check if OTP exists and is valid
+        const otps = await executeQuery('admin_otps', [{ field: 'email', op: '==', value: email }]);
+        // Sort to get latest
+        otps.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-        if (Date.now() > storedData.expiresAt) {
-            adminOtpStore.delete(email);
-            res.status(400).json({ status: 'error', message: 'OTP has expired' });
-            return;
-        }
+        const latestOtp: any = otps.length > 0 ? otps[0] : null;
 
-        if (storedData.otp !== otp) {
+        if (!latestOtp || latestOtp.otp !== otp) {
             res.status(400).json({ status: 'error', message: 'Invalid OTP' });
             return;
         }
 
-        adminOtpStore.delete(email);
-        const db: any = getDatabase();
+        const expires = latestOtp.expires_at?.toDate ? latestOtp.expires_at.toDate().getTime() : new Date(latestOtp.expires_at).getTime();
 
-        await db.execute(
-            'UPDATE users SET is_email_verified = true WHERE email = ?',
-            [email]
-        );
+        if (Date.now() > expires) {
+            res.status(400).json({ status: 'error', message: 'OTP expired' });
+            return;
+        }
+
+        // OTP Valid. Remove it
+        await deleteDoc('admin_otps', latestOtp.id);
+
+        // Update User
+        const users = await executeQuery('users', [{ field: 'email', op: '==', value: email }]);
+        if (users.length > 0) {
+            const user: any = users[0];
+            // Update admin verified status if needed
+            if (!user.is_email_verified) {
+                await updateDoc('users', user.id, { is_email_verified: true });
+            }
+        }
 
         res.status(200).json({ status: 'success', message: 'Admin verified successfully. You may now login.' });
 
@@ -198,45 +218,70 @@ export const verifyAdmin = async (req: Request, res: Response): Promise<void> =>
 /*                                DASHBOARD APIS                              */
 /* -------------------------------------------------------------------------- */
 
+/* -------------------------------------------------------------------------- */
+/*                                DASHBOARD APIS                              */
+/* -------------------------------------------------------------------------- */
+
 export const getPlatformHealth = async (req: Request, res: Response): Promise<void> => {
     try {
-        const db: any = getDatabase();
+        // Fetch all users (only needed fields for stats ideally, but helper fetches all)
+        // Optimization: Create a specific aggregation collection or cloud function counter.
+        // For migration: Fetch all users.
+        const users = await executeQuery('users');
 
-        const [users]: any = await db.execute(`
-            SELECT 
-                COUNT(*) as total,
-                SUM(CASE WHEN role = 'reader' THEN 1 ELSE 0 END) as readers,
-                SUM(CASE WHEN role = 'author' THEN 1 ELSE 0 END) as authors,
-                SUM(CASE WHEN role = 'reviewer' THEN 1 ELSE 0 END) as reviewers,
-                SUM(CASE WHEN role = 'editor' THEN 1 ELSE 0 END) as editors,
-                SUM(CASE WHEN role = 'content_manager' THEN 1 ELSE 0 END) as content_managers
-            FROM users
-        `);
+        const totalUsers = users.length;
+        const readers = users.filter((u: any) => u.role === 'reader').length;
+        const authors = users.filter((u: any) => u.role === 'author').length;
+        const reviewers = users.filter((u: any) => u.role === 'reviewer').length;
+        const editors = users.filter((u: any) => u.role === 'editor').length;
+        const contentManagers = users.filter((u: any) => u.role === 'content_manager').length;
 
-        const [contentStats]: any = await db.execute(`
-             SELECT 
-                COUNT(*) as total_submissions,
-                SUM(CASE WHEN DATE(created_at) = CURDATE() THEN 1 ELSE 0 END) as submissions_today,
-                SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) as pending_reviews,
-                SUM(CASE WHEN status = 'under_review' THEN 1 ELSE 0 END) as in_review,
-                SUM(CASE WHEN status = 'published' AND DATE(updated_at) = CURDATE() THEN 1 ELSE 0 END) as published_today
-             FROM content
-        `);
+        const content = await executeQuery('content');
+        const totalSubmissions = content.length;
+        // Date checks in memory
+        const today = new Date().toISOString().split('T')[0];
+        const submissionsToday = content.filter((c: any) => c.created_at && new Date(c.created_at).toISOString().startsWith(today)).length;
+        const pendingReviews = content.filter((c: any) => c.status === 'submitted').length;
+        const inReview = content.filter((c: any) => c.status === 'under_review').length;
+        const publishedToday = content.filter((c: any) => c.status === 'published' && c.updated_at && new Date(c.updated_at).toISOString().startsWith(today)).length;
 
-        const [editorQueue]: any = await db.execute(`
-             SELECT COUNT(DISTINCT article_id) as count FROM editor_assignments WHERE status IN ('assigned', 'in_progress')
-        `);
+        // Editor Queue
+        // assignments status in assigned/in_progress. Distinct article_id.
+        const assignments = await executeQuery('editor_assignments', [
+            { field: 'status', op: 'in', value: ['assigned', 'in_progress'] } // helper assumes 'op' handled (custom helper supports 'in'?)
+            // If helper calls underlying firestore 'in', good.
+        ]);
+        // If helper does NOT support 'in', we fetch all or multiple queries.
+        // Assuming helper pass-through. If not supported, we might get error.
+        // Fallback: Fetch all assignments? Or separate queries.
+        // Let's assume helper handles 'in' or we fetch all and filter.
+        // Since my previous helper code showed `conditions` array, and Firestore `where` supports `in`.
+        // BUT my helper signature: `op: WhereFilterOp`. Firestore `WhereFilterOp` includes 'in'.
+        // So it should work.
 
-        const activeSessions = Math.floor(users[0].total * 0.15); // Simulated
+        const activeEditorArticles = new Set(assignments.map((a: any) => a.article_id)).size;
+
+        const activeSessions = Math.floor(totalUsers * 0.15);
 
         res.status(200).json({
             status: 'success',
             data: {
-                users: users[0],
-                sessions: { active: activeSessions, daily_active: Math.floor(users[0].total * 0.3) },
+                users: {
+                    total: totalUsers,
+                    readers,
+                    authors,
+                    reviewers,
+                    editors,
+                    content_managers: contentManagers
+                },
+                sessions: { active: activeSessions, daily_active: Math.floor(totalUsers * 0.3) },
                 content: {
-                    ...contentStats[0],
-                    editor_queue: editorQueue[0].count
+                    total_submissions: totalSubmissions,
+                    submissions_today: submissionsToday,
+                    pending_reviews: pendingReviews,
+                    in_review: inReview,
+                    published_today: publishedToday,
+                    editor_queue: activeEditorArticles
                 },
                 alerts: 0,
                 system_status: 'operational'
@@ -252,45 +297,49 @@ export const getPlatformHealth = async (req: Request, res: Response): Promise<vo
 export const getSystemUsers = async (req: Request, res: Response): Promise<void> => {
     try {
         const { role, search, page = 1, limit = 20 } = req.query;
-        const offset = (Number(page) - 1) * Number(limit);
-        const db: any = getDatabase();
+        // Fetch ALL users then filter/slice (In-Memory Pagination)
+        let users = await executeQuery('users');
 
-        let query = `SELECT id, name, email, role, created_at, is_email_verified FROM users WHERE 1=1`;
-        const params: any[] = [];
-
+        // Filter
         if (role && role !== 'all') {
-            query += ` AND role = ?`;
-            params.push(role);
+            users = users.filter((u: any) => u.role === role);
         }
 
         if (search) {
-            query += ` AND (name LIKE ? OR email LIKE ?)`;
-            params.push(`%${search}%`, `%${search}%`);
+            const s = (search as string).toLowerCase();
+            users = users.filter((u: any) =>
+                (u.name && u.name.toLowerCase().includes(s)) ||
+                (u.email && u.email.toLowerCase().includes(s))
+            );
         }
 
-        const safeLimit = Number(limit) || 20;
-        const safeOffset = (Number(page) - 1) * safeLimit;
+        // Sort
+        users.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-        query += ` ORDER BY created_at DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`;
-        // params.push(safeLimit, safeOffset); // Removed due to interpolation
-
-        const [users]: any = await db.execute(query, params);
-
-        let countQuery = `SELECT COUNT(*) as total FROM users WHERE 1=1`;
-        const countParams: any[] = [];
-        if (role && role !== 'all') { countQuery += ` AND role = ?`; countParams.push(role); }
-        if (search) { countQuery += ` AND (name LIKE ? OR email LIKE ?)`; countParams.push(`%${search}%`, `%${search}%`); }
-        const [total]: any = await db.execute(countQuery, countParams);
+        // Pagination
+        const total = users.length;
+        const pageNum = Number(page);
+        const limitNum = Number(limit);
+        const startIndex = (pageNum - 1) * limitNum;
+        const endIndex = startIndex + limitNum;
+        const paginatedUsers = users.slice(startIndex, endIndex);
 
         res.status(200).json({
             status: 'success',
             data: {
-                users,
+                users: paginatedUsers.map((u: any) => ({
+                    id: u.id,
+                    name: u.name,
+                    email: u.email,
+                    role: u.role,
+                    created_at: u.created_at,
+                    is_email_verified: u.is_email_verified
+                })),
                 pagination: {
-                    total: total[0].total,
-                    page: Number(page),
-                    limit: Number(limit),
-                    pages: Math.ceil(total[0].total / Number(limit))
+                    total,
+                    page: pageNum,
+                    limit: limitNum,
+                    pages: Math.ceil(total / limitNum)
                 }
             }
         });
@@ -305,31 +354,29 @@ export const manageUserRole = async (req: Request, res: Response): Promise<void>
     try {
         const { userId, newRole, action } = req.body;
         const adminId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
         if (action === 'update_role') {
-            await db.execute('UPDATE users SET role = ? WHERE id = ?', [newRole, userId]);
+            await updateDoc('users', userId, { role: newRole });
             await logAdminAction(adminId, 'UPDATE_ROLE', 'user', userId, { new_role: newRole });
         } else if (action === 'suspend') {
-            const [userRows]: any = await db.execute('SELECT profile_data FROM users WHERE id = ?', [userId]);
-            if (userRows.length > 0) {
-                let profile = userRows[0].profile_data || {};
+            const user: any = await getDoc('users', userId);
+            if (user) {
+                let profile = user.profile_data || {};
                 profile.suspended = true;
-                await db.execute('UPDATE users SET profile_data = ? WHERE id = ?', [JSON.stringify(profile), userId]);
+                await updateDoc('users', userId, { profile_data: profile });
             }
             await logAdminAction(adminId, 'SUSPEND_USER', 'user', userId, {});
 
         } else if (action === 'activate') {
-            const [userRows]: any = await db.execute('SELECT profile_data FROM users WHERE id = ?', [userId]);
-            if (userRows.length > 0) {
-                let profile = userRows[0].profile_data || {};
+            const user: any = await getDoc('users', userId);
+            if (user) {
+                let profile = user.profile_data || {};
                 delete profile.suspended;
-                await db.execute('UPDATE users SET profile_data = ? WHERE id = ?', [JSON.stringify(profile), userId]);
+                await updateDoc('users', userId, { profile_data: profile });
             }
             await logAdminAction(adminId, 'ACTIVATE_USER', 'user', userId, {});
         }
 
-        // ... (manageUserRole logic)
         res.status(200).json({ status: 'success', message: `User action ${action} completed` });
 
     } catch (error: any) {
@@ -342,7 +389,6 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
     try {
         const { name, email, password, role } = req.body;
         const adminId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
         // Basic validation
         if (!email || !password || !name) {
@@ -350,7 +396,7 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
             return;
         }
 
-        const [existing]: any = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
+        const existing = await executeQuery('users', [{ field: 'email', op: '==', value: email }]);
         if (existing.length > 0) {
             res.status(409).json({ status: 'error', message: 'User with this email already exists' });
             return;
@@ -360,15 +406,23 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
         const validRoles = ['reader', 'author', 'reviewer', 'editor', 'content_manager', 'admin'];
         const userRole = validRoles.includes(role) ? role : 'reader';
 
-        await db.execute(
-            'INSERT INTO users (id, email, password, name, role, is_email_verified, created_at, profile_data) VALUES (UUID(), ?, ?, ?, ?, true, NOW(), ?)',
-            [email, hashedPassword, name, userRole, JSON.stringify({})]
-        );
+        // Auto-generate ID or let Firestore do it?
+        // createDoc with data usually lets Firestore generate ID if not provided.
+        // But we need the ID for logging.
+        // We can create doc reference first? Or createDoc returns the creating logic result (usually ID)?
+        // My helper createDoc signature: `createDoc(collection, data, id?)`. Returns `Promise<string>`.
 
-        // Get the new ID to log
-        const [newUser]: any = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
+        const newUserId = await createDoc('users', {
+            email,
+            password: hashedPassword,
+            name,
+            role: userRole,
+            is_email_verified: true,
+            created_at: new Date(),
+            profile_data: {}
+        });
 
-        await logAdminAction(adminId, 'CREATE_USER', 'user', newUser[0].id, { name, email, role: userRole });
+        await logAdminAction(adminId, 'CREATE_USER', 'user', newUserId, { name, email, role: userRole });
 
         res.status(201).json({ status: 'success', message: 'User created successfully' });
 
@@ -378,60 +432,109 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
     }
 };
 
+
 export const getAllContent = async (req: Request, res: Response): Promise<void> => {
     try {
         const { status, search, category, page = 1, limit = 20 } = req.query;
-        const offset = (Number(page) - 1) * Number(limit);
-        const db: any = getDatabase();
 
-        let query = `
-            SELECT 
-                c.id, c.title, c.status, c.created_at, 
-                u.name as author, 
-                cat.name as category,
-                (SELECT status FROM plagiarism_reports WHERE article_id = c.id ORDER BY created_at DESC LIMIT 1) as plagiarism_status,
-                (SELECT similarity_summary FROM plagiarism_reports WHERE article_id = c.id ORDER BY created_at DESC LIMIT 1) as plagiarism_score
-            FROM content c
-            JOIN users u ON c.author_id = u.id
-            LEFT JOIN categories cat ON c.category_id = cat.category_id
-            WHERE 1=1
-        `;
-        const params: any[] = [];
+        // Fetch content
+        // Firestore filter by status directly if possible
+        let content: any[] = [];
+        if (status && status !== 'all') {
+            content = await executeQuery('content', [{ field: 'status', op: '==', value: status }]);
+        } else {
+            content = await executeQuery('content');
+        }
 
-        if (status && status !== 'all') { query += ` AND c.status = ?`; params.push(status); }
-        if (category && category !== 'all') { query += ` AND cat.name = ?`; params.push(category); }
-        if (search) { query += ` AND (c.title LIKE ? OR u.name LIKE ?)`; params.push(`%${search}%`, `%${search}%`); }
+        // Filter by category name (requires fetching categories to map Name -> ID? or fetching article then cat?)
+        // Article references category_id. The filter calls for category NAME.
+        // We either fetch all CAtegories to find ID, or fetch articles and then filter by joined category name.
 
-        const safeLimit = Number(limit) || 20;
-        const safeOffset = (Number(page) - 1) * safeLimit;
+        // Fetch authors and categories in parallel or lazy load?
+        // Let's fetch all users (authors) and categories for join map if dataset small.
+        // Or fetch per item (N+1).
+        // Optimization: Fetch unique Author IDs from content list.
+        const authorIds = [...new Set(content.map((c: any) => c.author_id))];
+        const categoryIds = [...new Set(content.map((c: any) => c.category_id))].filter(Boolean);
 
-        query += ` ORDER BY c.created_at DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`;
-        // params.push(safeLimit, safeOffset); // Removed due to interpolation
-
-        const [content]: any = await db.execute(query, params);
-
-        let countQuery = `SELECT COUNT(*) as total FROM content c JOIN users u ON c.author_id = u.id LEFT JOIN categories cat ON c.category_id = cat.category_id WHERE 1=1`;
-        const countParams: any[] = [];
-        if (status && status !== 'all') { countQuery += ` AND c.status = ?`; countParams.push(status); }
-        if (category && category !== 'all') { countQuery += ` AND cat.name = ?`; countParams.push(category); }
-        if (search) { countQuery += ` AND (c.title LIKE ? OR u.name LIKE ?)`; countParams.push(`%${search}%`, `%${search}%`); }
-
-        const [total]: any = await db.execute(countQuery, countParams);
-
-        const formattedContent = content.map((item: any) => ({
-            ...item,
-            plagiarism_score: item.plagiarism_score ? (typeof item.plagiarism_score === 'string' ? JSON.parse(item.plagiarism_score) : item.plagiarism_score) : null
+        // Fetch authors
+        // executeQuery with 'in' (limit 10) or Promise.all(getDoc).
+        // Promise.all is robust.
+        const authorMap = new Map();
+        await Promise.all(authorIds.map(async (uid) => {
+            if (!uid) return;
+            const u: any = await getDoc('users', uid);
+            if (u) authorMap.set(uid, u.name);
         }));
+
+        const categoryMap = new Map();
+        await Promise.all(categoryIds.map(async (cid) => {
+            if (!cid) return;
+            const c: any = await getDoc('categories', cid);
+            if (c) categoryMap.set(cid, c.name);
+        }));
+
+        // Get Plagiarism Reports (Latest per article)
+        // Optimization: Fetch all reports for these article IDs? Or one by one.
+        const plagiarismMap = new Map();
+        await Promise.all(content.map(async (c: any) => {
+            const reports = await executeQuery('plagiarism_reports', [{ field: 'article_id', op: '==', value: c.id }]);
+            // Sort to get latest
+            reports.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            if (reports.length > 0) {
+                plagiarismMap.set(c.id, reports[0]);
+            }
+        }));
+
+        // Map data
+        let formattedContent = content.map((c: any) => ({
+            id: c.id,
+            title: c.title,
+            status: c.status,
+            created_at: c.created_at,
+            author: authorMap.get(c.author_id) || 'Unknown',
+            category: categoryMap.get(c.category_id) || 'Uncategorized',
+            plagiarism_status: plagiarismMap.get(c.id)?.status || null,
+            plagiarism_score: plagiarismMap.get(c.id)?.similarity_summary
+                ? (typeof plagiarismMap.get(c.id).similarity_summary === 'string'
+                    ? JSON.parse(plagiarismMap.get(c.id).similarity_summary)
+                    : plagiarismMap.get(c.id).similarity_summary)
+                : null
+        }));
+
+        // Apply remaining filters (Search, Category matches)
+        if (category && category !== 'all') {
+            formattedContent = formattedContent.filter((c: any) => c.category === category);
+        }
+
+        if (search) {
+            const s = (search as string).toLowerCase();
+            formattedContent = formattedContent.filter((c: any) =>
+                (c.title && c.title.toLowerCase().includes(s)) ||
+                (c.author && c.author.toLowerCase().includes(s))
+            );
+        }
+
+        // Sort
+        formattedContent.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+        // Pagination
+        const total = formattedContent.length;
+        const pageNum = Number(page);
+        const limitNum = Number(limit);
+        const startIndex = (pageNum - 1) * limitNum;
+        const endIndex = startIndex + limitNum;
+        const paginated = formattedContent.slice(startIndex, endIndex);
 
         res.status(200).json({
             status: 'success',
             data: {
-                content: formattedContent,
+                content: paginated,
                 pagination: {
-                    total: total[0].total,
-                    page: Number(page),
-                    limit: Number(limit),
-                    pages: Math.ceil(total[0].total / Number(limit))
+                    total: total,
+                    page: pageNum,
+                    limit: limitNum,
+                    pages: Math.ceil(total / limitNum)
                 }
             }
         });
@@ -446,19 +549,20 @@ export const adminContentAction = async (req: Request, res: Response): Promise<v
     try {
         const { articleId, action, notes } = req.body;
         const adminId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
         if (action === 'approve') {
-            await db.execute("UPDATE content SET status = 'approved' WHERE id = ?", [articleId]);
+            await updateDoc('content', articleId, { status: 'approved' });
             await logAdminAction(adminId, 'APPROVE_CONTENT', 'article', articleId, { notes });
         } else if (action === 'reject') {
-            await db.execute("UPDATE content SET status = 'rejected' WHERE id = ?", [articleId]);
+            await updateDoc('content', articleId, { status: 'rejected' });
             await logAdminAction(adminId, 'REJECT_CONTENT', 'article', articleId, { notes });
         } else if (action === 'takedown') {
-            await db.execute("UPDATE content SET status = 'rejected' WHERE id = ?", [articleId]);
+            await updateDoc('content', articleId, { status: 'rejected' }); // or 'takedown'
             await logAdminAction(adminId, 'TAKEDOWN_CONTENT', 'article', articleId, { notes });
         } else if (action === 'rescan') {
             await logAdminAction(adminId, 'FORCE_RESCAN', 'article', articleId, { notes });
+            // Logic to trigger scan? usually separate service or just status reset?
+            // Existing code only logged action. Keeping as is.
         }
 
         res.status(200).json({ status: 'success', message: `Content action ${action} completed` });
@@ -472,51 +576,72 @@ export const adminContentAction = async (req: Request, res: Response): Promise<v
 export const getPlagiarismMonitor = async (req: Request, res: Response): Promise<void> => {
     try {
         const { status, timeframe, page = 1, limit = 20 } = req.query;
-        const offset = (Number(page) - 1) * Number(limit);
-        const db: any = getDatabase();
+        // status: 'pending_check' or 'checked'
 
-        let query = `
-            SELECT 
-                c.id as article_id, 
-                c.title, 
-                u.name as author_name,
-                ra.reviewer_id,
-                ru.name as reviewer_name,
-                pr.id as report_id,
-                pr.similarity_summary,
-                pr.created_at as check_date,
-                pr.run_by,
-                (CASE WHEN pr.id IS NOT NULL THEN 'checked' ELSE 'pending' END) as check_status
-            FROM content c
-            JOIN users u ON c.author_id = u.id
-            LEFT JOIN reviewer_assignments ra ON c.id = ra.article_id AND ra.status IN ('assigned', 'completed')
-            LEFT JOIN users ru ON ra.reviewer_id = ru.id
-            LEFT JOIN (
-                SELECT * FROM plagiarism_reports WHERE id IN (
-                    SELECT MAX(id) FROM plagiarism_reports GROUP BY article_id
-                )
-            ) pr ON c.id = pr.article_id
-            WHERE 1=1
-        `;
+        const content = await executeQuery('content');
 
-        const params: any[] = [];
+        let monitorData = await Promise.all(content.map(async (c: any) => {
+            // Check reports
+            const reports = await executeQuery('plagiarism_reports', [{ field: 'article_id', op: '==', value: c.id }]);
+            reports.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+            const latestReport: any = reports.length > 0 ? reports[0] : null;
+            const hasReport = !!latestReport;
+
+            // Check reviewer assignment
+            const assignments = await executeQuery('reviewer_assignments', [
+                { field: 'article_id', op: '==', value: c.id }
+            ]);
+            // Filter assigned/completed
+            const activeAssign: any = assignments.find((a: any) => ['assigned', 'completed'].includes(a.status));
+
+            let authorName = 'Unknown';
+            let reviewerName: string | null = null; // Explicitly type as string | null
+
+            if (c.author_id) {
+                const u: any = await getDoc('users', c.author_id);
+                if (u) authorName = u.name;
+            }
+            if (activeAssign && activeAssign.reviewer_id) {
+                const r: any = await getDoc('users', activeAssign.reviewer_id);
+                if (r) reviewerName = r.name;
+            }
+
+            return {
+                article_id: c.id,
+                title: c.title,
+                author_name: authorName,
+                reviewer_id: activeAssign ? activeAssign.reviewer_id : null,
+                reviewer_name: reviewerName,
+                report_id: latestReport ? latestReport.id : null,
+                similarity_summary: latestReport ? latestReport.similarity_summary : null,
+                check_date: latestReport ? latestReport.created_at : null,
+                run_by: latestReport ? latestReport.run_by : null,
+                check_status: hasReport ? 'checked' : 'pending',
+                updated_at: c.updated_at
+            };
+        }));
+
+        // Filter
         if (status === 'pending_check') {
-            query += ` AND pr.id IS NULL`;
+            monitorData = monitorData.filter((d: any) => d.check_status === 'pending');
         } else if (status === 'checked') {
-            query += ` AND pr.id IS NOT NULL`;
+            monitorData = monitorData.filter((d: any) => d.check_status === 'checked');
         }
 
-        const safeLimit = Number(limit) || 20;
-        const safeOffset = (Number(page) - 1) * safeLimit;
+        // Sort
+        monitorData.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 
-        query += ` ORDER BY c.updated_at DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`;
-        // params.push(safeLimit, safeOffset); // Removed due to interpolation
+        // Pagination
+        const total = monitorData.length;
+        const pageNum = Number(page);
+        const limitNum = Number(limit);
+        const startIndex = (pageNum - 1) * limitNum;
+        const endIndex = startIndex + limitNum;
+        const paginated = monitorData.slice(startIndex, endIndex);
 
-        const [reports]: any = await db.execute(query, params);
-        const [countTotal]: any = await db.execute(`SELECT COUNT(*) as total FROM content c`);
-
-        const formatted = reports.map((r: any) => {
+        // Format similarity
+        const formatted = paginated.map((r: any) => {
             let similarity = 0;
             if (r.similarity_summary) {
                 const s = typeof r.similarity_summary === 'string' ? JSON.parse(r.similarity_summary) : r.similarity_summary;
@@ -534,10 +659,10 @@ export const getPlagiarismMonitor = async (req: Request, res: Response): Promise
             data: {
                 monitor: formatted,
                 pagination: {
-                    total: countTotal[0].total,
-                    page: Number(page),
-                    limit: Number(limit),
-                    pages: Math.ceil(countTotal[0].total / Number(limit))
+                    total,
+                    page: pageNum,
+                    limit: limitNum,
+                    pages: Math.ceil(total / limitNum)
                 }
             }
         });
@@ -552,12 +677,20 @@ export const verifyPlagiarismReport = async (req: Request, res: Response): Promi
     try {
         const { reportId, action, notes } = req.body;
         const adminId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
         if (action === 'escalate') {
-            await db.execute("INSERT INTO incidents (id, title, description, status, priority, submission_id, reported_by) VALUES (UUID(), ?, ?, 'open', 'high', (SELECT article_id FROM plagiarism_reports WHERE id=?), ?)",
-                ['Plagiarism Escalation', `Escalated by admin. Notes: ${notes}`, reportId, adminId]
-            );
+            const report: any = await getDoc('plagiarism_reports', reportId);
+            if (report) {
+                await createDoc('incidents', {
+                    title: 'Plagiarism Escalation',
+                    description: `Escalated by admin. Notes: ${notes}`,
+                    status: 'open',
+                    priority: 'high',
+                    submission_id: report.article_id, // Fetch from report
+                    reported_by: adminId,
+                    created_at: new Date()
+                });
+            }
         }
 
         await logAdminAction(adminId, 'VERIFY_PLAGIARISM', 'report', reportId, { action, notes });
@@ -569,50 +702,62 @@ export const verifyPlagiarismReport = async (req: Request, res: Response): Promi
     }
 };
 
+
 export const getAuditLogs = async (req: Request, res: Response): Promise<void> => {
     try {
         const { adminId, action, page = 1, limit = 50 } = req.query;
-        const offset = (Number(page) - 1) * Number(limit);
-        const db: any = getDatabase();
 
-        let query = `
-            SELECT 
-                al.*,
-                u.name as admin_name,
-                u.email as admin_email
-            FROM admin_audit_logs al
-            JOIN users u ON al.admin_id = u.id
-            WHERE 1=1
-        `;
-        const params: any[] = [];
+        let logs: any[] = [];
+        const filters: any[] = [];
 
-        if (adminId) { query += ` AND al.admin_id = ?`; params.push(adminId); }
-        if (action) { query += ` AND al.action = ?`; params.push(action); }
+        if (adminId) {
+            filters.push({ field: 'admin_id', op: '==', value: adminId });
+        }
+        if (action) {
+            filters.push({ field: 'action', op: '==', value: action });
+        }
 
-        const safeLimit = Number(limit) || 50;
-        const safeOffset = (Number(page) - 1) * safeLimit;
+        // executeQuery can handle multiple filters if they are equality checks on different fields
+        // For more complex queries (e.g., range queries or OR conditions), in-memory filtering might be needed.
+        // Assuming executeQuery can handle multiple '==' filters for now.
+        logs = await executeQuery('admin_audit_logs', filters);
 
-        query += ` ORDER BY al.created_at DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`;
-        // params.push(safeLimit, safeOffset); // Removed due to interpolation
+        // Sort by created_at descending first to ensure consistent pagination
+        logs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-        const [logs]: any = await db.execute(query, params);
+        // Fetch Admin Names
+        const adminIds = [...new Set(logs.map((l: any) => l.admin_id).filter(Boolean))]; // Filter out null/undefined admin_id
+        const adminMap = new Map();
+        await Promise.all(adminIds.map(async (uid) => {
+            const u: any = await getDoc('users', uid);
+            if (u) adminMap.set(uid, u);
+        }));
 
-        let countQuery = `SELECT COUNT(*) as total FROM admin_audit_logs al WHERE 1=1`;
-        const countParams: any[] = [];
-        if (adminId) { countQuery += ` AND al.admin_id = ?`; countParams.push(adminId); }
-        if (action) { countQuery += ` AND al.action = ?`; countParams.push(action); }
+        // Format
+        const formattedLogs = logs.map((l: any) => ({
+            ...l,
+            admin_name: adminMap.get(l.admin_id)?.name || 'Unknown',
+            admin_email: adminMap.get(l.admin_id)?.email || 'Unknown',
+            details: typeof l.details === 'string' ? JSON.parse(l.details) : l.details
+        }));
 
-        const [total]: any = await db.execute(countQuery, countParams);
+        // Pagination
+        const total = formattedLogs.length;
+        const pageNum = Number(page);
+        const limitNum = Number(limit);
+        const startIndex = (pageNum - 1) * limitNum;
+        const endIndex = startIndex + limitNum;
+        const paginated = formattedLogs.slice(startIndex, endIndex);
 
         res.status(200).json({
             status: 'success',
             data: {
-                logs,
+                logs: paginated,
                 pagination: {
-                    total: total[0].total,
-                    page: Number(page),
-                    limit: Number(limit),
-                    pages: Math.ceil(total[0].total / Number(limit))
+                    total,
+                    page: pageNum,
+                    limit: limitNum,
+                    pages: Math.ceil(total / limitNum)
                 }
             }
         });
@@ -623,8 +768,6 @@ export const getAuditLogs = async (req: Request, res: Response): Promise<void> =
     }
 };
 
-// ... existing exports
-
 /* -------------------------------------------------------------------------- */
 /*                            INCIDENT MANAGEMENT                             */
 /* -------------------------------------------------------------------------- */
@@ -632,47 +775,57 @@ export const getAuditLogs = async (req: Request, res: Response): Promise<void> =
 export const getIncidents = async (req: Request, res: Response): Promise<void> => {
     try {
         const { status, priority, page = 1, limit = 20 } = req.query;
-        const offset = (Number(page) - 1) * Number(limit);
-        const db: any = getDatabase();
 
-        let query = `
-            SELECT i.*, 
-                   u.name as reporter_name, 
-                   au.name as assignee_name
-            FROM incidents i
-            LEFT JOIN users u ON i.reported_by = u.id
-            LEFT JOIN users au ON i.assigned_to = au.id
-            WHERE 1=1
-        `;
-        const params: any[] = [];
+        // Fetch incidents
+        let incidents: any[] = await executeQuery('incidents');
 
-        if (status && status !== 'all') { query += ` AND i.status = ?`; params.push(status); }
-        if (priority && priority !== 'all') { query += ` AND i.priority = ?`; params.push(priority); }
+        // Filters
+        if (status && status !== 'all') {
+            incidents = incidents.filter((i: any) => i.status === status);
+        }
+        if (priority && priority !== 'all') {
+            incidents = incidents.filter((i: any) => i.priority === priority);
+        }
 
-        const safeLimit = Number(limit) || 20;
-        const safeOffset = (Number(page) - 1) * safeLimit;
+        // Sort by created_at descending first to ensure consistent pagination
+        incidents.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-        query += ` ORDER BY i.created_at DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`;
-        // params.push(safeLimit, safeOffset); // Removed due to interpolation
+        // Fetch Reporters & Assignees
+        const userIds = new Set<string>();
+        incidents.forEach((i: any) => {
+            if (i.reported_by) userIds.add(i.reported_by);
+            if (i.assigned_to) userIds.add(i.assigned_to);
+        });
 
-        const [incidents]: any = await db.execute(query, params);
+        const userMap = new Map();
+        await Promise.all(Array.from(userIds).map(async (uid) => {
+            const u: any = await getDoc('users', uid);
+            if (u) userMap.set(uid, u.name);
+        }));
 
-        let countQuery = `SELECT COUNT(*) as total FROM incidents i WHERE 1=1`;
-        const countParams: any[] = [];
-        if (status && status !== 'all') { countQuery += ` AND i.status = ?`; countParams.push(status); }
-        if (priority && priority !== 'all') { countQuery += ` AND i.priority = ?`; countParams.push(priority); }
+        const formattedIncidents = incidents.map((i: any) => ({
+            ...i,
+            reporter_name: userMap.get(i.reported_by) || 'Unknown',
+            assignee_name: userMap.get(i.assigned_to) || null
+        }));
 
-        const [total]: any = await db.execute(countQuery, countParams);
+        // Pagination
+        const total = formattedIncidents.length;
+        const pageNum = Number(page);
+        const limitNum = Number(limit);
+        const startIndex = (pageNum - 1) * limitNum;
+        const endIndex = startIndex + limitNum;
+        const paginated = formattedIncidents.slice(startIndex, endIndex);
 
         res.status(200).json({
             status: 'success',
             data: {
-                incidents,
+                incidents: paginated,
                 pagination: {
-                    total: total[0].total,
-                    page: Number(page),
-                    limit: Number(limit),
-                    pages: Math.ceil(total[0].total / Number(limit))
+                    total,
+                    page: pageNum,
+                    limit: limitNum,
+                    pages: Math.ceil(total / limitNum)
                 }
             }
         });
@@ -686,13 +839,16 @@ export const createIncident = async (req: Request, res: Response): Promise<void>
     try {
         const { title, description, priority, relatedSubmissionId } = req.body;
         const adminId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
-        await db.execute(
-            `INSERT INTO incidents (id, title, description, priority, status, submission_id, reported_by, created_at) 
-             VALUES (UUID(), ?, ?, ?, 'open', ?, ?, NOW())`,
-            [title, description, priority || 'medium', relatedSubmissionId || null, adminId]
-        );
+        await createDoc('incidents', {
+            title,
+            description,
+            priority: priority || 'medium',
+            status: 'open',
+            submission_id: relatedSubmissionId || null,
+            reported_by: adminId,
+            created_at: new Date()
+        });
 
         await logAdminAction(adminId, 'CREATE_INCIDENT', 'incident', 'new', { title });
 
@@ -707,20 +863,15 @@ export const updateIncident = async (req: Request, res: Response): Promise<void>
     try {
         const { incidentId, status, priority, assignedTo, notes } = req.body;
         const adminId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
-        let query = "UPDATE incidents SET updated_at = NOW()";
-        const params: any[] = [];
+        const updates: any = { updated_at: new Date() };
+        if (status) updates.status = status;
+        if (priority) updates.priority = priority;
+        if (assignedTo) updates.assigned_to = assignedTo;
+        if (notes) updates.resolution_notes = notes;
 
-        if (status) { query += ", status = ?"; params.push(status); }
-        if (priority) { query += ", priority = ?"; params.push(priority); }
-        if (assignedTo) { query += ", assigned_to = ?"; params.push(assignedTo); }
-        if (notes) { query += ", resolution_notes = ?"; params.push(notes); }
+        await updateDoc('incidents', incidentId, updates);
 
-        query += " WHERE id = ?";
-        params.push(incidentId);
-
-        await db.execute(query, params);
         await logAdminAction(adminId, 'UPDATE_INCIDENT', 'incident', incidentId, { status, priority, assignedTo });
 
         res.status(200).json({ status: 'success', message: 'Incident updated' });
@@ -730,37 +881,39 @@ export const updateIncident = async (req: Request, res: Response): Promise<void>
     }
 };
 
+// Helper for promise all check
+const Promise_allCheck = async (promises: Promise<any>[]) => {
+    return Promise.allSettled(promises);
+}
+
 export const createAnnouncement = async (req: Request, res: Response): Promise<void> => {
     try {
         const { title, message, targetRole } = req.body;
         const adminId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
         // 1. Log in communications (Broadcast record)
-        await db.execute(
-            `INSERT INTO communications (id, sender_id, receiver_id, message, type, entity_type, entity_id, is_read, created_at)
-             VALUES (UUID(), ?, ?, ?, 'system', 'announcement', NULL, false, NOW())`,
-            [adminId, targetRole || 'all', JSON.stringify({ title, body: message })]
-        );
+        await createDoc('communications', {
+            sender_id: adminId,
+            receiver_id: targetRole || 'all',
+            message: { title, body: message }, // Store as object
+            type: 'system',
+            entity_type: 'announcement',
+            entity_id: null,
+            is_read: false,
+            created_at: new Date()
+        });
 
         // 2. Fetch recipients
-        let query = "SELECT id, email, name FROM users WHERE 1=1";
-        const params: any[] = [];
+        let recipients: any[] = [];
         if (targetRole && targetRole !== 'all') {
-            query += " AND role = ?";
-            params.push(targetRole);
+            recipients = await executeQuery('users', [{ field: 'role', op: '==', value: targetRole }]);
         } else {
-            // If 'all', we might want to target mainly content creators/consumers? 
-            // User said "all the authors". Let's stick to 'author' if not specified, or all if explicit.
-            // But usually 'all authors' means role='author'.
-            query += " AND role = 'author'";
+            // Original logic: if targetRole is 'all' or not specified, default to 'author'
+            recipients = await executeQuery('users', [{ field: 'role', op: '==', value: 'author' }]);
         }
-
-        const [recipients]: any = await db.execute(query, params);
 
         if (recipients.length > 0) {
             // 3. Send Emails (Batch / Loop)
-            // Note: In production, use a queue (Bull/RabbitMQ). Here, await all promises.
             const emailPromises = recipients.map((user: any) =>
                 sendEmail(
                     user.email,
@@ -776,14 +929,16 @@ export const createAnnouncement = async (req: Request, res: Response): Promise<v
             );
 
             // 4. Create In-App Notifications
-            // Optimization: Bulk insert if driver supports it, or loop. 
-            // MySQL2 execute doesn't support bulk easily without building big string. Loop is safer for now.
             const notifPromises = recipients.map((user: any) =>
-                db.execute(
-                    `INSERT INTO notifications (id, user_id, type, title, message, link, is_read, created_at)
-                     VALUES (UUID(), ?, 'announcement', ?, ?, '/dashboard', false, NOW())`,
-                    [user.id, title, message]
-                )
+                createDoc('notifications', {
+                    user_id: user.id,
+                    type: 'announcement',
+                    title,
+                    message,
+                    link: '/dashboard',
+                    is_read: false,
+                    created_at: new Date()
+                })
             );
 
             await Promise_allCheck([...emailPromises, ...notifPromises]);
@@ -799,11 +954,9 @@ export const createAnnouncement = async (req: Request, res: Response): Promise<v
     }
 };
 
-// Helper to wait for all but not fail if one fails (allSettled equivalent)
-const Promise_allCheck = async (promises: Promise<any>[]) => {
-    const results = await Promise.allSettled(promises);
-    return results;
-};
+/* -------------------------------------------------------------------------- */
+/*                              SYSTEM SETTINGS                               */
+/* -------------------------------------------------------------------------- */
 
 /* -------------------------------------------------------------------------- */
 /*                              SYSTEM SETTINGS                               */
@@ -811,15 +964,11 @@ const Promise_allCheck = async (promises: Promise<any>[]) => {
 
 export const getSystemSettings = async (req: Request, res: Response): Promise<void> => {
     try {
-        const db: any = getDatabase();
-        const [rows]: any = await db.execute('SELECT setting_key, setting_value FROM system_settings');
+        const settingsDocs = await executeQuery('system_settings');
+        const config: any = settingsDocs.length > 0 ? settingsDocs[0] : {};
+        if (config.id) delete config.id;
 
-        const settings: any = {};
-        rows.forEach((row: any) => {
-            settings[row.setting_key] = row.setting_value; // Assuming JSON column parsing handled by driver or manual
-        });
-
-        res.status(200).json({ status: 'success', data: settings });
+        res.status(200).json({ status: 'success', data: config });
     } catch (error: any) {
         logger.error('Get system settings error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to fetch settings' });
@@ -828,21 +977,16 @@ export const getSystemSettings = async (req: Request, res: Response): Promise<vo
 
 export const updateSystemSettings = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { settings } = req.body; // Expects { key: value, key2: value2 }
+        const { settings } = req.body;
         const adminId = (req as any).user?.userId;
-        const db: any = getDatabase();
 
-        // Use transaction or Promise.all
-        const queries = Object.keys(settings).map(key => {
-            return db.execute(
-                `INSERT INTO system_settings (setting_key, setting_value, updated_at)
-                 VALUES (?, ?, NOW())
-                 ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = NOW()`,
-                [key, JSON.stringify(settings[key])] // Store value as JSON
-            );
-        });
+        const existing = await executeQuery('system_settings');
+        if (existing.length > 0) {
+            await updateDoc('system_settings', existing[0].id, settings);
+        } else {
+            await createDoc('system_settings', settings);
+        }
 
-        await Promise.all(queries);
         await logAdminAction(adminId, 'UPDATE_SETTINGS', 'system', 'settings', { keys: Object.keys(settings) });
 
         res.status(200).json({ status: 'success', message: 'Settings updated successfully' });
@@ -858,51 +1002,15 @@ export const updateSystemSettings = async (req: Request, res: Response): Promise
 
 export const getAdvancedAnalytics = async (req: Request, res: Response): Promise<void> => {
     try {
-        const db: any = getDatabase();
-
-        // 1. Content Velocity (Submissions per day over last 30 days)
-        const [contentVelocity]: any = await db.execute(`
-            SELECT DATE(created_at) as date, COUNT(*) as count
-            FROM content
-            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-            GROUP BY DATE(created_at)
-            ORDER BY date ASC
-        `);
-
-        // 2. Editor Performance (Avg time to decision) - Mockish logic since we need complex time diffs
-        // Simplification: Count decisions made
-        const [editorPerformance]: any = await db.execute(`
-            SELECT
-                u.name as editor_name,
-                COUNT(ea.id) as actions_count
-            FROM editor_activity ea
-            JOIN editors e ON ea.editor_id = e.id
-            JOIN users u ON e.user_id = u.id
-            GROUP BY u.name
-            LIMIT 5
-        `);
-
-        // 3. Reviewer Statistics (Top reviewers)
-        // Fixed: Added ra.reviewer_id to GROUP BY to comply with ONLY_FULL_GROUP_BY
-        const [reviewerStats]: any = await db.execute(`
-            SELECT
-                u.name as reviewer_name,
-                COUNT(ra.id) as assigned_count,
-                SUM(CASE WHEN ra.status = 'completed' THEN 1 ELSE 0 END) as completed_count,
-                (SELECT COUNT(*) FROM plagiarism_reports pr WHERE pr.run_by = ra.reviewer_id AND pr.article_id = ra.article_id) as scans_run
-            FROM reviewer_assignments ra
-            JOIN users u ON ra.reviewer_id = u.id
-            GROUP BY ra.reviewer_id, u.name
-            ORDER BY assigned_count DESC
-            LIMIT 10
-        `);
-
+        // Placeholder for complex analytics
+        // Firestore aggregation queries can be used here later.
         res.status(200).json({
             status: 'success',
             data: {
-                contentVelocity,
-                editorPerformance,
-                reviewerStats
+                message: 'Advanced Analytics not fully migrated to Firestore yet.',
+                contentVelocity: [],
+                editorPerformance: [],
+                reviewerStats: []
             }
         });
     } catch (error: any) {
@@ -910,10 +1018,6 @@ export const getAdvancedAnalytics = async (req: Request, res: Response): Promise
         res.status(500).json({ status: 'error', message: 'Failed to fetch analytics' });
     }
 };
-
-/* -------------------------------------------------------------------------- */
-/*                              ADMIN STATS                                   */
-/* -------------------------------------------------------------------------- */
 
 export const getAdminStats = async (req: Request, res: Response): Promise<void> => {
     return getPlatformHealth(req, res);
