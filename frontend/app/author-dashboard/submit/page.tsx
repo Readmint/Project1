@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -74,7 +74,7 @@ const API_BASE = rawApi.endsWith("/api") ? rawApi.replace(/\/api$/, "") : rawApi
 // final root for requests including the /api prefix on every call:
 const API_ROOT = `${API_BASE}/api`.replace(/\/+$/, ""); // e.g. http://localhost:5000/api
 
-export default function SubmitArticlePage() {
+function SubmitArticleContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -1620,5 +1620,15 @@ export default function SubmitArticlePage() {
 
       {/* ... */}
     </div>
+  );
+}
+
+export default function SubmitArticlePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+    </div>}>
+      <SubmitArticleContent />
+    </Suspense>
   );
 }

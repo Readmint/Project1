@@ -586,7 +586,7 @@ export default function EditorPage() {
           open={imageDialogOpen}
           onOpenChange={setImageDialogOpen}
           onInsert={handleImageInsert}
-          articleId={Array.isArray(id) ? id[0] : id}
+          articleId={Array.isArray(id) ? id[0] : (id || "")}
         />
       </div>
     </div>

@@ -23,7 +23,10 @@ interface ReviewContent {
   assignment_id?: string;
 }
 
-export default function ReviewWorkspacePage() {
+
+import { Suspense } from "react";
+
+function ReviewWorkspaceContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const articleId = searchParams.get("id");
@@ -358,5 +361,17 @@ export default function ReviewWorkspacePage() {
         </Button>
       </section>
     </div>
+  );
+}
+
+export default function ReviewWorkspacePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-[50vh] items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      </div>
+    }>
+      <ReviewWorkspaceContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ interface PaymentDetails {
   status: string;
 }
 
-export default function PaymentSuccessPage() {
+function PaymentSuccessContent() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<'verifying' | 'success' | 'error' | 'pending'>('verifying');
   const [paymentDetails, setPaymentDetails] = useState<PaymentDetails | null>(null);
@@ -27,10 +27,10 @@ export default function PaymentSuccessPage() {
           // Check payment status from backend
           const response = await fetch(`/api/subscriptions/payment/status/${txnid}`);
           const data = await response.json();
-          
+
           if (data.status === 'success') {
             setPaymentDetails(data.data);
-            
+
             if (data.data.status === 'completed') {
               setStatus('success');
             } else {
@@ -144,5 +144,17 @@ export default function PaymentSuccessPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function PaymentSuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600"></div>
+      </div>
+    }>
+      <PaymentSuccessContent />
+    </Suspense>
   );
 }

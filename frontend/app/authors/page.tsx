@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,8 @@ interface Author {
   bio: string;
 }
 
-export default function AuthorsPage() {
+
+function AuthorsContent() {
   const router = useRouter();
   const params = useSearchParams();
   const authorId = params.get("id");
@@ -68,7 +69,7 @@ export default function AuthorsPage() {
 
           {/* Profile Image */}
           <div className="w-32 h-32 relative mb-4 rounded-full overflow-hidden border border-slate-300 dark:border-slate-600">
-            <Image src={author.image} alt={author.name} fill className="object-cover"/>
+            <Image src={author.image} alt={author.name} fill className="object-cover" />
           </div>
 
           <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
@@ -110,7 +111,7 @@ export default function AuthorsPage() {
         {/* Search Bar */}
         <div className="flex justify-center mb-10">
           <div className="relative w-full max-w-lg">
-            <Search className="absolute left-3 top-3 h-5 w-5 text-slate-500 dark:text-slate-300"/>
+            <Search className="absolute left-3 top-3 h-5 w-5 text-slate-500 dark:text-slate-300" />
             <Input
               placeholder="Search authors..."
               className="pl-10 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white"
@@ -173,7 +174,7 @@ export default function AuthorsPage() {
             {/* Details */}
             <div className="flex gap-4 mb-4">
               <div className="w-28 h-28 relative rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600">
-                <Image src={selectedAuthor.image} alt={selectedAuthor.name} fill className="object-cover"/>
+                <Image src={selectedAuthor.image} alt={selectedAuthor.name} fill className="object-cover" />
               </div>
 
               <div className="flex-1">
@@ -223,5 +224,15 @@ export default function AuthorsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AuthorsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white dark:bg-slate-900 flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+    </div>}>
+      <AuthorsContent />
+    </Suspense>
   );
 }

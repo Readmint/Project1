@@ -9,7 +9,7 @@ export type Issue = {
   title: string;
   answer: string;
   moreLink?: string;
-  category?: "writing" | "payment" | "technical" | "general" | "account";
+  category?: "writing" | "payment" | "technical" | "general" | "account" | "editorial";
 };
 
 const DEFAULT_ISSUES: Issue[] = [
@@ -32,7 +32,8 @@ const categoryIcons = {
   writing: "✍️",
   payment: "💰",
   technical: "🔧",
-  account: "👤"
+  account: "👤",
+  general: "💡"
 };
 
 const categoryColors = {
@@ -40,7 +41,8 @@ const categoryColors = {
   writing: "bg-gradient-to-r from-emerald-500 to-teal-600",
   payment: "bg-gradient-to-r from-amber-500 to-orange-600",
   technical: "bg-gradient-to-r from-blue-500 to-cyan-600",
-  account: "bg-gradient-to-r from-gray-600 to-gray-800"
+  account: "bg-gradient-to-r from-gray-600 to-gray-800",
+  general: "bg-gradient-to-r from-slate-500 to-slate-700"
 };
 
 const categoryDescriptions = {
@@ -48,7 +50,8 @@ const categoryDescriptions = {
   writing: "Editing, grammar, structural changes",
   payment: "Earnings, payout schedules",
   technical: "Editor tool, bugs, access issues",
-  account: "Profile, availability, settings"
+  account: "Profile, availability, settings",
+  general: "General inquiries and help"
 };
 
 export default function ChatbotEditor({
@@ -329,7 +332,8 @@ export default function ChatbotEditor({
       payment: "💰 **Payment Assistance:** ",
       technical: "🔧 **Technical Help:** ",
       general: "💡 **General Guidance:** ",
-      account: "👤 **Account Support:** "
+      account: "👤 **Account Support:** ",
+      editorial: "🧐 **Editorial Guidelines:** "
     };
 
     const prefix = prefixes[it.category || "general"];

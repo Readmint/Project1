@@ -71,15 +71,6 @@ export default function CommunicationPage() {
     setSending(true);
     try {
       const res = await postJSON("/content-manager/send-message", {
-        receiverId: selectedUser, // This needs to be the USER ID, not editor ID. 
-        // Wait, getEditors returns 'editor_id'. We might need user_id. 
-        // The backend `getEditors` currently returns `id` as `editor_id`.
-        // We need to fix backend `getEditors` to return `user_id` or `sendMessage` to accept `editor_id`.
-        // Let's assume for now we need valid user_id.
-        // Actually, looking at `getEditors` in controller: it returns `id: e.editor_id`.
-        // But `sendMessage` expects `receiverId` which is looked up in `users` table. 
-        // `editor_id` != `user_id`.
-        // FIX: I will update `getEditors` in the next step to return `user_id` as well.
         receiverId: selectedUser,
         subject,
         message
