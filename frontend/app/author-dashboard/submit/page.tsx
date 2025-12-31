@@ -113,6 +113,8 @@ export default function SubmitArticlePage() {
 
   // Authorship Liability Agreement
   const [agreementFile, setAgreementFile] = useState<File | null>(null);
+  // University Liability Agreement (Partner)
+  const [universityAgreementFile, setUniversityAgreementFile] = useState<File | null>(null);
 
   // Similarity check UI state (TF-IDF)
   const [similarityLoading, setSimilarityLoading] = useState(false);
@@ -670,6 +672,14 @@ export default function SubmitArticlePage() {
       return;
     }
 
+    // Enforcement: Check for University Agreement (Partner)
+    if (isPartner && !universityAgreementFile) {
+      setStatusMsg("⚠️ University Publication Authorization is required");
+      const el = document.getElementById("university-agreement-section");
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
     setIsSubmitting(true);
     setStatusMsg("Creating article...");
 
@@ -710,6 +720,9 @@ export default function SubmitArticlePage() {
         // We can treat it as an attachment, or specific type if backend supported.
         // For now, upload as regular attachment
         filesToUpload.push(agreementFile);
+      }
+      if (universityAgreementFile) {
+        filesToUpload.push(universityAgreementFile);
       }
 
       if (filesToUpload.length > 0) {
@@ -1002,7 +1015,9 @@ export default function SubmitArticlePage() {
             />
           </Card>
 
-          {/* AUTHORSHIP LIABILITY AGREEMENT CARD */}
+          {/* AUTHORSHIP LIABILITY AGREEMENT CARD (Authors Only or Both? Usually Authors only require this specific one, Partners might need the Uni one. User said "make it similarly", implying Uni liability is for Partners. I will show Uni Liability for Partners INSTEAD of or WITH Authorship? I'll show BOTH if isPartner, or usually Partners act as authors too... let's assume Partners need the University one specifically. I'll add the University one below this card.) */}
+          {/* ACTUALLY, usually if I am a Partner submitting, do I need the personal Authorship Liability? Maybe. But I DEFINITELY need the University one. I will show the University Card if isPartner. */}
+
           <Card id="agreement-section" className={`p-5 rounded-2xl border shadow-sm ${!agreementFile ? "border-amber-400 bg-amber-50/30" : "border-emerald-200 bg-emerald-50/30"}`}>
             <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
               <ShieldAlert size={18} className={!agreementFile ? "text-amber-600" : "text-emerald-600"} />
@@ -1064,6 +1079,71 @@ export default function SubmitArticlePage() {
               </div>
             </div>
           </Card>
+
+          {/* UNIVERSITY LIABILITY AGREEMENT CARD (PARTNERS ONLY) */}
+          {isPartner && (
+            <Card id="university-agreement-section" className={`p-5 rounded-2xl border shadow-sm ${!universityAgreementFile ? "border-amber-400 bg-amber-50/30" : "border-emerald-200 bg-emerald-50/30"}`}>
+              <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+                <ShieldAlert size={18} className={!universityAgreementFile ? "text-amber-600" : "text-emerald-600"} />
+                University Publication Authorization
+              </h3>
+              <p className="text-xs text-slate-500 mb-4">
+                As a partner, it is mandatory to download, sign, and upload the university publication authorization before submitting.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-3 items-center">
+                {/* Download Button */}
+                <a
+                  href="/University_Publication_Authorization_MindRadiX.pdf"
+                  download="University_Publication_Authorization_MindRadiX.pdf"
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-lg hover:bg-indigo-100 transition-colors border border-indigo-200 whitespace-nowrap"
+                >
+                  <Upload size={14} className="rotate-180" /> Download Authorization
+                </a>
+
+                <div className="text-xs text-slate-400 hidden sm:block">|</div>
+
+                {/* Upload Section */}
+                <div className="flex-1 w-full relative">
+                  {!universityAgreementFile ? (
+                    <div className="relative group">
+                      <input
+                        type="file"
+                        accept=".doc,.docx,.pdf"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            setUniversityAgreementFile(e.target.files[0]);
+                          }
+                        }}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        disabled={isSubmitting}
+                      />
+                      <div className="border border-dashed border-slate-300 rounded-lg p-2 text-center text-xs text-slate-500 group-hover:bg-white group-hover:border-indigo-400 transition-colors">
+                        Click to upload signed authorization
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between bg-white border border-emerald-200 p-2 rounded-lg">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <div className="bg-emerald-100 p-1 rounded text-emerald-600">
+                          <FileText size={14} />
+                        </div>
+                        <span className="text-xs truncate max-w-[150px] font-medium text-emerald-700">{universityAgreementFile.name}</span>
+                      </div>
+                      <button
+                        onClick={() => !isSubmitting && setUniversityAgreementFile(null)}
+                        className="text-slate-400 hover:text-red-500 p-1"
+                        disabled={isSubmitting}
+                        title="Remove authorization"
+                      >
+                        <XCircle size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+          )}
 
           {/* ATTACHMENTS CARD */}
           <Card className="p-5 rounded-2xl border shadow-sm">
