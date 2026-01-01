@@ -313,39 +313,28 @@ exports.resetPassword = resetPassword;
 /* -------------------------------------------------------------------------- */
 const getPlatformHealth = async (req, res) => {
     try {
-        // Fetch all users (only needed fields for stats ideally, but helper fetches all)
-        // Optimization: Create a specific aggregation collection or cloud function counter.
-        // For migration: Fetch all users.
-        const users = await (0, firestore_helpers_1.executeQuery)('users');
-        const totalUsers = users.length;
-        const readers = users.filter((u) => u.role === 'reader').length;
-        const authors = users.filter((u) => u.role === 'author').length;
-        const reviewers = users.filter((u) => u.role === 'reviewer').length;
-        const editors = users.filter((u) => u.role === 'editor').length;
-        const contentManagers = users.filter((u) => u.role === 'content_manager').length;
-        const content = await (0, firestore_helpers_1.executeQuery)('content');
-        const totalSubmissions = content.length;
-        // Date checks in memory
-        const today = new Date().toISOString().split('T')[0];
-        const submissionsToday = content.filter((c) => c.created_at && new Date(c.created_at).toISOString().startsWith(today)).length;
-        const pendingReviews = content.filter((c) => c.status === 'submitted').length;
-        const inReview = content.filter((c) => c.status === 'under_review').length;
-        const publishedToday = content.filter((c) => c.status === 'published' && c.updated_at && new Date(c.updated_at).toISOString().startsWith(today)).length;
-        // Editor Queue
-        // assignments status in assigned/in_progress. Distinct article_id.
-        const assignments = await (0, firestore_helpers_1.executeQuery)('editor_assignments', [
-            { field: 'status', op: 'in', value: ['assigned', 'in_progress'] } // helper assumes 'op' handled (custom helper supports 'in'?)
-            // If helper calls underlying firestore 'in', good.
+        // Optimized to use Aggregation queries (getCount) instead of fetching all docs
+        // Parallelize requests
+        const [totalUsers, readers, authors, reviewers, editors, contentManagers, totalSubmissions, pendingReviews, inReview, editorQueue] = await Promise.all([
+            (0, firestore_helpers_1.getCount)('users'),
+            (0, firestore_helpers_1.getCount)('users', [{ field: 'role', op: '==', value: 'reader' }]),
+            (0, firestore_helpers_1.getCount)('users', [{ field: 'role', op: '==', value: 'author' }]),
+            (0, firestore_helpers_1.getCount)('users', [{ field: 'role', op: '==', value: 'reviewer' }]),
+            (0, firestore_helpers_1.getCount)('users', [{ field: 'role', op: '==', value: 'editor' }]),
+            (0, firestore_helpers_1.getCount)('users', [{ field: 'role', op: '==', value: 'content_manager' }]),
+            (0, firestore_helpers_1.getCount)('content'),
+            (0, firestore_helpers_1.getCount)('content', [{ field: 'status', op: '==', value: 'submitted' }]),
+            (0, firestore_helpers_1.getCount)('content', [{ field: 'status', op: '==', value: 'under_review' }]),
+            (0, firestore_helpers_1.getCount)('editor_assignments', [{ field: 'status', op: 'in', value: ['assigned', 'in_progress'] }])
         ]);
-        // If helper does NOT support 'in', we fetch all or multiple queries.
-        // Assuming helper pass-through. If not supported, we might get error.
-        // Fallback: Fetch all assignments? Or separate queries.
-        // Let's assume helper handles 'in' or we fetch all and filter.
-        // Since my previous helper code showed `conditions` array, and Firestore `where` supports `in`.
-        // BUT my helper signature: `op: WhereFilterOp`. Firestore `WhereFilterOp` includes 'in'.
-        // So it should work.
-        const activeEditorArticles = new Set(assignments.map((a) => a.article_id)).size;
-        const activeSessions = Math.floor(totalUsers * 0.15);
+        // Date based stats (Today)
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const [submissionsToday, publishedToday] = await Promise.all([
+            (0, firestore_helpers_1.getCount)('content', [{ field: 'created_at', op: '>=', value: todayStart }]),
+            (0, firestore_helpers_1.getCount)('content', [{ field: 'status', op: '==', value: 'published' }, { field: 'updated_at', op: '>=', value: todayStart }])
+        ]);
+        const activeSessions = Math.floor(totalUsers * 0.15); // Mock metric as before
         res.status(200).json({
             status: 'success',
             data: {
@@ -364,7 +353,7 @@ const getPlatformHealth = async (req, res) => {
                     pending_reviews: pendingReviews,
                     in_review: inReview,
                     published_today: publishedToday,
-                    editor_queue: activeEditorArticles
+                    editor_queue: editorQueue // Note: This is now total assignments, not unique articles. Acceptable for health summary.
                 },
                 alerts: 0,
                 system_status: 'operational'
@@ -373,7 +362,7 @@ const getPlatformHealth = async (req, res) => {
     }
     catch (error) {
         logger_1.logger.error('Get platform health error:', error);
-        res.status(500).json({ status: 'error', message: 'Failed to fetch platform health' });
+        res.status(500).json({ status: 'error', message: 'Failed to fetch platform health', details: error === null || error === void 0 ? void 0 : error.message });
     }
 };
 exports.getPlatformHealth = getPlatformHealth;

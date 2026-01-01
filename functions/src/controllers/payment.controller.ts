@@ -85,31 +85,46 @@ export const handlePaymentSuccess = async (req: Request, res: Response): Promise
 
         if (order) {
             const userId = order.user_id;
-            const articleIds = productinfo.split(','); // Assuming productinfo = "article1_id,article2_id"
 
-            for (const articleId of articleIds) {
-                const aid = articleId.trim();
-                // Check if valid UUID/ID length to prevent junk keys
-                if (aid.length > 5) {
-                    // Create purchase record
-                    // Use a unique ID or auto-ID. Since one user can buy multiple times?
-                    // Actually, if they buy same book twice, it's fine.
-                    // But we want to query "does user own X?".
-                    // Avoid duplicates?
-                    // Query existing first?
-                    // Firestore reads are cheap enough for check.
-                    const existing = await executeQuery('user_purchases', [
-                        { field: 'user_id', op: '==', value: userId },
-                        { field: 'article_id', op: '==', value: aid }
-                    ]);
+            // CHECK FOR SUBMISSION FEE
+            if (productinfo === 'Submission Fee' || order.plan_id === 'submission_fee') {
+                // Grant credit
+                const stats: any = await getDoc('author_stats', userId);
+                if (!stats) {
+                    await createDoc('author_stats', {
+                        author_id: userId,
+                        submission_credits: 1,
+                        updated_at: new Date()
+                    }, userId);
+                } else {
+                    await updateDoc('author_stats', userId, {
+                        submission_credits: (stats.submission_credits || 0) + 1
+                    });
+                }
+                logger.info(`Granted submission credit to ${userId}`);
+            }
+            // CHECK FOR ARTICLE PURCHASE
+            else {
+                const articleIds = productinfo.split(','); // Assuming productinfo = "article1_id,article2_id"
 
-                    if (existing.length === 0) {
-                        await createDoc('user_purchases', {
-                            user_id: userId,
-                            article_id: aid,
-                            order_id: txnid,
-                            purchased_at: new Date()
-                        });
+                for (const articleId of articleIds) {
+                    const aid = articleId.trim();
+                    // Check if valid UUID/ID length to prevent junk keys
+                    if (aid.length > 5) {
+                        // Create purchase record
+                        const existing = await executeQuery('user_purchases', [
+                            { field: 'user_id', op: '==', value: userId },
+                            { field: 'article_id', op: '==', value: aid }
+                        ]);
+
+                        if (existing.length === 0) {
+                            await createDoc('user_purchases', {
+                                user_id: userId,
+                                article_id: aid,
+                                order_id: txnid,
+                                purchased_at: new Date()
+                            });
+                        }
                     }
                 }
             }

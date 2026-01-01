@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getTopAuthors = exports.addEarnings = exports.incrementViews = exports.incrementArticleCount = exports.getCurrentSubscription = exports.getSubscriptionPlans = exports.getAuthorStats = exports.updateAuthorStats = exports.updateProfilePhoto = exports.updateAuthorProfile = exports.getAuthorProfile = void 0;
+exports.getTopAuthors = exports.addEarnings = exports.incrementViews = exports.incrementArticleCount = exports.getCurrentSubscriptionInternal = exports.getCurrentSubscription = exports.getSubscriptionPlans = exports.getAuthorStats = exports.updateAuthorStats = exports.updateProfilePhoto = exports.updateAuthorProfile = exports.getAuthorProfile = void 0;
 const firestore_helpers_1 = require("../utils/firestore-helpers");
 const logger_1 = require("../utils/logger");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
@@ -169,7 +169,7 @@ const getAuthorProfile = async (req, res) => {
         }
         let membership = null;
         try {
-            membership = await getCurrentSubscriptionInternal(userId);
+            membership = await (0, exports.getCurrentSubscriptionInternal)(userId);
         }
         catch (_a) {
             membership = null;
@@ -533,7 +533,7 @@ const getCurrentSubscription = async (req, res) => {
             res.status(401).json({ error: "Unauthorized" });
             return;
         }
-        const subscription = await getCurrentSubscriptionInternal(userId);
+        const subscription = await (0, exports.getCurrentSubscriptionInternal)(userId);
         res.json({
             success: true,
             subscription,
@@ -598,6 +598,7 @@ const getCurrentSubscriptionInternal = async (userId) => {
         return null;
     }
 };
+exports.getCurrentSubscriptionInternal = getCurrentSubscriptionInternal;
 const incrementArticleCount = async (userId) => {
     try {
         // Resolve author stats doc needed?

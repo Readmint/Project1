@@ -65,6 +65,15 @@ type SimilarityDoc = {
 };
 
 import { API_BASE, getJSON, postJSON, patchJSON, deleteJSON } from "@/lib/api";
+import { createOrderAndRedirect } from "@/lib/payments";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 /*
 // Removed manual API normalization
@@ -143,6 +152,11 @@ function SubmitArticleContent() {
   const [lastTopSimilarity, setLastTopSimilarity] = useState<number | null>(null);
   // If true, user explicitly confirmed to proceed despite high similarity
   const [forceSubmitDespiteSimilarity, setForceSubmitDespiteSimilarity] = useState(false);
+
+  // Payment Modal
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [isPaymentLoading, setIsPaymentLoading] = useState(false);
 
   const strip = (t: string) => t.replace(/<[^>]+>/g, "");
   const words = strip(content).split(/\s+/).filter(Boolean).length;
@@ -366,6 +380,18 @@ function SubmitArticleContent() {
       const body: any = await postJSON("/article/author/articles", payload);
       return body;
     } catch (err: any) {
+      // Intercept PAYMENT_REQUIRED
+      if (err?.code === 'PAYMENT_REQUIRED' || err?.data?.code === 'PAYMENT_REQUIRED' || (err?.message && err.message.includes('Submission fee'))) {
+        // Trigger payment flow
+        const amount = err?.data?.amount || err?.amount || 50;
+        setPaymentAmount(amount);
+        setPaymentModalOpen(true);
+        // Don't re-throw, just stop submission logic here by returning logic
+        // But this function returns body.
+        // We can throw a specific error or return null to signal stop?
+        // Throwing is better to stop chain.
+        throw new Error('PAYMENT_REQUIRED');
+      }
       throw err;
     }
   };
@@ -668,6 +694,11 @@ function SubmitArticleContent() {
         router.push("/author-dashboard/articles"); // default
       }
     } catch (err: any) {
+      if (err.message === 'PAYMENT_REQUIRED') {
+        setStatusMsg("⚠️ Payment required to submit");
+        setIsSubmitting(false);
+        return;
+      }
       console.error("Submit error:", err);
       setStatusMsg("❌ Submission failed: " + (err.message || ""));
       setIsSubmitting(false);
@@ -1507,6 +1538,50 @@ function SubmitArticleContent() {
       )}
 
       {/* ... */}
+      {/* Payment Modal */}
+      <Dialog open={paymentModalOpen} onOpenChange={setPaymentModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Submission Fee Required</DialogTitle>
+            <DialogDescription>
+              You are currently on the Free Plan. To submit this article, a one-time submission fee of <strong>₹{paymentAmount}</strong> is required.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 text-sm text-slate-500">
+            This fee covers the editorial review and processing costs. Upgrading to a Premium Plan gives you 5 free submissions per month.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentModalOpen(false)}>Cancel</Button>
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              disabled={isPaymentLoading}
+              onClick={async () => {
+                setIsPaymentLoading(true);
+                try {
+                  const userStr = localStorage.getItem("user");
+                  const user = userStr ? JSON.parse(userStr) : {};
+
+                  await createOrderAndRedirect({
+                    planId: 'submission_fee',
+                    amount: paymentAmount,
+                    userId: userId || 'guest',
+                    userEmail: user.email || '',
+                    firstName: user.name || user.firstName || '',
+                    userPhone: user.phone || ''
+                  });
+                } catch (e) {
+                  console.error(e);
+                } finally {
+                  setIsPaymentLoading(false);
+                }
+              }}
+            >
+              {isPaymentLoading ? <Clock className="animate-spin mr-2 h-4 w-4" /> : null}
+              Pay ₹{paymentAmount}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

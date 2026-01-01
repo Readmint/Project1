@@ -79,29 +79,44 @@ const handlePaymentSuccess = async (req, res) => {
         const order = await (0, firestore_helpers_1.getDoc)('orders', txnid);
         if (order) {
             const userId = order.user_id;
-            const articleIds = productinfo.split(','); // Assuming productinfo = "article1_id,article2_id"
-            for (const articleId of articleIds) {
-                const aid = articleId.trim();
-                // Check if valid UUID/ID length to prevent junk keys
-                if (aid.length > 5) {
-                    // Create purchase record
-                    // Use a unique ID or auto-ID. Since one user can buy multiple times?
-                    // Actually, if they buy same book twice, it's fine.
-                    // But we want to query "does user own X?".
-                    // Avoid duplicates?
-                    // Query existing first?
-                    // Firestore reads are cheap enough for check.
-                    const existing = await (0, firestore_helpers_1.executeQuery)('user_purchases', [
-                        { field: 'user_id', op: '==', value: userId },
-                        { field: 'article_id', op: '==', value: aid }
-                    ]);
-                    if (existing.length === 0) {
-                        await (0, firestore_helpers_1.createDoc)('user_purchases', {
-                            user_id: userId,
-                            article_id: aid,
-                            order_id: txnid,
-                            purchased_at: new Date()
-                        });
+            // CHECK FOR SUBMISSION FEE
+            if (productinfo === 'Submission Fee' || order.plan_id === 'submission_fee') {
+                // Grant credit
+                const stats = await (0, firestore_helpers_1.getDoc)('author_stats', userId);
+                if (!stats) {
+                    await (0, firestore_helpers_1.createDoc)('author_stats', {
+                        author_id: userId,
+                        submission_credits: 1,
+                        updated_at: new Date()
+                    }, userId);
+                }
+                else {
+                    await (0, firestore_helpers_1.updateDoc)('author_stats', userId, {
+                        submission_credits: (stats.submission_credits || 0) + 1
+                    });
+                }
+                logger_1.logger.info(`Granted submission credit to ${userId}`);
+            }
+            // CHECK FOR ARTICLE PURCHASE
+            else {
+                const articleIds = productinfo.split(','); // Assuming productinfo = "article1_id,article2_id"
+                for (const articleId of articleIds) {
+                    const aid = articleId.trim();
+                    // Check if valid UUID/ID length to prevent junk keys
+                    if (aid.length > 5) {
+                        // Create purchase record
+                        const existing = await (0, firestore_helpers_1.executeQuery)('user_purchases', [
+                            { field: 'user_id', op: '==', value: userId },
+                            { field: 'article_id', op: '==', value: aid }
+                        ]);
+                        if (existing.length === 0) {
+                            await (0, firestore_helpers_1.createDoc)('user_purchases', {
+                                user_id: userId,
+                                article_id: aid,
+                                order_id: txnid,
+                                purchased_at: new Date()
+                            });
+                        }
                     }
                 }
             }

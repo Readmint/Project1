@@ -31,7 +31,20 @@ router.post('/incidents/update', authenticate, authorize('admin'), updateInciden
 router.get('/settings', authenticate, authorize('admin'), getSystemSettings);
 router.post('/settings', authenticate, authorize('admin'), updateSystemSettings);
 
+import { createPlan, updatePlan, deletePlan, getAdminPlans, getPaymentReceipts, getFinancialStats } from '../controllers/admin.payment.controller';
+
+// ... Existing routes ...
+
 router.get('/analytics', authenticate, authorize('admin'), getAdvancedAnalytics);
 router.post('/announcements', authenticate, authorize('admin'), createAnnouncement);
+
+// --- Payment & Subscription Management ---
+router.post('/plans', authenticate, authorize('admin'), createPlan);
+router.put('/plans/:planId', authenticate, authorize('admin'), updatePlan);
+router.delete('/plans/:planId', authenticate, authorize('admin'), deletePlan);
+router.get('/plans', authenticate, authorize('admin'), getAdminPlans);
+
+router.get('/receipts', authenticate, authorize('admin'), getPaymentReceipts);
+router.get('/financials', authenticate, authorize('admin'), getFinancialStats);
 
 export default router;

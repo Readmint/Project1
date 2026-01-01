@@ -27,7 +27,16 @@ router.post('/incidents', auth_1.authenticate, (0, auth_1.authorize)('admin'), a
 router.post('/incidents/update', auth_1.authenticate, (0, auth_1.authorize)('admin'), admin_controller_1.updateIncident);
 router.get('/settings', auth_1.authenticate, (0, auth_1.authorize)('admin'), admin_controller_1.getSystemSettings);
 router.post('/settings', auth_1.authenticate, (0, auth_1.authorize)('admin'), admin_controller_1.updateSystemSettings);
+const admin_payment_controller_1 = require("../controllers/admin.payment.controller");
+// ... Existing routes ...
 router.get('/analytics', auth_1.authenticate, (0, auth_1.authorize)('admin'), admin_controller_1.getAdvancedAnalytics);
 router.post('/announcements', auth_1.authenticate, (0, auth_1.authorize)('admin'), admin_controller_1.createAnnouncement);
+// --- Payment & Subscription Management ---
+router.post('/plans', auth_1.authenticate, (0, auth_1.authorize)('admin'), admin_payment_controller_1.createPlan);
+router.put('/plans/:planId', auth_1.authenticate, (0, auth_1.authorize)('admin'), admin_payment_controller_1.updatePlan);
+router.delete('/plans/:planId', auth_1.authenticate, (0, auth_1.authorize)('admin'), admin_payment_controller_1.deletePlan);
+router.get('/plans', auth_1.authenticate, (0, auth_1.authorize)('admin'), admin_payment_controller_1.getAdminPlans);
+router.get('/receipts', auth_1.authenticate, (0, auth_1.authorize)('admin'), admin_payment_controller_1.getPaymentReceipts);
+router.get('/financials', auth_1.authenticate, (0, auth_1.authorize)('admin'), admin_payment_controller_1.getFinancialStats);
 exports.default = router;
 //# sourceMappingURL=admin.routes.js.map
