@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Upload } from "lucide-react";
+import { Upload, UploadCloud, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { API_BASE } from "@/lib/api";
 
 interface SimpleImageUploadProps {
     articleId: string;
@@ -25,7 +26,8 @@ export default function SimpleImageUpload({ articleId, onUploadComplete, label =
 
         const token = localStorage.getItem("ACCESS_TOKEN");
         // Remove trailing slash if present
-        const apiBase = (process.env.NEXT_PUBLIC_API_BASE || "http://localhost:5000/api").replace(/\/$/, "");
+
+        const apiBase = API_BASE;
 
         try {
             const res = await fetch(`${apiBase}/author/articles/${articleId}/attachments`, {

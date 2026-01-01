@@ -16,10 +16,11 @@ import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
+import { getJSON } from "@/lib/api";
+
 // API Helpers
-const rawApi = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
-const API_BASE = rawApi.endsWith("/api") ? rawApi.replace(/\/api$/, "") : rawApi;
-const API_ROOT = `${API_BASE}/api`.replace(/\/+$/, "");
+// Removed manual API constants in favor of lib/api
+
 
 type AuthorStats = {
     articles: number;
@@ -48,23 +49,15 @@ export default function AnalyticsPage() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const token = localStorage.getItem("ACCESS_TOKEN");
-                const headers = {
-                    "Authorization": `Bearer ${token}`,
-                    "Content-Type": "application/json"
-                };
-
                 // 1. Fetch Profile for Stats
-                const profileRes = await fetch(`${API_ROOT}/authors/profile`, { headers });
-                const profileData = await profileRes.json();
+                const profileData: any = await getJSON("/authors/profile");
 
                 if (profileData.success && profileData.profile) {
                     setStats(profileData.profile.stats);
                 }
 
                 // 2. Fetch Articles for content performance
-                const articlesRes = await fetch(`${API_ROOT}/author/my-articles?limit=50`, { headers });
-                const articlesData = await articlesRes.json();
+                const articlesData: any = await getJSON("/article/author/my-articles?limit=50");
 
                 if (articlesData.status === "success") {
                     let fetchedArticles: Article[] = [];

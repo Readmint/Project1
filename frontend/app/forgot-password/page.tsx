@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { postJSON } from "@/lib/api";
 
 export default function ForgotPassword() {
   const router = useRouter();
@@ -20,6 +21,8 @@ export default function ForgotPassword() {
   const [error, setError] = useState("");
   const [resetToken, setResetToken] = useState("");
 
+  /* import { postJSON } from "@/lib/api"; */ // Ensure this import is added at top
+
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -27,22 +30,11 @@ export default function ForgotPassword() {
     setMessage("");
 
     try {
-      const response = await fetch("http://localhost:5000/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setStep(2);
-        setMessage(data.message || "OTP sent to your email. Please check your inbox.");
-      } else {
-        setError(data.message || "Failed to send OTP");
-      }
-    } catch (err) {
-      setError("Something went wrong. Please try again.");
+      const data: any = await postJSON("/auth/forgot-password", { email });
+      setStep(2);
+      setMessage(data.message || "OTP sent to your email. Please check your inbox.");
+    } catch (err: any) {
+      setError(err?.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -54,23 +46,12 @@ export default function ForgotPassword() {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:5000/api/auth/verify-reset-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setResetToken(data.data.resetToken);
-        setStep(3);
-        setMessage("");
-      } else {
-        setError(data.message || "Invalid OTP");
-      }
-    } catch (err) {
-      setError("Failed to verify OTP");
+      const data: any = await postJSON("/auth/verify-reset-otp", { email, otp });
+      setResetToken(data.data.resetToken);
+      setStep(3);
+      setMessage("");
+    } catch (err: any) {
+      setError(err?.message || "Failed to verify OTP");
     } finally {
       setLoading(false);
     }
@@ -78,7 +59,7 @@ export default function ForgotPassword() {
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (newPassword !== confirmPassword) {
       setError("Passwords don't match");
       return;
@@ -93,28 +74,18 @@ export default function ForgotPassword() {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:5000/api/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          resetToken, 
-          email, 
-          newPassword 
-        }),
+      await postJSON("/auth/reset-password", {
+        resetToken,
+        email,
+        newPassword
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        setMessage("Password reset successfully! Redirecting to login...");
-        setTimeout(() => {
-          router.push("/login");
-        }, 2000);
-      } else {
-        setError(data.message || "Failed to reset password");
-      }
-    } catch (err) {
-      setError("Something went wrong");
+      setMessage("Password reset successfully! Redirecting to login...");
+      setTimeout(() => {
+        router.push("/login");
+      }, 2000);
+    } catch (err: any) {
+      setError(err?.message || "Failed to reset password");
     } finally {
       setLoading(false);
     }
@@ -135,7 +106,7 @@ export default function ForgotPassword() {
         <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-lg shadow-2xl border border-slate-200/50 dark:border-slate-700/50 p-5 sm:p-6">
           {/* Logo + Title */}
           <div className="mb-4 flex flex-col items-center">
-            <Image 
+            <Image
               src="/icons/icon.png"
               alt="E-Magazine Logo"
               width={48}
@@ -184,8 +155,8 @@ export default function ForgotPassword() {
                 />
               </div>
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 disabled={loading}
                 className="w-full h-9 text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-lg hover:shadow-xl transition-shadow disabled:opacity-50"
               >
@@ -227,8 +198,8 @@ export default function ForgotPassword() {
                 >
                   Back
                 </Button>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={loading || otp.length !== 6}
                   className="flex-1 h-9 text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-lg hover:shadow-xl transition-shadow disabled:opacity-50"
                 >
@@ -291,8 +262,8 @@ export default function ForgotPassword() {
                 >
                   Back
                 </Button>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={loading}
                   className="flex-1 h-9 text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-lg hover:shadow-xl transition-shadow disabled:opacity-50"
                 >

@@ -1,0 +1,10 @@
+
+> build
+> tsc
+
+src/config/database.ts(3,19): error TS2307: Cannot find module 'mysql2/promise' or its corresponding type declarations.
+src/config/database.ts(73,14): error TS2451: Cannot redeclare block-scoped variable 'getDatabase'.
+src/config/database.ts(1071,14): error TS2451: Cannot redeclare block-scoped variable 'getDatabase'.
+src/config/mongodb.ts(2,57): error TS2307: Cannot find module 'mongodb' or its corresponding type declarations.
+src/controllers/auth.controller.ts(675,18): error TS2339: Property 'is_email_verified' does not exist on type '{ id: string; }'.
+src/controllers/contentManager.controller.ts(54,74): error TS2339: Property 'editor_id' does not exist on type '{ id: string; }'.

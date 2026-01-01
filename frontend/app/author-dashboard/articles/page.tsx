@@ -31,13 +31,7 @@ import { StatusTracker } from "@/components/author/StatusTracker";
 
 type Status = "Published" | "In Review" | "Revise" | "Draft" | "Rejected";
 
-// -------------------------
-// API base normalization (robust)
-// Accepts NEXT_PUBLIC_API_BASE = "http://localhost:5000" or "http://localhost:5000/api"
-// Produces API_ROOT that you can use with /article/... routes
-const rawApi = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
-const API_BASE = rawApi.endsWith("/api") ? rawApi.replace(/\/api$/, "") : rawApi;
-const API_ROOT = `${API_BASE}/api`.replace(/\/+$/, "");
+import { getJSON, patchJSON, deleteJSON } from "@/lib/api";
 
 type Article = {
   id: string;
@@ -82,38 +76,9 @@ export default function MyArticlesPage() {
   const fetchArticles = async () => {
     setLoading(true);
     try {
-      const token = getToken();
-      if (!token) {
-        console.error("No authentication token found");
-        router.push("/login");
-        return;
-      }
-
-      const url = `${API_ROOT}/article/author/my-articles?limit=100`;
-      console.log("Fetching articles from:", url);
-
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      console.log("Response status:", res.status);
-
-      const body = await (async () => {
-        try {
-          return await res.json();
-        } catch {
-          return null;
-        }
-      })();
+      const body: any = await getJSON("/article/author/my-articles?limit=100");
 
       console.log("Response body:", body);
-
-      if (!res.ok) {
-        throw new Error(body?.message || body?.error || `Failed to fetch articles: ${res?.status}`);
-      }
 
       // The data is in body.data.articles
       const rows = body?.data?.articles || [];
@@ -261,12 +226,7 @@ export default function MyArticlesPage() {
     const ok = window.confirm(`Delete draft "${article.title}"? This action cannot be undone.`);
     if (!ok) return;
     try {
-      const token = getToken();
-      const res = await fetch(`${API_ROOT}/article/author/articles/${article.id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token || ""}` },
-      });
-      if (!res.ok) throw new Error("Failed to delete");
+      await deleteJSON(`/article/author/articles/${article.id}`);
       setArticles((prev) => prev.filter((a) => a.id !== article.id));
     } catch (err) {
       console.error("Delete draft error:", err);
@@ -278,16 +238,7 @@ export default function MyArticlesPage() {
     const ok = window.confirm(`Submit "${article.title}" for review?`);
     if (!ok) return;
     try {
-      const token = getToken();
-      const res = await fetch(`${API_ROOT}/article/author/articles/${article.id}/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token || ""}`,
-        },
-        body: JSON.stringify({ status: "submitted", note: "Submitted by author" }),
-      });
-      if (!res.ok) throw new Error("Failed to submit");
+      await patchJSON(`/article/author/articles/${article.id}/status`, { status: "submitted", note: "Submitted by author" });
       await fetchArticles();
     } catch (err) {
       console.error("Submit draft error:", err);

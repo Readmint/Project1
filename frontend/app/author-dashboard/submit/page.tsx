@@ -64,15 +64,19 @@ type SimilarityDoc = {
   textExcerpt: string;
 };
 
-// -------------------------
-// API base normalization
-// -------------------------
-// Accepts NEXT_PUBLIC_API_BASE = "http://localhost:5000" or "http://localhost:5000/api"
-// Produces API_BASE that we use with route names like "/article/author/articles"
-const rawApi = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
-const API_BASE = rawApi.endsWith("/api") ? rawApi.replace(/\/api$/, "") : rawApi;
-// final root for requests including the /api prefix on every call:
-const API_ROOT = `${API_BASE}/api`.replace(/\/+$/, ""); // e.g. http://localhost:5000/api
+import { API_BASE, getJSON, postJSON, patchJSON, deleteJSON } from "@/lib/api";
+
+/*
+// Removed manual API normalization
+*/
+const API_ROOT = `${API_BASE}`; // lib/api.ts API_BASE already has /api suffix usually? No wait.
+// In lib/api.ts:
+// exports const API_BASE = ... (with /api suffix)
+// So we can use API_BASE directly as API_ROOT, or if we need to append /api...
+// Let's check lib/api.ts again.
+// It seems API_BASE in lib/api INCLUDES /api.
+// So we don't need to append /api.
+
 
 function SubmitArticleContent() {
   const router = useRouter();
@@ -238,22 +242,10 @@ function SubmitArticleContent() {
   const fetchCategories = async () => {
     try {
       setIsLoadingCategories(true);
-      const token = getToken();
-      const headers: Record<string, string> = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
-
-      const res = await fetch(`${API_ROOT}/article/categories`, {
-        headers,
-      });
-      if (!res.ok) {
-        setStatusMsg("⚠️ Could not load categories");
-        setIsLoadingCategories(false);
-        return;
-      }
-      const data = await res.json();
+      const data: any = await getJSON("/article/categories");
       setCategories(data.data?.categories || data.categories || []);
       setStatusMsg("Categories loaded");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error fetching categories:", err);
       setStatusMsg("⚠️ Error loading categories");
     } finally {
@@ -263,14 +255,8 @@ function SubmitArticleContent() {
 
   const fetchEvents = async () => {
     try {
-      const token = getToken();
-      if (!token) return;
-      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-      const res = await fetch(`${API_ROOT}/partner/events`, { headers });
-      if (res.ok) {
-        const json = await res.json();
-        setEvents(json.data || []);
-      }
+      const json: any = await getJSON("/partner/events");
+      setEvents(json.data || []);
     } catch (e) {
       console.error("Failed to fetch events", e);
     }
@@ -283,46 +269,40 @@ function SubmitArticleContent() {
       // Fetch details
       const fetchDetails = async () => {
         try {
-          const token = getToken();
-          const res = await fetch(`${API_ROOT}/article/author/articles/${queryArticleId}`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {}
-          });
-          if (res.ok) {
-            const json = await res.json();
-            const art = json.data?.article;
-            if (art) {
-              setTitle(art.title || "");
-              setSummary(art.summary || "");
-              setContent(art.content || "");
-              setLanguage(art.language || "en");
-              setCategory_id(art.category_id || "");
-              setEvent_id(art.event_id || "");
-              setVisibility(art.visibility || "public");
-              if (art.metadata) {
-                try {
-                  const meta = typeof art.metadata === 'string' ? JSON.parse(art.metadata) : art.metadata;
-                  if (meta.tags) setTags(meta.tags);
-                  if (meta.issue_id) setIssue_id(meta.issue_id);
-                } catch (e) { /* ignore */ }
-              }
-              // Removed redundant catch
-              // Parse co_authors
-              let ca = art.co_authors;
-              if (ca && Array.isArray(ca)) {
-                setCoAuthors(ca.join(", "));
-              } else if (typeof ca === 'string') {
-                setCoAuthors(ca); // fallback
-              }
-            } else if (art.tags) {
-              // Fallback if tags stored in separate column and not metadata (depends on backend)
-              // Controller stores tags in metadata AND separate column often.
-              // Try parsing separate column if it's a string
+          const json: any = await getJSON(`/article/author/articles/${queryArticleId}`);
+          const art = json.data?.article;
+          if (art) {
+            setTitle(art.title || "");
+            setSummary(art.summary || "");
+            setContent(art.content || "");
+            setLanguage(art.language || "en");
+            setCategory_id(art.category_id || "");
+            setEvent_id(art.event_id || "");
+            setVisibility(art.visibility || "public");
+            if (art.metadata) {
               try {
-                setTags(typeof art.tags === 'string' ? JSON.parse(art.tags) : art.tags);
-              } catch { /* */ }
+                const meta = typeof art.metadata === 'string' ? JSON.parse(art.metadata) : art.metadata;
+                if (meta.tags) setTags(meta.tags);
+                if (meta.issue_id) setIssue_id(meta.issue_id);
+              } catch (e) { /* ignore */ }
             }
-            setStatusMsg("Loaded article for editing");
+            // Removed redundant catch
+            // Parse co_authors
+            let ca = art.co_authors;
+            if (ca && Array.isArray(ca)) {
+              setCoAuthors(ca.join(", "));
+            } else if (typeof ca === 'string') {
+              setCoAuthors(ca); // fallback
+            }
+          } else if (art.tags) {
+            // Fallback if tags stored in separate column and not metadata (depends on backend)
+            // Controller stores tags in metadata AND separate column often.
+            // Try parsing separate column if it's a string
+            try {
+              setTags(typeof art.tags === 'string' ? JSON.parse(art.tags) : art.tags);
+            } catch { /* */ }
           }
+          setStatusMsg("Loaded article for editing");
         } catch (err) {
           console.error("Failed to fetch article details", err);
         }
@@ -382,49 +362,17 @@ function SubmitArticleContent() {
 
   // Create article (we will create as draft first, then finalize)
   const createArticleOnServer = async (payload: any) => {
-    const token = getToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers.Authorization = `Bearer ${token}`;
-
-    const res = await fetch(`${API_ROOT}/article/author/articles`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-    });
-    const body = await (async () => {
-      try {
-        return await res.json();
-      } catch {
-        return null;
-      }
-    })();
-    if (!res.ok) {
-      const errorMsg = body?.errors
-        ? `Validation failed: ${JSON.stringify(body.errors)}`
-        : body?.message || `Failed to create article (${res.status})`;
-      const err: any = new Error(errorMsg);
-      err.res = res;
-      err.body = body;
+    try {
+      const body: any = await postJSON("/article/author/articles", payload);
+      return body;
+    } catch (err: any) {
       throw err;
     }
-    return body;
   };
 
   // Update article content
   const updateArticleOnServer = async (id: string, payload: any) => {
-    const token = getToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers.Authorization = `Bearer ${token}`;
-
-    const res = await fetch(`${API_ROOT}/article/author/articles/${id}`, {
-      method: "PATCH",
-      headers,
-      body: JSON.stringify(payload),
-    });
-    const body = await res.json();
-    if (!res.ok) {
-      throw new Error(body.message || "Failed to update article");
-    }
+    const body: any = await patchJSON(`/article/author/articles/${id}`, payload);
     return body;
   };
 
@@ -436,7 +384,8 @@ function SubmitArticleContent() {
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
 
-    const res = await fetch(`${API_ROOT}/article/author/articles/${encodeURIComponent(articleIdParam)}/attachments`, {
+    // Use API_BASE from lib/api (which includes /api suffix usually)
+    const res = await fetch(`${API_BASE}/article/author/articles/${encodeURIComponent(articleIdParam)}/attachments`, {
       method: "POST",
       headers,
       body: form,
@@ -457,25 +406,7 @@ function SubmitArticleContent() {
 
   // Finalize (patch status to submitted)
   const finalizeSubmission = async (articleIdParam: string) => {
-    const token = getToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers.Authorization = `Bearer ${token}`;
-
-    const res = await fetch(`${API_ROOT}/article/author/articles/${encodeURIComponent(articleIdParam)}/status`, {
-      method: "PATCH",
-      headers,
-      body: JSON.stringify({ status: "submitted" }),
-    });
-    if (!res.ok) {
-      const body = await (async () => {
-        try {
-          return await res.json();
-        } catch {
-          return null;
-        }
-      })();
-      throw new Error(body?.message || "Failed to update status");
-    }
+    await patchJSON(`/article/author/articles/${encodeURIComponent(articleIdParam)}/status`, { status: "submitted" });
     return true;
   };
 
@@ -495,27 +426,7 @@ function SubmitArticleContent() {
       if (typeof similarityThreshold !== "undefined") params.append("threshold", String(similarityThreshold));
       if (typeof similarityTopN !== "undefined") params.append("top", String(similarityTopN));
 
-      const token = getToken();
-      const headers: Record<string, string> = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
-
-      const res = await fetch(`${API_ROOT}/article/author/articles/${encodeURIComponent(aid)}/similarity?${params.toString()}`, {
-        method: "POST",
-        headers,
-      });
-
-      const body = await (async () => {
-        try {
-          return await res.json();
-        } catch {
-          return null;
-        }
-      })();
-
-      if (!res.ok) {
-        if (res.status === 404) throw new Error("Similarity check endpoint not available. Contact administrator.");
-        throw new Error(body?.message || `Similarity check failed (${res.status})`);
-      }
+      const body: any = await postJSON(`/article/author/articles/${encodeURIComponent(aid)}/similarity?${params.toString()}`, {});
 
       const data = body?.data || { docs: [], pairs: [], web_results: [] };
       setSimilarityDocs(data.docs || []);
@@ -561,30 +472,7 @@ function SubmitArticleContent() {
     setPlagiarismReportUrl(null);
 
     try {
-      const token = getToken();
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      if (token) headers.Authorization = `Bearer ${token}`;
-
-      const res = await fetch(`${API_ROOT}/article/articles/${encodeURIComponent(articleId)}/plagiarism`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ language: plagLanguage }),
-      });
-
-      const body = await (async () => {
-        try {
-          return await res.json();
-        } catch {
-          return null;
-        }
-      })();
-
-      if (!res.ok) {
-        const msg = body?.message || `Plagiarism check failed (${res.status})`;
-        throw new Error(msg);
-      }
+      const body: any = await postJSON(`/article/articles/${encodeURIComponent(articleId)}/plagiarism`, { language: plagLanguage });
 
       const data = body?.data;
       setPlagiarismStatus("Completed");

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { API_BASE } from "@/lib/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +41,7 @@ export default function ImageInsertDialog({ open, onOpenChange, onInsert, articl
             return;
         }
 
-        const apiBase = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:5000/api';
+        const apiBase = API_BASE;
 
         try {
             // Reuse existing attachment endpoint which returns public/signed URL

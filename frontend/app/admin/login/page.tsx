@@ -7,6 +7,7 @@ import { Lock, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import Link from 'next/link';
 
 export default function AdminLoginPage() {
     const router = useRouter();
@@ -87,6 +88,13 @@ export default function AdminLoginPage() {
                                 onChange={(e) => setPassword(e.target.value)}
                             />
                         </div>
+
+                        <div className="flex justify-end">
+                            <Link href="/admin/forgot-password" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                                Forgot Password?
+                            </Link>
+                        </div>
+
 
                         <Button
                             type="submit"

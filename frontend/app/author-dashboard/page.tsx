@@ -17,11 +17,12 @@ import {
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { getJSON } from "@/lib/api";
+
 
 // API Helpers
-const rawApi = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
-const API_BASE = rawApi.endsWith("/api") ? rawApi.replace(/\/api$/, "") : rawApi;
-const API_ROOT = `${API_BASE}/api`.replace(/\/+$/, "");
+// Removed manual API constants in favor of lib/api
+
 
 type Article = {
   id: number;
@@ -61,21 +62,18 @@ export default function AuthorDashboard() {
       }
     }
 
+    // ...
+
+
+    // ...
+
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem("ACCESS_TOKEN");
-        const headers = {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json"
-        };
-
         // 1. Fetch Profile for generic stats (views, total counts)
-        const profileRes = await fetch(`${API_ROOT}/authors/profile`, { headers });
-        const profileData = await profileRes.json();
+        const profileData: any = await getJSON("/authors/profile");
 
         // 2. Fetch Articles for content lists & precise status counts
-        const articlesRes = await fetch(`${API_ROOT}/article/author/my-articles?limit=10`, { headers });
-        const articlesData = await articlesRes.json();
+        const articlesData: any = await getJSON("/article/author/my-articles?limit=10");
 
         console.log("Articles Data Response:", articlesData);
 

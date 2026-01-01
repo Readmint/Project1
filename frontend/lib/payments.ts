@@ -15,7 +15,7 @@ export type PayPayload = {
   furl?: string;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
 const PAYU_PAYMENT_URL =
   process.env.NEXT_PUBLIC_PAYU_MODE === 'production'
     ? 'https://secure.payu.in/_payment'
@@ -28,22 +28,45 @@ const PAYU_PAYMENT_URL =
  *
  * Throws on error (caller should handle loading state).
  */
+import { postJSON } from './api';
+
+// ...
+
 export async function createOrderAndRedirect(payload: PayPayload, createOrderUrl?: string) {
   toast.loading('Initiating payment...', { id: 'pay' });
 
-  const endpoint = createOrderUrl || `${API_BASE}/api/subscription/payu/create-order`;
+  // If createOrderUrl is provided, we assumes it's a full URL or handle it manually?
+  // But standard flow uses our API.
+  // We'll trust postJSON handles the /api prefixing if we pass a relative path.
+  // The default path in original code was `${API_BASE}/api/subscription/payu/create-order`
+  // So relative path is `/subscription/payu/create-order`
 
   try {
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    let data: any;
 
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data || data.status !== 'success') {
-      const errMsg = data?.message || `Failed to create payment order (status ${res?.status})`;
-      throw new Error(errMsg);
+    if (createOrderUrl) {
+      // Only used if caller overrides (e.g. ads). 
+      // Assume caller passes full URL? Or relative? 
+      // For safety, if it starts with http, use fetch, else postJSON.
+      if (createOrderUrl.startsWith('http')) {
+        const res = await fetch(createOrderUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        data = await res.json();
+        if (!res.ok) throw new Error(data?.message || 'Payment Order Failed');
+      } else {
+        data = await postJSON(createOrderUrl, payload);
+      }
+    } else {
+      data = await postJSON('/subscription/payu/create-order', payload);
+    }
+
+    // postJSON throws on error, so if we are here, success.
+    // However, original code checked data.status === 'success'.
+    if (data?.status !== 'success') {
+      throw new Error(data?.message || 'Failed to create payment order');
     }
 
     const params = data.data || {};

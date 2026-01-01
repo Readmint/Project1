@@ -20,8 +20,8 @@ type Event = {
 };
 
 // API Base normalization
-const raw = (process.env.NEXT_PUBLIC_API_BASE || "http://localhost:5000").replace(/\/+$/, "");
-const API_BASE = raw.endsWith("/api") ? raw.slice(0, -4) : raw;
+import { API_BASE } from "@/lib/api";
+const API_ROOT = API_BASE;
 
 export default function PartnerEventsPage() {
   const router = useRouter();

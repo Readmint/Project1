@@ -36,11 +36,9 @@ type Review = {
   created_at?: string;
 };
 
-// Normalize NEXT_PUBLIC_API_BASE to API_ROOT (works with values like "http://localhost:5000" or ".../api")
-const rawApi = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
-const API_BASE = rawApi.endsWith("/api") ? rawApi.replace(/\/api$/, "") : rawApi;
-const API_ROOT = `${API_BASE}/api`.replace(/\/+$/, "");
-// Use endpoints like: `${API_ROOT}/article/author/articles/:id`
+import { API_BASE, getJSON } from "@/lib/api";
+// API_ROOT usage replaced by getJSON
+
 
 export default function ArticlePreviewPage(): JSX.Element {
   const params = useParams() as { id?: string };
@@ -90,40 +88,19 @@ export default function ArticlePreviewPage(): JSX.Element {
         return;
       }
 
-      const url = `${API_ROOT}/article/author/articles/${encodeURIComponent(articleId)}`;
-      console.log("Fetching article preview from", url);
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      console.log("Fetching article preview for", articleId);
+      // getJSON handles 401/403 internally by throwing, but we can catch
+      const res: any = await getJSON(`/article/author/articles/${encodeURIComponent(articleId)}`);
 
-      let body: any = null;
-      try {
-        body = await res.json();
-      } catch (e) {
-        /* ignore non-json */
-      }
-
-      if (!res.ok) {
-        if (res.status === 401) setErrorMsg("Unauthorized. Please login again.");
-        else if (res.status === 403) setErrorMsg("Forbidden. You don't have permission to view this article.");
-        else if (res.status === 404) setErrorMsg("Article not found (404). It might have been deleted.");
-        else setErrorMsg(body?.message || `Failed to load (status ${res.status}).`);
-        console.warn("Preview fetch failed:", res.status, body);
-        setLoading(false);
-        return;
-      }
-
-      const data = body?.data;
+      // If we got here, it's success (or 200 OK range)
+      const data = res?.data;
       setArticle(data?.article || null);
       setAttachments(data?.attachments || []);
       setWorkflow(data?.workflow || []);
       setReviews(data?.reviews || []);
     } catch (err: any) {
       console.error("Error fetching preview:", err);
+      // getJSON throws object with status/message usually
       setErrorMsg("Failed to load article preview: " + (err.message || String(err)));
     } finally {
       setLoading(false);
@@ -151,41 +128,17 @@ export default function ArticlePreviewPage(): JSX.Element {
       return;
     }
 
-    const token = getToken();
-    if (!token) {
-      alert("Not authenticated. Cannot download attachment.");
-      return;
-    }
-
     try {
       // endpoint uses API_ROOT + "/article" because routes are mounted at /api/article
-      const signedUrlEndpoint = `${API_ROOT}/article/author/articles/${encodeURIComponent(
+      const signedUrlEndpoint = `/article/author/articles/${encodeURIComponent(
         id
       )}/attachments/${encodeURIComponent(att.id)}/signed-url`;
 
-      const res = await fetch(signedUrlEndpoint, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      });
+      const res: any = await getJSON(signedUrlEndpoint);
 
-      let body: any = null;
-      try {
-        body = await res.json();
-      } catch {
-        // ignore
-      }
-
-      if (!res.ok) {
-        const msg = body?.message || `Failed to get download URL (${res.status})`;
-        alert(msg);
-        console.warn("Failed to get signed url:", res.status, body);
-        return;
-      }
-
-      const signed = body?.data?.url;
+      const signed = res?.data?.url;
       if (!signed) {
         alert("Signed URL not returned by server.");
-        console.warn("Signed URL missing in response:", body);
         return;
       }
 

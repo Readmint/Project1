@@ -1,9 +1,11 @@
 // components/home/SubscriptionPlans.tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useState, useEffect } from "react";
+import { Check, Loader2 } from "lucide-react";
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
+import { getJSON } from "@/lib/api";
 import { toast } from 'react-hot-toast';
 import { createOrderAndRedirect, PayPayload } from '@/lib/payments';
 import { useRouter } from 'next/navigation';
@@ -74,9 +76,7 @@ export default function SubscriptionPlans() {
 
   async function fetchPlans() {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/subscription/plans`);
-      if (!res.ok) throw new Error(`Failed to load plans (${res.status})`);
-      const data = await res.json();
+      const data: any = await getJSON('/subscription/plans');
 
       // log the raw response so you can inspect it if shapes differ
       console.log('Subscription plans raw response:', data);

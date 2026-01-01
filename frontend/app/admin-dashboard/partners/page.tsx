@@ -26,7 +26,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
-const API_ROOT = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+import { getJSON, postJSON } from "@/lib/api";
 
 export default function PartnerManagementPage() {
     const [partners, setPartners] = useState<any[]>([]);
@@ -51,17 +51,8 @@ export default function PartnerManagementPage() {
     const fetchPartners = async () => {
         try {
             setLoading(true);
-            const token = localStorage.getItem("token");
-            const res = await fetch(`${API_ROOT}/partner/all`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            if (res.ok) {
-                const json = await res.json();
-                setPartners(json.data || []);
-            } else {
-                toast.error("Failed to load partners");
-            }
+            const json: any = await getJSON("/partner/all");
+            setPartners(json.data || []);
         } catch (err) {
             console.error(err);
             toast.error("Error loading partners");
@@ -74,36 +65,22 @@ export default function PartnerManagementPage() {
         e.preventDefault();
         try {
             setIsSubmitting(true);
-            const token = localStorage.getItem("token");
 
-            const res = await fetch(`${API_ROOT}/partner/create-partner`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify(formData)
+            await postJSON("/partner/create-partner", formData);
+
+            toast.success("Partner organization created successfully");
+            setIsCreateModalOpen(false);
+            setFormData({
+                organization_name: "",
+                type: "university",
+                name: "",
+                email: "",
+                password: ""
             });
-
-            const data = await res.json();
-
-            if (res.ok) {
-                toast.success("Partner organization created successfully");
-                setIsCreateModalOpen(false);
-                setFormData({
-                    organization_name: "",
-                    type: "university",
-                    name: "",
-                    email: "",
-                    password: ""
-                });
-                fetchPartners(); // Refresh list
-            } else {
-                toast.error(data.message || "Failed to create partner");
-            }
-        } catch (err) {
+            fetchPartners(); // Refresh list
+        } catch (err: any) {
             console.error(err);
-            toast.error("An error occurred");
+            toast.error(err?.message || "Failed to create partner");
         } finally {
             setIsSubmitting(false);
         }

@@ -16,8 +16,9 @@ type Article = {
   updated_at: string;
 };
 
-const raw = (process.env.NEXT_PUBLIC_API_BASE || "http://localhost:5000").replace(/\/+$/, "");
-const API_BASE = raw.endsWith("/api") ? raw.slice(0, -4) : raw;
+import { API_BASE } from "@/lib/api";
+// Use API_BASE directly instead of manual calculation
+const API_ROOT = API_BASE;
 
 export default function PartnerSubmissionsPage() {
   const router = useRouter();

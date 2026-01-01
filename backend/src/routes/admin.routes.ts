@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { adminLogin, createAdmin, verifyAdmin, getAdminStats, getPlatformHealth, getSystemUsers, manageUserRole, createUser, getAllContent, adminContentAction, getPlagiarismMonitor, verifyPlagiarismReport, getAuditLogs, getIncidents, createIncident, updateIncident, getSystemSettings, updateSystemSettings, getAdvancedAnalytics, createAnnouncement } from '../controllers/admin.controller';
+import { adminLogin, createAdmin, verifyAdmin, forgotPassword, resetPassword, getAdminStats, getPlatformHealth, getSystemUsers, manageUserRole, createUser, getAllContent, adminContentAction, getPlagiarismMonitor, verifyPlagiarismReport, getAuditLogs, getIncidents, createIncident, updateIncident, getSystemSettings, updateSystemSettings, getAdvancedAnalytics, createAnnouncement } from '../controllers/admin.controller';
+
 import { authenticate, authorize } from '../middleware/auth';
 
 const router = Router();
@@ -8,6 +9,8 @@ const router = Router();
 router.post('/register', createAdmin);
 router.post('/verify', verifyAdmin);
 router.post('/login', adminLogin);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 
 // Protected (Requires Admin Token)
 router.get('/stats', authenticate, authorize('admin'), getAdminStats); // Kept for legacy

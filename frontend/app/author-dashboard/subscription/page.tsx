@@ -5,10 +5,11 @@ import { Check, Download, History, CreditCard, Shield, Star, Zap } from "lucide-
 import { createOrderAndRedirect } from "@/lib/payments";
 import { toast } from "react-hot-toast";
 
+import { getJSON } from "@/lib/api";
+
 // API base normalization
-const rawApi = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
-const API_BASE = rawApi.endsWith("/api") ? rawApi.replace(/\/api$/, "") : rawApi;
-const API_ROOT = `${API_BASE}/api`.replace(/\/+$/, "");
+// Removed manual API constants in favor of getJSON
+
 
 export default function AuthorSubscriptionPage() {
     const [plans, setPlans] = useState([]);
@@ -29,16 +30,14 @@ export default function AuthorSubscriptionPage() {
         const fetchData = async () => {
             try {
                 // Fetch Plans
-                const plansRes = await fetch(`${API_ROOT}/subscription/plans/author`);
-                const plansData = await plansRes.json();
+                const plansData: any = await getJSON("/subscription/plans/author");
                 if (plansData.status === "success") {
                     setPlans(plansData.data.plans);
                 }
 
                 // Fetch History
                 if (userId) {
-                    const historyRes = await fetch(`${API_ROOT}/subscription/history/${userId}`);
-                    const historyData = await historyRes.json();
+                    const historyData: any = await getJSON(`/subscription/history/${userId}`);
                     if (historyData.status === "success") {
                         setHistory(historyData.data.history);
                     }

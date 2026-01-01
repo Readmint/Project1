@@ -1,6 +1,8 @@
 // frontend/lib/api.ts  (replace existing file content or merge changes)
 export const API_BASE =
-  (process.env.NEXT_PUBLIC_API_BASE || "http://localhost:5000/api").replace(/\/+$/, "");
+  process.env.NODE_ENV === 'production'
+    ? "https://us-central1-readmint-fe3c3.cloudfunctions.net/api/api"
+    : (process.env.NEXT_PUBLIC_API_BASE || "http://localhost:5000/api").replace(/\/+$/, "");
 
 type Nullable<T> = T | null;
 
@@ -198,4 +200,92 @@ export async function getJSON(path: string, token?: string) {
  */
 export async function postOAuth(idToken: string, provider: string = 'google') {
   return postJSON('/auth/oauth', { idToken, provider });
+}
+
+/**
+ * PATCH JSON helper
+ */
+export async function patchJSON(path: string, body: any, token?: string) {
+  const url = buildUrl(path);
+  let res: Response;
+
+  const tokenToUse = token ?? readTokenFromStorage();
+
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`API PATCH: ${url}`, { body: { ...body }, tokenProvided: !!tokenToUse });
+  }
+
+  try {
+    res = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...(tokenToUse ? { Authorization: `Bearer ${tokenToUse}` } : {}),
+      },
+      body: JSON.stringify(body ?? {}),
+      credentials: "include",
+    });
+  } catch (err: any) {
+    const error = new ApiError("Network request failed", 0, { error: String(err?.message ?? err) }, url);
+    console.error('Network error:', error);
+    throw error;
+  }
+
+  const data = await parseResponse(res);
+
+  if (!res.ok) {
+    const message = (data && data.message) ? data.message : `HTTP ${res.status}`;
+    const error = new ApiError(message, res.status, data, url);
+    console.error(`API Error ${res.status}: ${url}`, {
+      status: res.status,
+      message: error.getDetailedMessage(),
+      data: data
+    });
+    throw error;
+  }
+
+  return data;
+}
+
+/**
+ * DELETE JSON helper
+ */
+export async function deleteJSON(path: string, token?: string) {
+  const url = buildUrl(path);
+  let res: Response;
+
+  const tokenToUse = token ?? readTokenFromStorage();
+
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`API DELETE: ${url}`, { tokenProvided: !!tokenToUse });
+  }
+
+  try {
+    res = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        ...(tokenToUse ? { Authorization: `Bearer ${tokenToUse}` } : {}),
+      },
+      credentials: "include",
+    });
+  } catch (err: any) {
+    const error = new ApiError("Network request failed", 0, { error: String(err?.message ?? err) }, url);
+    console.error('Network error:', error);
+    throw error;
+  }
+
+  const data = await parseResponse(res);
+
+  if (!res.ok) {
+    const message = (data && data.message) ? data.message : `HTTP ${res.status}`;
+    const error = new ApiError(message, res.status, data, url);
+    console.error(`API Error ${res.status}: ${url}`, {
+      status: res.status,
+      message: error.getDetailedMessage(),
+      data: data
+    });
+    throw error;
+  }
+
+  return data;
 }

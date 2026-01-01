@@ -31,17 +31,22 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+/* ----------------------------------- CORS -------------------------------------- */
+const corsOptions = {
+  origin: [
+    'http://localhost:3000',
+    'https://readmint-fe3c3.web.app',
+    process.env.FRONTEND_URL || ''
+  ].filter(Boolean),
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
 /* ----------------------------- Security Middlewares ----------------------------- */
 app.use(helmet());
 app.use(compression());
-
-/* ----------------------------------- CORS -------------------------------------- */
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    credentials: true,
-  })
-);
 
 /* -------------------------------- Body Parsers --------------------------------- */
 app.use(express.json({ limit: '10mb' }));

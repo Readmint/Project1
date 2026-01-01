@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { toast } from 'react-hot-toast';
 import { createOrderAndRedirect } from '@/lib/payments';
+import { getJSON } from '@/lib/api';
 
 interface SubscriptionPlan {
   id: string;
@@ -17,7 +18,7 @@ interface SubscriptionPlan {
   duration: string;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
 
 export default function SubscribePage() {
   const params: any = useParams();
@@ -31,12 +32,12 @@ export default function SubscribePage() {
     phone: '9999999999'
   });
 
+  // ... 
+
   useEffect(() => {
     const fetchPlans = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/subscription/plans`);
-        if (!response.ok) throw new Error('HTTP error');
-        const data = await response.json();
+        const data: any = await getJSON('/subscription/plans');
         const fetchedRaw = data?.data?.plans ?? data?.plans ?? data ?? [];
         const fetchedPlans = (Array.isArray(fetchedRaw) ? fetchedRaw : []).map((p: any) => ({
           ...p,

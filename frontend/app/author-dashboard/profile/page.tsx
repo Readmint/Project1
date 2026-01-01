@@ -51,11 +51,9 @@ type Profile = {
   membership?: any;
 };
 
-// Normalize NEXT_PUBLIC_API_BASE to API_ROOT (works with values like "http://localhost:5000" or ".../api")
-// Falls back to "/api" when env not provided
-const rawApi = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
-const API_BASE = rawApi.endsWith("/api") ? rawApi.replace(/\/api$/, "") : rawApi;
-const API_ROOT = `${API_BASE || ""}/api`.replace(/\/+$/, ""); // e.g. "http://localhost:5000/api" or "/api"
+import { getJSON, putJSON } from "@/lib/api";
+
+// ... (imports)
 
 export default function AuthorProfilePage() {
   const router = useRouter();
@@ -72,80 +70,14 @@ export default function AuthorProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Robust getToken(): checks multiple keys and trims
-  const getToken = (): string | null => {
-    try {
-      if (typeof window === "undefined") return null;
-      const keys = ["ACCESS_TOKEN", "token", "idToken"];
-      for (const k of keys) {
-        const v = localStorage.getItem(k);
-        if (v && v.trim()) return v.trim();
-      }
-      return null;
-    } catch (err) {
-      console.warn("getToken error", err);
-      return null;
-    }
-  };
-
-  const getAuthHeaders = (): Record<string, string> => {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    try {
-      const token = getToken();
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      } else {
-        // fallback: if you stored user object with id in localStorage during dev login
-        const userRaw = localStorage.getItem("user");
-        if (userRaw) {
-          try {
-            const u = JSON.parse(userRaw);
-            if (u?.id) {
-              headers["x-user-id"] = u.id;
-            } else if (u?.uid) {
-              // Firebase uid saved as uid
-              headers["x-user-id"] = u.uid;
-            }
-          } catch { }
-        }
-      }
-    } catch { }
-    return headers;
-  };
-
   const fetchProfile = async () => {
     setLoading(true);
     setError(null);
     setUnauthorized(false);
 
-    const headers = getAuthHeaders();
-
     try {
-      const res = await fetch(`${API_ROOT}/authors/profile`, {
-        method: "GET",
-        headers,
-        credentials: "include",
-      });
+      const data: any = await getJSON("/authors/profile");
 
-      if (res.status === 401) {
-        setUnauthorized(true);
-        setProfile(null);
-        setError("Unauthorized. Please sign in.");
-        setLoading(false);
-        return;
-      }
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        setError(body?.error || `Error fetching profile: ${res.statusText}`);
-        setProfile(null);
-        setLoading(false);
-        return;
-      }
-
-      const data = await res.json();
       if (data?.success && data.profile) {
         // ensure shape
         const p: Profile = {
@@ -179,8 +111,14 @@ export default function AuthorProfilePage() {
       }
     } catch (err: any) {
       console.error("Error fetching profile:", err);
-      setError(err?.message || "Network error");
-      setProfile(null);
+      if (err?.status === 401) {
+        setUnauthorized(true);
+        setProfile(null);
+        setError("Unauthorized. Please sign in.");
+      } else {
+        setError(err?.message || "Network error");
+        setProfile(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -214,27 +152,8 @@ export default function AuthorProfilePage() {
     };
 
     try {
-      const headers = getAuthHeaders();
-      const res = await fetch(`${API_ROOT}/authors/profile`, {
-        method: "PUT",
-        headers,
-        credentials: "include",
-        body: JSON.stringify(updates),
-      });
+      const body: any = await putJSON("/authors/profile", updates);
 
-      if (res.status === 401) {
-        setUnauthorized(true);
-        setError("Unauthorized. Please sign in to update profile.");
-        return;
-      }
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        setError(body?.error || "Failed to update profile");
-        return;
-      }
-
-      const body = await res.json();
       if (body?.success) {
         // re-fetch profile to get canonical data (and created timestamps)
         await fetchProfile();
@@ -244,7 +163,12 @@ export default function AuthorProfilePage() {
       }
     } catch (err: any) {
       console.error("Error saving profile:", err);
-      setError(err?.message || "Network error when saving");
+      if (err?.status === 401) {
+        setUnauthorized(true);
+        setError("Unauthorized. Please sign in to update profile.");
+      } else {
+        setError(err?.message || "Network error when saving");
+      }
     } finally {
       setSaving(false);
     }
@@ -258,39 +182,22 @@ export default function AuthorProfilePage() {
     const url = URL.createObjectURL(file);
     setProfile((p) => (p ? { ...p, photo: url } : p));
 
-    // If you have nowhere to upload the file (S3/Cloudinary/Firebase Storage),
-    // send the temp URL to backend which will accept a URL. In production you should
-    // upload the file to storage and send the final public URL.
     try {
       // Here we pretend we've uploaded and obtained 'url' - send to backend to store
-      const headers = getAuthHeaders();
-      const res = await fetch(`${API_ROOT}/authors/profile/photo`, {
-        method: "PUT",
-        headers,
-        credentials: "include",
-        body: JSON.stringify({ photoUrl: url }),
-      });
+      const body: any = await putJSON("/authors/profile/photo", { photoUrl: url });
 
-      if (res.status === 401) {
-        setUnauthorized(true);
-        setError("Unauthorized. Please sign in to update photo.");
-        return;
-      }
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        setError(body?.error || "Failed to update profile photo");
-        return;
-      }
-
-      const body = await res.json();
       if (body?.success && body.photoUrl) {
         // use server-canonical photo URL when available
         setProfile((p) => (p ? { ...p, photo: body.photoUrl } : p));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error uploading photo:", err);
-      setError("Error uploading photo");
+      if (err?.status === 401) {
+        setUnauthorized(true);
+        setError("Unauthorized. Please sign in to update photo.");
+      } else {
+        setError("Error uploading photo");
+      }
     }
   };
 
