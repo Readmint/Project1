@@ -38,6 +38,8 @@ type CollectionName =
     | 'incidents'
     | 'orders'
     | 'system_settings'
+    | 'advertisement_plans'
+    | 'advertisement_enquiries'
     | 'editorial_applications';
 
 export const getCollection = (collectionName: CollectionName) => {

@@ -37,7 +37,10 @@ type CollectionName =
     | 'admin_audit_logs'
     | 'incidents'
     | 'orders'
-    | 'system_settings';
+    | 'system_settings'
+    | 'advertisement_plans'
+    | 'advertisement_enquiries'
+    | 'editorial_applications';
 
 export const getCollection = (collectionName: CollectionName) => {
     const db = getDatabase();

@@ -5,35 +5,42 @@ let firestoreDb: any = null;
 
 export const connectDatabase = async (): Promise<void> => {
   try {
-    if (!admin.apps.length) {
-      // Use Application Default Credentials (best for Cloud Functions)
-      // If FIREBASE_PRIVATE_KEY is present, we can use it (local dev), otherwise default.
-      if (process.env.FIREBASE_PRIVATE_KEY) {
-        const serviceAccount = {
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        };
+    // Connect to Firebase Firestore (for authentication / storage bucket)
+    const projectId = process.env.READMINT_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
+    const privateKey = process.env.READMINT_FIREBASE_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY;
+    const clientEmail = process.env.READMINT_FIREBASE_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL;
+    const storageBucket = process.env.READMINT_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET;
+
+    if (projectId) {
+      console.log('🔄 Initializing Firebase Firestore...');
+      const serviceAccount = {
+        projectId,
+        privateKey: privateKey?.replace(/\\n/g, '\n'),
+        clientEmail,
+      };
+
+      if (!admin.apps.length) {
         admin.initializeApp({
           credential: admin.credential.cert(serviceAccount),
-          storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`,
+          storageBucket: storageBucket || `${projectId}.appspot.com`,
         });
-      } else {
-        admin.initializeApp(); // Use ADC
       }
+
+      firestoreDb = admin.firestore();
+      logger.info('Connected to Firebase Firestore');
+      console.log('✅ Connected to Firebase Firestore');
+      console.log('📦 Storage bucket:', storageBucket || `${projectId}.appspot.com`);
+    } else {
+      logger.warn('FIREBASE_PROJECT_ID (or READMINT_ prefixed) not found in env, skipping Firebase init');
     }
 
-    firestoreDb = admin.firestore();
-    logger.info('Connected to Firebase Firestore');
-    console.log('✅ Connected to Firebase Firestore (via ADC or Config)');
-
     if (!firestoreDb) {
-      throw new Error('Firestore database not initialized');
+      throw new Error('Firestore database configuration not found or failed to initialize');
     }
   } catch (error) {
     console.error('❌ Database connection failed:', error);
     logger.error('Database connection failed:', error);
-    // process.exit(1); // Do not crash the container!
+    process.exit(1);
   }
 };
 
@@ -50,6 +57,18 @@ export const getFirestoreDatabase = (): any => {
 
 // Main getDatabase function - defaults to Firestore
 export const getDatabase = (): any => {
+  if (!firestoreDb) {
+    // Lazy initialization for Cloud Functions or if connectDatabase wasn't called
+    if (!admin.apps.length) {
+      // Use default credentials (works in Cloud Functions)
+      admin.initializeApp();
+    }
+    // If initialized but firestoreDb references missing, get it
+    if (admin.apps.length && !firestoreDb) {
+      firestoreDb = admin.firestore();
+    }
+  }
+
   if (firestoreDb) {
     return firestoreDb;
   }

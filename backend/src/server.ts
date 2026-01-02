@@ -24,6 +24,7 @@ import reviewerRoutes from './routes/reviewer.routes';
 import adminRoutes from './routes/admin.routes';
 import paymentRoutes from './routes/payment.routes';
 import partnerRoutes from './routes/partner.routes';
+import advertisementRoutes from './routes/advertisement.routes';
 import { setupSwagger } from './config/swagger';
 
 dotenv.config();
@@ -36,13 +37,15 @@ const corsOptions = {
   origin: [
     'http://localhost:3000',
     'https://readmint-fe3c3.web.app',
+    'https://mindradix.com',
+    'https://www.mindradix.com',
     process.env.FRONTEND_URL || ''
   ].filter(Boolean),
   credentials: true,
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+// app.options('*', cors(corsOptions)); // Preflight handled by app.use(cors)
 
 /* ----------------------------- Security Middlewares ----------------------------- */
 app.use(helmet());
@@ -73,6 +76,7 @@ app.use('/api/reviewer', reviewerRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/partner', partnerRoutes);
+app.use('/api/advertisements', advertisementRoutes);
 
 /* ------------------------------- Health Check ---------------------------------- */
 app.get('/api/health-check', (req, res) => {
