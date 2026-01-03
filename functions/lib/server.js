@@ -25,6 +25,7 @@ const admin_routes_1 = __importDefault(require("./routes/admin.routes"));
 const payment_routes_1 = __importDefault(require("./routes/payment.routes"));
 const partner_routes_1 = __importDefault(require("./routes/partner.routes"));
 const advertisement_routes_1 = __importDefault(require("./routes/advertisement.routes"));
+const career_routes_1 = __importDefault(require("./routes/career.routes"));
 const swagger_1 = require("./config/swagger");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -69,6 +70,7 @@ app.use('/api/admin', admin_routes_1.default);
 app.use('/api/payment', payment_routes_1.default);
 app.use('/api/partner', partner_routes_1.default);
 app.use('/api/advertisements', advertisement_routes_1.default);
+app.use('/api/careers', career_routes_1.default);
 /* ------------------------------- Health Check ---------------------------------- */
 app.get('/api/health-check', (req, res) => {
     res.status(200).json({

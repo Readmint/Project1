@@ -45,8 +45,32 @@ const firebase_admin_1 = __importDefault(require("firebase-admin"));
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const crypto_1 = __importDefault(require("crypto"));
 const firestore_helpers_1 = require("../utils/firestore-helpers");
+/* safeSign (same as you had) */
 const safeSign = (payload, secretOrPrivateKey, options) => {
-    return jwt.sign(payload, secretOrPrivateKey, options);
+    var _a, _b, _c, _d;
+    let signFn = (_a = jwt.sign) !== null && _a !== void 0 ? _a : (_b = jwt.default) === null || _b === void 0 ? void 0 : _b.sign;
+    if (typeof signFn !== 'function') {
+        try {
+            const requiredJwt = require && typeof require === 'function' ? require('jsonwebtoken') : null;
+            signFn = (_c = requiredJwt === null || requiredJwt === void 0 ? void 0 : requiredJwt.sign) !== null && _c !== void 0 ? _c : (_d = requiredJwt === null || requiredJwt === void 0 ? void 0 : requiredJwt.default) === null || _d === void 0 ? void 0 : _d.sign;
+        }
+        catch (reqErr) {
+            // ignore
+        }
+    }
+    if (typeof signFn !== 'function') {
+        const jwtKeys = (() => {
+            try {
+                return Object.keys(jwt);
+            }
+            catch (_a) {
+                return ['<unavailable>'];
+            }
+        })();
+        const msg = `jsonwebtoken "sign" function not found. Detected jwt export keys: ${JSON.stringify(jwtKeys)}. Check that 'jsonwebtoken' is installed and that your bundler/runtime supports it.`;
+        throw new Error(msg);
+    }
+    return signFn(payload, secretOrPrivateKey, options);
 };
 // Generate random OTP
 const generateOTP = () => {

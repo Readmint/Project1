@@ -24,6 +24,7 @@ const navGroups = [
             { label: "User Management", path: "/admin-dashboard/users", icon: Users },
             { label: "Partner Management", path: "/admin-dashboard/partners", icon: Briefcase },
             { label: "Advertisements", path: "/admin-dashboard/advertisements", icon: Monitor },
+            { label: "Careers", path: "/admin-dashboard/careers", icon: Briefcase },
             { label: "Content Oversight", path: "/admin-dashboard/content", icon: FileText },
             { label: "Plagiarism Monitor", path: "/admin-dashboard/plagiarism", icon: ShieldAlert },
             { label: "Incident Management", path: "/admin-dashboard/incidents", icon: AlertTriangle },

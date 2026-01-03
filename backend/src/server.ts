@@ -25,6 +25,7 @@ import adminRoutes from './routes/admin.routes';
 import paymentRoutes from './routes/payment.routes';
 import partnerRoutes from './routes/partner.routes';
 import advertisementRoutes from './routes/advertisement.routes';
+import careerRoutes from './routes/career.routes';
 import { setupSwagger } from './config/swagger';
 
 dotenv.config();
@@ -77,6 +78,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/partner', partnerRoutes);
 app.use('/api/advertisements', advertisementRoutes);
+app.use('/api/careers', careerRoutes);
 
 /* ------------------------------- Health Check ---------------------------------- */
 app.get('/api/health-check', (req, res) => {

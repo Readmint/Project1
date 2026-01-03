@@ -243,6 +243,9 @@ function PlanModal({ open, onOpenChange, plan, isEditing, onSuccess }: any) {
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                     <DialogTitle>{isEditing ? "Edit Plan" : "Create New Plan"}</DialogTitle>
+                    <DialogDescription>
+                        {isEditing ? "Modify the details of the existing subscription plan." : "Define the details for the new subscription plan."}
+                    </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="grid gap-4 py-4">
                     <div className="grid gap-2">

@@ -28,6 +28,7 @@ const connectDatabase = async () => {
                 });
             }
             firestoreDb = firebase_admin_1.default.firestore();
+            firestoreDb.settings({ ignoreUndefinedProperties: true });
             logger_1.logger.info('Connected to Firebase Firestore');
             console.log('✅ Connected to Firebase Firestore');
             console.log('📦 Storage bucket:', storageBucket || `${projectId}.appspot.com`);
@@ -68,6 +69,7 @@ const getDatabase = () => {
         // If initialized but firestoreDb references missing, get it
         if (firebase_admin_1.default.apps.length && !firestoreDb) {
             firestoreDb = firebase_admin_1.default.firestore();
+            firestoreDb.settings({ ignoreUndefinedProperties: true });
         }
     }
     if (firestoreDb) {

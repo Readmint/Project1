@@ -40,7 +40,9 @@ type CollectionName =
     | 'system_settings'
     | 'advertisement_plans'
     | 'advertisement_enquiries'
-    | 'editorial_applications';
+    | 'editorial_applications'
+    | 'career_roles'
+    | 'career_applications';
 
 export const getCollection = (collectionName: CollectionName) => {
     const db = getDatabase();

@@ -9,8 +9,31 @@ import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import { getCollection, executeQuery, createDoc, updateDoc, getDoc } from '../utils/firestore-helpers';
 
+// Allow TypeScript to use require in mixed module setups
+declare const require: any;
+
+/* safeSign (same as you had) */
 const safeSign = (payload: object | string | Buffer, secretOrPrivateKey: jwt.Secret, options?: jwt.SignOptions): string => {
-  return jwt.sign(payload, secretOrPrivateKey, options);
+  let signFn: Function | undefined = (jwt as any).sign ?? (jwt as any).default?.sign;
+
+  if (typeof signFn !== 'function') {
+    try {
+      const requiredJwt = require && typeof require === 'function' ? require('jsonwebtoken') : null;
+      signFn = requiredJwt?.sign ?? requiredJwt?.default?.sign;
+    } catch (reqErr) {
+      // ignore
+    }
+  }
+
+  if (typeof signFn !== 'function') {
+    const jwtKeys = (() => {
+      try { return Object.keys(jwt); } catch { return ['<unavailable>']; }
+    })();
+    const msg = `jsonwebtoken "sign" function not found. Detected jwt export keys: ${JSON.stringify(jwtKeys)}. Check that 'jsonwebtoken' is installed and that your bundler/runtime supports it.`;
+    throw new Error(msg);
+  }
+
+  return signFn(payload, secretOrPrivateKey, options);
 };
 
 // Generate random OTP

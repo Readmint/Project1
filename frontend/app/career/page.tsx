@@ -1,222 +1,119 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Search, Briefcase, Users, Star, Code, Palette, ShieldCheck } from "lucide-react";
+import { Search, Briefcase, Users, Star, Code, Palette, ShieldCheck, X } from "lucide-react";
+import { getJSON, postJSON } from "@/lib/api";
+import { toast } from "sonner";
 
-/* Replace authors data with careers */
-const careers = [
-  {
-    id: 1,
-    role: "Content Manager",
-    department: "Editorial & Content",
-    type: "Full-Time",
-    openings: 2,
-    experience: "3+ years",
-    icon: "Users",
-    image: "/careers/content-manager.jpg",
-    description: "Manage magazine content pipeline, teams, scheduling, publishing, strategy and quality control.",
-  },
-  {
-    id: 2,
-    role: "Author / Writer",
-    department: "Content Contributors",
-    type: "Contract / Freelance",
-    openings: 10,
-    experience: "Portfolio required",
-    icon: "Briefcase",
-    image: "/careers/author.jpg",
-    description: "Write high-quality magazine articles, opinion pieces, interviews, and storytelling content.",
-  },
-  {
-    id: 3,
-    role: "Reviewer",
-    department: "Magazine Review Board",
-    type: "Part-Time / Remote",
-    openings: 5,
-    experience: "2+ years",
-    icon: "Star",
-    image: "/careers/reviewer.jpg",
-    description: "Review articles, fact-check, give feedback, maintain credibility and editorial excellence.",
-  },
-  {
-    id: 4,
-    role: "Editor",
-    department: "Editorial",
-    type: "Full-Time",
-    openings: 3,
-    experience: "3+ years",
-    icon: "Palette",
-    image: "/careers/editor.jpg",
-    description: "Edit and polish articles, maintain tone, structure, accuracy and audience engagement.",
-  },
-  {
-    id: 5,
-    role: "SEO Specialist",
-    department: "Growth & Marketing",
-    type: "Full-Time",
-    openings: 1,
-    experience: "2+ years",
-    icon: "Code",
-    image: "/careers/seo.jpg",
-    description: "Optimize e-magazine discoverability, keyword strategy, content ranking and traffic growth.",
-  },
-  {
-    id: 6,
-    role: "UI/UX Designer",
-    department: "Design",
-    type: "Contract / Remote",
-    openings: 1,
-    experience: "3+ years",
-    icon: "Palette",
-    image: "/careers/uiux.jpg",
-    description: "Craft magazine website layout, reader-focused interfaces, typography and interactive experience.",
-  },
-  {
-    id: 7,
-    role: "Frontend Developer",
-    department: "Engineering",
-    type: "Full-Time",
-    openings: 2,
-    experience: "3+ years",
-    icon: "Code",
-    image: "/careers/frontend.jpg",
-    description: "Build responsive magazine web UI, animations, UI performance and reader-facing features.",
-  },
-  {
-    id: 8,
-    role: "Backend Developer",
-    department: "Engineering",
-    type: "Full-Time",
-    openings: 2,
-    experience: "3+ years",
-    icon: "Briefcase",
-    image: "/careers/backend.jpg",
-    description: "Develop APIs, CMS infrastructure, database, user handling, authentication and workflows.",
-  },
-  {
-    id: 9,
-    role: "Full Stack Developer",
-    department: "Engineering",
-    type: "Full-Time / Remote",
-    openings: 1,
-    experience: "4+ years",
-    icon: "Code",
-    image: "/careers/fullstack.jpg",
-    description: "Work across entire magazine platform including CMS, frontend, backend and scaling.",
-  },
-  {
-    id: 10,
-    role: "QA / Test Engineer",
-    department: "Engineering",
-    type: "Part-Time",
-    openings: 1,
-    experience: "2+ years",
-    icon: "ShieldCheck",
-    image: "/careers/qa.jpg",
-    description: "Test CMS, publishing tools, website reliability, performance, and fix quality issues.",
-  },
-  {
-    id: 11,
-    role: "Security Engineer",
-    department: "Engineering",
-    type: "Full-Time",
-    openings: 1,
-    experience: "3+ years",
-    icon: "ShieldCheck",
-    image: "/careers/security.jpg",
-    description: "Ensure platform safety, protection, vulnerability checks, authentication and data security.",
-  },
-  {
-    id: 12,
-    role: "Data Analyst",
-    department: "Insights & Growth",
-    type: "Full-Time",
-    openings: 1,
-    experience: "2+ years",
-    icon: "Briefcase",
-    image: "/careers/data.jpg",
-    description: "Track performance metrics, readership insights, engagement trends and data-driven decisions.",
-  },
-  {
-    id: 13,
-    role: "Mobile App Developer",
-    department: "Engineering",
-    type: "Contract",
-    openings: 1,
-    experience: "3+ years",
-    icon: "Code",
-    image: "/careers/mobile.jpg",
-    description: "Develop future mobile reading experience for the magazine on iOS & Android.",
-  },
-  {
-    id: 14,
-    role: "Cloud Engineer",
-    department: "Infrastructure",
-    type: "Full-Time",
-    openings: 1,
-    experience: "3+ years",
-    icon: "Briefcase",
-    image: "/careers/cloud.jpg",
-    description: "Deploy, scale and maintain cloud infrastructure supporting magazine platform reliability.",
-  },
-  {
-    id: 15,
-    role: "DevOps Engineer",
-    department: "Infrastructure",
-    type: "Full-Time",
-    openings: 1,
-    experience: "3+ years",
-    icon: "ShieldCheck",
-    image: "/careers/devops.jpg",
-    description: "Automate deployments, server monitoring, logs, CI/CD, uptime, reliability and infrastructure stability.",
-  }
-];
-
-interface Career {
-  id: number;
+// --- Types ---
+interface JobRole {
+  id: string;
   role: string;
   department: string;
   type: string;
   openings: number;
   experience: string;
+  description: string;
   icon: string;
   image: string;
-  description: string;
-  rating?: number;
+  status: 'active' | 'closed';
 }
-
-
-import { Suspense } from "react";
 
 function CareerContent() {
   const router = useRouter();
   const params = useSearchParams();
   const careerId = params.get("id");
 
+  const [roles, setRoles] = useState<JobRole[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [selectedCareer, setSelectedCareer] = useState<Career | null>(null);
+  const [selectedCareer, setSelectedCareer] = useState<JobRole | null>(null);
+  const [isApplying, setIsApplying] = useState(false);
 
+  // Application Form State
+  const [formData, setFormData] = useState({
+    applicant_name: "",
+    email: "",
+    phone: "",
+    resume_link: "",
+    portfolio_link: "",
+    cover_letter: ""
+  });
+  const [submitting, setSubmitting] = useState(false);
+
+  // Fetch Roles
   useEffect(() => {
-    if (careerId) {
-      const found = careers.find((r) => r.id === Number(careerId));
+    async function fetchRoles() {
+      try {
+        const res = await getJSON("/careers/roles");
+        if (res.status === 'success') {
+          setRoles(res.data.roles);
+        }
+      } catch (error) {
+        console.error("Failed to fetch roles", error);
+        toast.error("Could not load job openings");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchRoles();
+  }, []);
+
+  // Handle URL param selection
+  useEffect(() => {
+    if (careerId && roles.length > 0) {
+      const found = roles.find((r) => r.id === careerId);
       if (found) setSelectedCareer(found);
     }
-  }, [careerId]);
+  }, [careerId, roles]);
 
-  const filtered = careers.filter((role) =>
+  const filtered = roles.filter((role) =>
     role.role.toLowerCase().includes(search.toLowerCase())
   );
 
   const closeModal = () => {
     setSelectedCareer(null);
+    setIsApplying(false);
     router.replace("/career");
   };
+
+  const handleApplyClick = () => {
+    setIsApplying(true);
+  };
+
+  const handleApplySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCareer) return;
+
+    setSubmitting(true);
+    try {
+      // Date formatting for robust submission
+      // Using postJSON which calls /api/api/careers/apply
+      await postJSON("/careers/apply", {
+        role_id: selectedCareer.id,
+        role_name: selectedCareer.role,
+        ...formData
+      });
+
+      toast.success("Application Submitted!", { description: "We will review your profile shortly." });
+      closeModal();
+      setFormData({ applicant_name: "", email: "", phone: "", resume_link: "", portfolio_link: "", cover_letter: "" });
+    } catch (error: any) {
+      console.error("Application error", error);
+      toast.error("Submission Failed", { description: error.message || "Please try again." });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
 
   return (
     <div className="min-h-screen w-full bg-white dark:bg-slate-900 transition-colors">
@@ -246,106 +143,231 @@ function CareerContent() {
           </div>
         </div>
 
+        {/* LOADING STATE */}
+        {loading && (
+          <div className="flex justify-center py-20">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+          </div>
+        )}
+
         {/* CAREER GRID */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filtered.map((career) => (
-            <motion.div
-              key={career.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              whileHover={{ scale: 1.02 }}
-            >
-              <Card className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-md hover:shadow-xl transition-all duration-200 overflow-hidden">
-                <CardContent className="p-6 flex flex-col items-center text-center">
+        {!loading && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {filtered.map((career) => (
+              <motion.div
+                key={career.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                whileHover={{ scale: 1.02 }}
+              >
+                <Card className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-md hover:shadow-xl transition-all duration-200 overflow-hidden h-full flex flex-col">
+                  <CardContent className="p-6 flex flex-col items-center text-center flex-grow">
 
-                  <div className="w-20 h-20 mb-3">
-                    {career.icon === "Users" && <Users className="h-16 w-16 text-indigo-500 mx-auto" />}
-                    {career.icon === "Briefcase" && <Briefcase className="h-16 w-16 text-indigo-500 mx-auto" />}
-                    {career.icon === "Code" && <Code className="h-16 w-16 text-indigo-500 mx-auto" />}
-                    {career.icon === "Palette" && <Palette className="h-16 w-16 text-indigo-500 mx-auto" />}
-                    {career.icon === "Star" && <Star className="h-16 w-16 text-yellow-500 mx-auto" />}
-                    {career.icon === "ShieldCheck" && <ShieldCheck className="h-16 w-16 text-green-500 mx-auto" />}
-                  </div>
+                    <div className="w-20 h-20 mb-3 flex items-center justify-center bg-slate-50 dark:bg-slate-900 rounded-full">
+                      {/* Dynamic Icon Fallback */}
+                      {career.icon === "Users" ? <Users className="h-10 w-10 text-indigo-500" /> :
+                        career.icon === "Code" ? <Code className="h-10 w-10 text-indigo-500" /> :
+                          career.icon === "Palette" ? <Palette className="h-10 w-10 text-indigo-500" /> :
+                            career.icon === "Star" ? <Star className="h-10 w-10 text-yellow-500" /> :
+                              career.icon === "ShieldCheck" ? <ShieldCheck className="h-10 w-10 text-green-500" /> :
+                                <Briefcase className="h-10 w-10 text-indigo-500" />}
+                    </div>
 
-                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
-                    {career.role}
-                  </h3>
+                    <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-1">
+                      {career.role}
+                    </h3>
 
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    {career.department}
-                  </p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                      {career.department}
+                    </p>
 
-                  <div className="mt-2 text-sm space-y-1 text-slate-700 dark:text-slate-300">
-                    <p className="flex items-center gap-1 justify-center"><Briefcase className="h-4 w-4" /> {career.type}</p>
-                    <p className="flex items-center gap-1 justify-center"><Users className="h-4 w-4" /> {career.openings} openings</p>
-                    <p className="flex items-center gap-1 justify-center"><Briefcase className="h-4 w-4" /> {career.experience} experience</p>
-                  </div>
+                    <div className="mt-auto text-sm space-y-1 text-slate-700 dark:text-slate-300 w-full">
+                      <p className="flex items-center gap-2 justify-center"><Briefcase className="h-4 w-4 opacity-70" /> {career.type}</p>
+                      <p className="flex items-center gap-2 justify-center"><Users className="h-4 w-4 opacity-70" /> {career.openings} openings</p>
+                      <p className="flex items-center gap-2 justify-center"><Star className="h-4 w-4 opacity-70" /> {career.experience}</p>
+                    </div>
 
-                  <Button
-                    className="mt-5 w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
-                    onClick={() => router.push(`/career?id=${career.id}`)}
-                  >
-                    View Details
-                  </Button>
+                    <Button
+                      className="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
+                      onClick={() => router.push(`/career?id=${career.id}`)}
+                    >
+                      View Details
+                    </Button>
 
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+
+            {!loading && filtered.length === 0 && (
+              <div className="col-span-full text-center py-10 text-slate-500">
+                No open positions match your search.
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* MODAL VIEW FOR SELECTED CAREER */}
       {selectedCareer && (
-        <div className="fixed inset-0 bg-black/60 dark:bg-black/70 flex justify-center items-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/60 dark:bg-black/70 flex justify-center items-center p-4 z-50 overflow-y-auto">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white dark:bg-slate-800 rounded-xl p-6 max-w-lg w-full shadow-xl border border-slate-200 dark:border-slate-700"
+            className="bg-white dark:bg-slate-800 rounded-xl p-6 max-w-2xl w-full shadow-xl border border-slate-200 dark:border-slate-700 max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Briefcase className="h-6 w-6 text-indigo-500" /> {selectedCareer.role}
-              </h2>
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Briefcase className="h-6 w-6 text-indigo-500" /> {selectedCareer.role}
+                </h2>
+                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{selectedCareer.department} • {selectedCareer.type}</p>
+              </div>
 
               <Button
                 variant="ghost"
                 onClick={closeModal}
-                className="text-slate-700 dark:text-slate-300 hover:text-indigo-600"
+                className="text-slate-700 dark:text-slate-300 hover:text-indigo-600 -mt-2 -mr-2"
               >
-                Close
+                <X className="h-6 w-6" />
               </Button>
             </div>
 
-            <div className="flex gap-5 mb-4">
-              <div className="w-28 h-28 relative rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600">
-                <Image src={selectedCareer.image} alt={selectedCareer.role} fill className="object-cover" />
-              </div>
+            {!isApplying ? (
+              <>
+                <div className="flex flex-col md:flex-row gap-6 mb-6">
+                  <div className="w-full md:w-1/3 aspect-square relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100">
+                    {/* Use default image if none provided */}
+                    <div className="w-full h-full flex items-center justify-center bg-indigo-50 dark:bg-slate-900 text-indigo-200 dark:text-slate-700">
+                      <Briefcase className="h-20 w-20" />
+                    </div>
+                    {selectedCareer.image && selectedCareer.image !== '/careers/default.jpg' && (
+                      <Image src={selectedCareer.image} alt={selectedCareer.role} fill className="object-cover" />
+                    )}
+                  </div>
 
-              <div className="text-sm text-slate-800 dark:text-slate-300 space-y-1">
-                <p className="flex items-center gap-1"><Users className="h-4 w-4" /> {selectedCareer.department}</p>
-                <p className="flex items-center gap-1"><Briefcase className="h-4 w-4" /> {selectedCareer.type}</p>
-                <p className="flex items-center gap-1"><Users className="h-4 w-4" /> {selectedCareer.openings} Openings</p>
-                <p className="flex items-center gap-1"><Briefcase className="h-4 w-4" /> Experience: {selectedCareer.experience}</p>
-                {selectedCareer.rating && (
-                  <p className="flex items-center gap-1"><Star className="h-4 w-4 text-yellow-500" /> Rating: {selectedCareer.rating}</p>
-                )}
-              </div>
-            </div>
+                  <div className="flex-1 text-sm text-slate-800 dark:text-slate-300 space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-lg border border-slate-100 dark:border-slate-700">
+                        <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Experience</p>
+                        <p className="font-medium">{selectedCareer.experience}</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-lg border border-slate-100 dark:border-slate-700">
+                        <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Openings</p>
+                        <p className="font-medium">{selectedCareer.openings}</p>
+                      </div>
+                    </div>
 
-            <div className="border-t border-slate-200 dark:border-slate-700 pt-3">
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
-                <Briefcase className="h-5 w-5 text-indigo-500" /> Role Overview
-              </h3>
-              <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-                {selectedCareer.description}
-              </p>
+                    <div className="pt-2">
+                      <h4 className="font-semibold mb-2 flex items-center gap-2 text-slate-900 dark:text-white">
+                        <Briefcase className="h-4 w-4 text-indigo-500" /> Role Overview
+                      </h4>
+                      <p className="text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-wrap">
+                        {selectedCareer.description}
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-              {/* APPLY BUTTON */}
-              <Button className="mt-5 w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">
-                Apply for this Role
-              </Button>
-            </div>
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-6">
+                  <Button
+                    onClick={handleApplyClick}
+                    className="w-full h-12 text-base bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-lg hover:shadow-indigo-500/20 transition-all"
+                  >
+                    Apply for this Role
+                  </Button>
+                </div>
+              </>
+            ) : (
+              /* APPLICATION FORM */
+              <form onSubmit={handleApplySubmit} className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="flex items-center gap-2 mb-4 pb-4 border-b border-slate-200 dark:border-slate-700">
+                  <Button variant="ghost" size="sm" onClick={() => setIsApplying(false)} type="button" className="p-0 h-auto hover:bg-transparent text-indigo-600">Back</Button>
+                  <span className="text-slate-400">/</span>
+                  <span className="font-medium text-slate-900 dark:text-white">Application Form</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Full Name *</Label>
+                    <Input
+                      id="name"
+                      required
+                      value={formData.applicant_name}
+                      onChange={(e) => setFormData({ ...formData, applicant_name: e.target.value })}
+                      placeholder="John Doe"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      required
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      placeholder="john@example.com"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number *</Label>
+                  <Input
+                    id="phone"
+                    required
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="+1 (555) 000-0000"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="resume">Resume / CV Link *</Label>
+                    <Input
+                      id="resume"
+                      required
+                      value={formData.resume_link}
+                      onChange={(e) => setFormData({ ...formData, resume_link: e.target.value })}
+                      placeholder="https://linkedin.com/in/..."
+                    />
+                    <p className="text-xs text-slate-500">Provide a link to your LinkedIn, Google Drive, or personal site.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="portfolio">Portfolio URL</Label>
+                    <Input
+                      id="portfolio"
+                      value={formData.portfolio_link}
+                      onChange={(e) => setFormData({ ...formData, portfolio_link: e.target.value })}
+                      placeholder="https://behance.net/..."
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="cover">Cover Letter (Optional)</Label>
+                  <Textarea
+                    id="cover"
+                    rows={4}
+                    value={formData.cover_letter}
+                    onChange={(e) => setFormData({ ...formData, cover_letter: e.target.value })}
+                    placeholder="Tell us why you're a great fit..."
+                  />
+                </div>
+
+                <div className="pt-4">
+                  <Button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full h-11 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
+                  >
+                    {submitting ? "Submitting Application..." : "Submit Application"}
+                  </Button>
+                </div>
+              </form>
+            )}
+
           </motion.div>
         </div>
       )}

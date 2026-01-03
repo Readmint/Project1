@@ -27,6 +27,7 @@ export const connectDatabase = async (): Promise<void> => {
       }
 
       firestoreDb = admin.firestore();
+      firestoreDb.settings({ ignoreUndefinedProperties: true });
       logger.info('Connected to Firebase Firestore');
       console.log('✅ Connected to Firebase Firestore');
       console.log('📦 Storage bucket:', storageBucket || `${projectId}.appspot.com`);
@@ -66,6 +67,7 @@ export const getDatabase = (): any => {
     // If initialized but firestoreDb references missing, get it
     if (admin.apps.length && !firestoreDb) {
       firestoreDb = admin.firestore();
+      firestoreDb.settings({ ignoreUndefinedProperties: true });
     }
   }
 

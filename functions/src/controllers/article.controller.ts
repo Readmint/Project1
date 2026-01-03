@@ -103,36 +103,10 @@ export const createArticle = async (req: Request, res: Response): Promise<void> 
       visibility = 'public',
     } = req.body;
 
-    res.status(400).json({ status: 'error', message: 'Title is required' });
-    return;
-    // Validations handled above
-
-
-    // --- CHECK SUBMISSION ELIGIBILITY ---
-    const { getCurrentSubscriptionInternal } = require('./author.controller'); // Dynamic import to avoid circular dependency issues if any
-    const sub = await getCurrentSubscriptionInternal(authorId);
-
-    // If Free Plan (status 'free' or null)
-    if (!sub || sub.status === 'free') {
-      const stats: any = await getDoc('author_stats', authorId);
-      const credits = stats?.submission_credits || 0;
-
-      if (credits <= 0) {
-        res.status(403).json({
-          status: 'error',
-          code: 'PAYMENT_REQUIRED',
-          message: 'Submission fee required for Free Plan users.',
-          data: { needsPayment: true, amount: 50 } // Hardcoded fee or fetch from settings
-        });
-        return;
-      }
-
-      // Deduct credit
-      await updateDoc('author_stats', authorId, {
-        submission_credits: credits - 1
-      });
+    if (!title || typeof title !== 'string' || title.trim().length === 0) {
+      res.status(400).json({ status: 'error', message: 'Title is required' });
+      return;
     }
-    // ------------------------------------
 
     // Validate category
     let finalCategoryId: string | null = null;

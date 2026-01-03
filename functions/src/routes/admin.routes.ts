@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { adminLogin, createAdmin, verifyAdmin, forgotPassword, resetPassword, getAdminStats, getPlatformHealth, getSystemUsers, manageUserRole, createUser, getAllContent, adminContentAction, getPlagiarismMonitor, verifyPlagiarismReport, getAuditLogs, getIncidents, createIncident, updateIncident, getSystemSettings, updateSystemSettings, getAdvancedAnalytics, createAnnouncement } from '../controllers/admin.controller';
+import { adminLogin, createAdmin, verifyAdmin, forgotPassword, resetPassword, getAdminStats, getPlatformHealth, getSystemUsers, manageUserRole, createUser, getAllContent, adminContentAction, getPlagiarismMonitor, verifyPlagiarismReport, getAuditLogs, getIncidents, createIncident, updateIncident, getSystemSettings, updateSystemSettings, getAdvancedAnalytics, createAnnouncement, getPlans, getFinancials } from '../controllers/admin.controller';
+
 import { authenticate, authorize } from '../middleware/auth';
 
 const router = Router();
@@ -14,6 +15,10 @@ router.post('/reset-password', resetPassword);
 // Protected (Requires Admin Token)
 router.get('/stats', authenticate, authorize('admin'), getAdminStats); // Kept for legacy
 router.get('/health', authenticate, authorize('admin'), getPlatformHealth);
+
+router.get('/plans', authenticate, authorize('admin'), getPlans);
+router.get('/financials', authenticate, authorize('admin'), getFinancials);
+
 router.get('/users', authenticate, authorize('admin'), getSystemUsers);
 router.post('/users/manage', authenticate, authorize('admin'), manageUserRole);
 router.post('/users/create', authenticate, authorize('admin'), createUser);
@@ -31,20 +36,7 @@ router.post('/incidents/update', authenticate, authorize('admin'), updateInciden
 router.get('/settings', authenticate, authorize('admin'), getSystemSettings);
 router.post('/settings', authenticate, authorize('admin'), updateSystemSettings);
 
-import { createPlan, updatePlan, deletePlan, getAdminPlans, getPaymentReceipts, getFinancialStats } from '../controllers/admin.payment.controller';
-
-// ... Existing routes ...
-
 router.get('/analytics', authenticate, authorize('admin'), getAdvancedAnalytics);
 router.post('/announcements', authenticate, authorize('admin'), createAnnouncement);
-
-// --- Payment & Subscription Management ---
-router.post('/plans', authenticate, authorize('admin'), createPlan);
-router.put('/plans/:planId', authenticate, authorize('admin'), updatePlan);
-router.delete('/plans/:planId', authenticate, authorize('admin'), deletePlan);
-router.get('/plans', authenticate, authorize('admin'), getAdminPlans);
-
-router.get('/receipts', authenticate, authorize('admin'), getPaymentReceipts);
-router.get('/financials', authenticate, authorize('admin'), getFinancialStats);
 
 export default router;

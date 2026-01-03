@@ -535,7 +535,7 @@ export const getCurrentSubscription = async (req: Request, res: Response): Promi
   }
 };
 
-export const getCurrentSubscriptionInternal = async (userId: string): Promise<any> => {
+const getCurrentSubscriptionInternal = async (userId: string): Promise<any> => {
   try {
     // Filter by user_id, status=active, end_date > now
     // Firestore complex filter: end_date > now.
