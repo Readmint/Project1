@@ -1,0 +1,6 @@
+
+> build
+> tsc
+
+src/controllers/career.controller.ts(105,24): error TS7030: Not all code paths return a value.
+src/controllers/career.controller.ts(220,40): error TS7030: Not all code paths return a value.

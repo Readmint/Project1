@@ -8,6 +8,7 @@ import { Check, Upload, ArrowRight, BookOpen, User, PenTool, Globe, Briefcase, G
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { API_BASE } from "@/lib/api";
 
 const ROLES = [
     "Editor-in-Chief",
@@ -134,7 +135,7 @@ export default function EditorialApplicationPage() {
             // Retrieve token if needed? Application usually public.
             // Assuming public endpoint.
 
-            const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://us-central1-readmint-fe3c3.cloudfunctions.net/api/api";
+            // API Call
             const res = await fetch(`${API_BASE}/editorial/apply`, {
                 method: "POST",
                 body: data

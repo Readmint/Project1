@@ -26,17 +26,19 @@ export const errorHandler = (
       error: err
     });
   } else {
-    // Production mode
-    if (err.statusCode === 500) {
-      res.status(500).json({
-        status: 'error',
-        message: 'Something went wrong!'
-      });
-    } else {
-      res.status(err.statusCode).json({
-        status: err.status,
-        message: err.message
-      });
-    }
+    // Production mode - TEMPORARY DEBUGGING ENABLED
+    // if (err.statusCode === 500) {
+    res.status(err.statusCode || 500).json({
+      status: 'error',
+      message: err.message || 'Something went wrong!',
+      debug_error: err.message, // Explicitly sending this to frontend
+      debug_stack: err.stack      // Explicitly sending this to frontend
+    });
+    // } else {
+    //   res.status(err.statusCode).json({
+    //     status: err.status,
+    //     message: err.message
+    //   });
+    // }
   }
 };

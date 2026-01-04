@@ -14,7 +14,33 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
+/* --------------------------------------------------------------------------
+   DATA (Now Dynamic)
+   -------------------------------------------------------------------------- */
+import { useEffect, useState } from "react";
+import { getJSON } from "@/lib/api";
+import { Loader2 } from "lucide-react";
+
 export default function EditorialBoardPage() {
+    const [boardMembers, setBoardMembers] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchBoard = async () => {
+            try {
+                const res = await getJSON("/editorial/board");
+                if (res.status === "success") {
+                    setBoardMembers(res.data);
+                }
+            } catch (e) {
+                console.error("Failed to fetch board members", e);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchBoard();
+    }, []);
+
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors">
 
@@ -100,7 +126,6 @@ export default function EditorialBoardPage() {
                                     alt="Editorial Team"
                                     fill
                                     className="object-cover"
-                                // Removing placeholder prop as we don't have the blurred image yet
                                 // placeholder="blur"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-8">
@@ -128,63 +153,26 @@ export default function EditorialBoardPage() {
                     </p>
                 </div>
 
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {boardMembers.map((member, idx) => (
-                        <BoardMemberCard key={idx} member={member} index={idx} />
-                    ))}
-                </div>
+                {loading ? (
+                    <div className="flex justify-center py-20">
+                        <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
+                    </div>
+                ) : (
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        {boardMembers.length > 0 ? boardMembers.map((member: any, idx) => (
+                            <BoardMemberCard key={idx} member={member} index={idx} />
+                        )) : (
+                            <div className="col-span-full text-center py-10 text-slate-500">
+                                No board members found.
+                            </div>
+                        )}
+                    </div>
+                )}
             </section>
 
         </div>
     );
 }
-
-/* --------------------------------------------------------------------------
-   DATA
-   -------------------------------------------------------------------------- */
-
-const boardMembers = [
-    {
-        name: "Dr. Amit Sharma",
-        role: "Editor-in-Chief",
-        affiliation: "Professor & Dean, Faculty of Science, Central University of Delhi.",
-        bio: "Dr. Sharma has over 20 years of experience in academic publishing and research leadership. As the Editor-in-Chief, he oversees the journal's strategic direction, ensuring high standards of integrity and excellence in every publication.",
-        image: "/avatars/amit-sharma.jpg", // Placeholder path
-        color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
-    },
-    {
-        name: "Mr. Vikram Aditya Singh",
-        role: "Content Manager",
-        affiliation: "Department of Digital Media & Publications, National Institute of Mass Communication.",
-        bio: "Mr. Vikram has over 8 years of experience in managing academic publishing workflows. He is responsible for the overall content strategy, layout consistency, and ensuring that all published material meets the journal’s standards.",
-        image: "/avatars/vikram-singh.jpg",
-        color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-    },
-    {
-        name: "Mr. Sanjay Kumar",
-        role: "Editor",
-        affiliation: "Technical Lead & Researcher, Indian Institute of Technology (IIT) Delhi.",
-        bio: "Mr. Sanjay specializes in technical communication and applied sciences. With a decade of experience in journal management, he ensures that all technological manuscripts align with contemporary industry trends and scientific rigor.",
-        image: "/avatars/sanjay-kumar.jpg",
-        color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
-    },
-    {
-        name: "Dr. Sunita Rao",
-        role: "Senior Reviewer",
-        affiliation: "Senior Scientist, Indian Council of Agricultural Research (ICAR), New Delhi.",
-        bio: "With over 15 years of experience in scientific research, Dr. Rao leads the peer-review committee. She specializes in deep technical analysis and provides expert feedback to maintain the highest academic integrity.",
-        image: "/avatars/sunita-rao.jpg",
-        color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
-    },
-    {
-        name: "Dr. Rakesh Verma",
-        role: "Reviewer",
-        affiliation: "Associate Professor, Department of Agronomy, Banaras Hindu University (BHU).",
-        bio: "Dr. Verma is a Ph.D. holder with extensive experience in sustainable farming research. He has evaluated numerous international papers and focuses on the scientific accuracy and practical impact of agricultural studies.",
-        image: "/avatars/rakesh-verma.jpg",
-        color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
-    }
-];
 
 /* --------------------------------------------------------------------------
    COMPONENTS

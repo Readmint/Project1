@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.checkDatabaseStatus = exports.getDatabase = exports.getFirestoreDatabase = exports.getStorageBucket = exports.connectDatabase = void 0;
+exports.checkDatabaseStatus = exports.getDatabase = exports.getFirestoreDatabase = exports.getStorageBucket = exports.ensureInitialized = exports.connectDatabase = void 0;
 const firebase_admin_1 = __importDefault(require("firebase-admin"));
 const logger_1 = require("../utils/logger");
 let firestoreDb = null;
@@ -47,35 +47,44 @@ const connectDatabase = async () => {
     }
 };
 exports.connectDatabase = connectDatabase;
+const ensureInitialized = () => {
+    if (!firebase_admin_1.default.apps.length) {
+        // Use default credentials (works in Cloud Functions)
+        try {
+            const projectId = process.env.READMINT_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
+            const storageBucket = process.env.READMINT_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || (projectId ? `${projectId}.appspot.com` : undefined);
+            firebase_admin_1.default.initializeApp({
+                storageBucket: storageBucket
+            });
+            console.log('✅ Firebase Admin Initialized (Lazy)');
+        }
+        catch (e) {
+            console.error('Failed to lazy initialize Firebase Admin', e);
+            // Fallback - might already be initialized?
+            if (!firebase_admin_1.default.apps.length)
+                throw e;
+        }
+    }
+};
+exports.ensureInitialized = ensureInitialized;
 const getStorageBucket = () => {
+    (0, exports.ensureInitialized)();
     return firebase_admin_1.default.storage().bucket();
 };
 exports.getStorageBucket = getStorageBucket;
 const getFirestoreDatabase = () => {
     if (!firestoreDb) {
-        throw new Error('Firestore database not initialized');
+        if (!firebase_admin_1.default.apps.length)
+            (0, exports.ensureInitialized)();
+        firestoreDb = firebase_admin_1.default.firestore();
+        firestoreDb.settings({ ignoreUndefinedProperties: true });
     }
     return firestoreDb;
 };
 exports.getFirestoreDatabase = getFirestoreDatabase;
 // Main getDatabase function - defaults to Firestore
 const getDatabase = () => {
-    if (!firestoreDb) {
-        // Lazy initialization for Cloud Functions or if connectDatabase wasn't called
-        if (!firebase_admin_1.default.apps.length) {
-            // Use default credentials (works in Cloud Functions)
-            firebase_admin_1.default.initializeApp();
-        }
-        // If initialized but firestoreDb references missing, get it
-        if (firebase_admin_1.default.apps.length && !firestoreDb) {
-            firestoreDb = firebase_admin_1.default.firestore();
-            firestoreDb.settings({ ignoreUndefinedProperties: true });
-        }
-    }
-    if (firestoreDb) {
-        return firestoreDb;
-    }
-    throw new Error('No database initialized');
+    return (0, exports.getFirestoreDatabase)();
 };
 exports.getDatabase = getDatabase;
 /**

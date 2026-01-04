@@ -77,13 +77,13 @@ export const createRole = async (req: Request, res: Response) => {
 export const getRoles = async (req: Request, res: Response) => {
     try {
         const showAll = req.query.all === 'true';
-        let conditions: any[] = [];
+        let conditions: { field: string; op: FirebaseFirestore.WhereFilterOp; value: any }[] = [];
 
         if (!showAll) {
             conditions.push({ field: 'status', op: '==', value: 'active' });
         }
 
-        const roles = await firestore.executeQuery('career_roles', conditions as any);
+        const roles = await firestore.executeQuery('career_roles', conditions);
 
         // Sort by posted_at descending (newest first)
         roles.sort((a: any, b: any) => new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime());

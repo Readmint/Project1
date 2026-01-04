@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAdminStats = exports.getAdvancedAnalytics = exports.updateSystemSettings = exports.getSystemSettings = exports.createAnnouncement = exports.updateIncident = exports.createIncident = exports.getIncidents = exports.getAuditLogs = exports.verifyPlagiarismReport = exports.getPlagiarismMonitor = exports.adminContentAction = exports.getAllContent = exports.createUser = exports.manageUserRole = exports.getSystemUsers = exports.getPlatformHealth = exports.verifyAdmin = exports.createAdmin = exports.adminLogin = void 0;
+exports.getAdminStats = exports.getAdvancedAnalytics = exports.updateSystemSettings = exports.getSystemSettings = exports.createAnnouncement = exports.updateIncident = exports.createIncident = exports.getIncidents = exports.getAuditLogs = exports.verifyPlagiarismReport = exports.getPlagiarismMonitor = exports.adminContentAction = exports.getAllContent = exports.createUser = exports.manageUserRole = exports.getSystemUsers = exports.getPlatformHealth = exports.resetPassword = exports.forgotPassword = exports.verifyAdmin = exports.createAdmin = exports.adminLogin = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jwt = __importStar(require("jsonwebtoken"));
 // import { getDatabase } from '../config/database';
@@ -223,6 +223,89 @@ const verifyAdmin = async (req, res) => {
     }
 };
 exports.verifyAdmin = verifyAdmin;
+const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const users = await (0, firestore_helpers_1.executeQuery)('users', [{ field: 'email', op: '==', value: email }]);
+        if (users.length === 0) {
+            // Return success even if not found to prevent enumeration, or return 404 if internal policy allows
+            res.status(200).json({ status: 'success', message: 'If an account exists, an OTP has been sent.' });
+            return;
+        }
+        const user = users[0];
+        if (user.role !== 'admin') {
+            res.status(200).json({ status: 'success', message: 'If an account exists, an OTP has been sent.' });
+            return;
+        }
+        const otp = generateOTP();
+        const expiresAt = Date.now() + 10 * 60 * 1000; // 10 mins
+        await (0, firestore_helpers_1.createDoc)('admin_otps', {
+            email,
+            otp,
+            expires_at: new Date(expiresAt),
+            created_at: new Date()
+        });
+        const transporter = createTransporter();
+        await transporter.sendMail({
+            from: process.env.EMAIL_USER,
+            to: email,
+            subject: 'Reset Admin Password - ReadMint',
+            html: `
+              <div style="font-family: Arial, sans-serif; padding: 20px;">
+                <h2>Password Reset Request</h2>
+                <p>We received a request to reset your admin password.</p>
+                <p>Your OTP is: <strong>${otp}</strong></p>
+                <p>It expires in 10 minutes.</p>
+              </div>
+            `
+        });
+        res.status(200).json({ status: 'success', message: 'OTP sent successfully.' });
+    }
+    catch (error) {
+        logger_1.logger.error('Forgot password error:', error);
+        res.status(500).json({ status: 'error', message: 'Failed to process request' });
+    }
+};
+exports.forgotPassword = forgotPassword;
+const resetPassword = async (req, res) => {
+    try {
+        const { email, otp, newPassword } = req.body;
+        if (!newPassword || newPassword.length < 6) {
+            res.status(400).json({ status: 'error', message: 'Password must be at least 6 characters' });
+            return;
+        }
+        const otps = await (0, firestore_helpers_1.executeQuery)('admin_otps', [{ field: 'email', op: '==', value: email }]);
+        otps.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        const latestOtp = otps.length > 0 ? otps[0] : null;
+        if (!latestOtp || latestOtp.otp !== otp) {
+            res.status(400).json({ status: 'error', message: 'Invalid OTP' });
+            return;
+        }
+        const expires = latestOtp.expires_at?.toDate ? latestOtp.expires_at.toDate().getTime() : new Date(latestOtp.expires_at).getTime();
+        if (Date.now() > expires) {
+            res.status(400).json({ status: 'error', message: 'OTP expired' });
+            return;
+        }
+        // OTP Valid
+        const users = await (0, firestore_helpers_1.executeQuery)('users', [{ field: 'email', op: '==', value: email }]);
+        if (users.length === 0) {
+            res.status(404).json({ status: 'error', message: 'User not found' });
+            return;
+        }
+        const user = users[0];
+        const hashedPassword = await bcryptjs_1.default.hash(newPassword, 12);
+        await (0, firestore_helpers_1.updateDoc)('users', user.id, { password: hashedPassword });
+        // Clean up OTP
+        await (0, firestore_helpers_1.deleteDoc)('admin_otps', latestOtp.id);
+        await logAdminAction(user.id, 'RESET_PASSWORD', 'user', user.id, {});
+        res.status(200).json({ status: 'success', message: 'Password reset successfully. Please login.' });
+    }
+    catch (error) {
+        logger_1.logger.error('Reset password error:', error);
+        res.status(500).json({ status: 'error', message: 'Failed to reset password' });
+    }
+};
+exports.resetPassword = resetPassword;
 /* -------------------------------------------------------------------------- */
 /*                                DASHBOARD APIS                              */
 /* -------------------------------------------------------------------------- */

@@ -57,7 +57,7 @@ export const createRole = async (req: Request, res: Response) => {
             status: 'active'
         };
 
-        await firestore.createDoc('career_roles', newRole.id, newRole);
+        await firestore.createDoc('career_roles', newRole, newRole.id);
 
         res.status(201).json({
             status: 'success',
@@ -77,13 +77,13 @@ export const createRole = async (req: Request, res: Response) => {
 export const getRoles = async (req: Request, res: Response) => {
     try {
         const showAll = req.query.all === 'true';
-        let conditions = [];
+        let conditions: { field: string; op: FirebaseFirestore.WhereFilterOp; value: any }[] = [];
 
         if (!showAll) {
-            conditions.push({ field: 'status', operator: '==', value: 'active' });
+            conditions.push({ field: 'status', op: '==', value: 'active' });
         }
 
-        const roles = await firestore.getCollection('career_roles', conditions);
+        const roles = await firestore.executeQuery('career_roles', conditions);
 
         // Sort by posted_at descending (newest first)
         roles.sort((a: any, b: any) => new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime());
@@ -180,7 +180,7 @@ export const submitApplication = async (req: Request, res: Response) => {
             status: 'pending'
         };
 
-        await firestore.createDoc('career_applications', newApplication.id, newApplication);
+        await firestore.createDoc('career_applications', newApplication, newApplication.id);
 
         res.status(201).json({
             status: 'success',
@@ -198,7 +198,7 @@ export const submitApplication = async (req: Request, res: Response) => {
  */
 export const getApplications = async (req: Request, res: Response) => {
     try {
-        const applications = await firestore.getCollection('career_applications');
+        const applications = await firestore.executeQuery('career_applications');
 
         // Sort by applied_at descending
         applications.sort((a: any, b: any) => new Date(b.applied_at).getTime() - new Date(a.applied_at).getTime());

@@ -18,6 +18,9 @@ import {
   Languages,
   ShieldAlert,
   FileText,
+  CreditCard,
+  CheckCircle2,
+  Lock
 } from "lucide-react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { SUPPORTED_LANGUAGES } from "@/constants/languages";
@@ -109,6 +112,16 @@ function SubmitArticleContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [articleId, setArticleId] = useState<string | null>(null);
+
+  // Fee & Publication Type
+  const [publicationType, setPublicationType] = useState("Journal");
+  const [subscription, setSubscription] = useState<any>(null);
+  const [feeBreakup, setFeeBreakup] = useState({
+    plagiarism: 50,
+    processing: 100,
+    platform: 50,
+    total: 200
+  });
 
   // Partner Event & Visibility support
   const [event_id, setEvent_id] = useState("");
@@ -206,12 +219,51 @@ function SubmitArticleContent() {
       return;
     }
 
+
+    // Fetch Subscription Status
+    const fetchSubscription = async (uid: string) => {
+      try {
+        const res: any = await getJSON(`/subscription/user/${uid}/current-subscription`);
+        if (res.status === 'success' && res.data?.subscription) {
+          setSubscription(res.data.subscription);
+          // Recalculate Fees for Subscriber
+          // Subscriber: 0 Plagiarism, 0 Processing, Only Platform Fee (50)
+          setFeeBreakup({
+            plagiarism: 0,
+            processing: 0,
+            platform: 50,
+            total: 50
+          });
+        } else {
+          // No active subscription -> Full Fees
+          setFeeBreakup({
+            plagiarism: 50,
+            processing: 100,
+            platform: 50,
+            total: 200
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch subscription", err);
+        // Fallback to full fees
+        setFeeBreakup({
+          plagiarism: 50,
+          processing: 100,
+          platform: 50,
+          total: 200
+        });
+      }
+    };
+
     const payload = parseJwt(token);
     if (payload) {
       const role = (payload.role as string) || getRole();
       console.log("SubmitPage Role (JWT):", role);
       setUserRole(role);
-      setUserId((payload.userId as string) || (payload.sub as string) || (localStorage.getItem("userId") || null));
+      const uid = (payload.userId as string) || (payload.sub as string) || (localStorage.getItem("userId") || null);
+      setUserId(uid);
+      if (uid) fetchSubscription(uid);
+
       const isAuth = privilegedRoles.includes(role.toLowerCase());
       console.log("Authorized (JWT)?", isAuth);
       setIsAuthorizedToRun(isAuth);
@@ -298,6 +350,7 @@ function SubmitArticleContent() {
                 const meta = typeof art.metadata === 'string' ? JSON.parse(art.metadata) : art.metadata;
                 if (meta.tags) setTags(meta.tags);
                 if (meta.issue_id) setIssue_id(meta.issue_id);
+                if (meta.publication_type) setPublicationType(meta.publication_type);
               } catch (e) { /* ignore */ }
             }
             // Removed redundant catch
@@ -337,6 +390,7 @@ function SubmitArticleContent() {
           setVisibility(d.visibility || "public");
           setTags(d.tags || []);
           setIssue_id(d.issue_id || "");
+          if (d.publication_type) setPublicationType(d.publication_type);
           setStatusMsg("✅ Draft Loaded");
         } catch {
           // ignore parse errors
@@ -361,6 +415,7 @@ function SubmitArticleContent() {
             visibility,
             tags,
             issue_id,
+            publication_type: publicationType,
           })
         );
         setStatusMsg("Draft autosaved...");
@@ -563,6 +618,35 @@ function SubmitArticleContent() {
   // 3) run similarity check
   // 4) show similarity modal with results
   // 5) if user confirms (and/or similarity below threshold), call finalizeSubmission (PATCH status)
+  const handleCheckout = async () => {
+    // 1. Save Draft First
+    await saveDraft();
+
+    if (!userId) {
+      // toast.error("User not identified"); 
+      // We don't have toast imported? checking imports... 
+      // Re-checking imports, I see Dialog imports but not toast. 
+      // Using setStatusMsg as fallback if toast missing, or justconsole.error
+      console.error("User not identified for checkout");
+      return;
+    }
+
+    // 2. Initiate Payment
+    try {
+      await createOrderAndRedirect({
+        planId: 'article_submission_fee',
+        amount: feeBreakup.total,
+        userId: userId,
+        userEmail: localStorage.getItem('email') || "",
+        firstName: localStorage.getItem('name') || "Author",
+        surl: `${window.location.origin}/author-dashboard/submit?articleId=${articleId || ''}&status=payment_success`,
+        furl: `${window.location.origin}/author-dashboard/submit?articleId=${articleId || ''}&status=payment_failure`,
+      });
+    } catch (err: any) {
+      console.error("Payment Error", err);
+    }
+  };
+
   const submit = async () => {
     if (!title.trim()) {
       setStatusMsg("Title is required");
@@ -607,7 +691,8 @@ function SubmitArticleContent() {
         content: content || "",
         language: language || "en",
         tags: tags || [],
-        co_authors: co_authors ? co_authors.split(",").map(s => s.trim()).filter(Boolean) : []
+        co_authors: co_authors ? co_authors.split(",").map(s => s.trim()).filter(Boolean) : [],
+        metadata: JSON.stringify({ publication_type: publicationType, tags: tags, issue_id: issue_id })
       };
       if (category_id && category_id.trim()) payload.category_id = category_id.trim();
       if (event_id && event_id.trim()) payload.event_id = event_id.trim();
@@ -1104,6 +1189,22 @@ function SubmitArticleContent() {
           <Card className="p-5 rounded-2xl border shadow-sm">
             <h3 className="text-base font-semibold mb-3">Article Details</h3>
 
+            <label className="text-xs font-medium mb-1 block">Publication Type</label>
+            <div className="relative mb-3">
+              <select
+                value={publicationType}
+                onChange={(e) => setPublicationType(e.target.value)}
+                className="w-full border bg-slate-100 dark:bg-slate-900 text-xs p-2 rounded-lg appearance-none pr-8"
+                disabled={isSubmitting}
+              >
+                <option value="Journal">Journal</option>
+                <option value="Magazine">Magazine</option>
+                <option value="Book">Book</option>
+                <option value="Research Paper">Research Paper</option>
+              </select>
+              <ChevronDown size={14} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none" />
+            </div>
+
             <label className="text-xs font-medium mb-1 block">Category</label>
             <div className="relative mb-3">
               <select
@@ -1197,6 +1298,87 @@ function SubmitArticleContent() {
                 <p className="text-[10px] text-slate-500">List other contributors (optional)</p>
               </div>
             )}
+          </Card>
+
+          {/* FEE BREAKUP CARD */}
+          <Card className="p-5 rounded-2xl border shadow-sm bg-white dark:bg-slate-950">
+            <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+              <CreditCard size={18} className="text-indigo-600" /> Fee Setup
+            </h3>
+
+            <div className="space-y-3">
+              {/* Selected Plan */}
+              <div className="flex justify-between items-center pb-3 border-b border-dashed">
+                <span className="text-xs text-slate-500">Selected Plan</span>
+                <span className={`text-xs font-bold px-2 py-1 rounded ${subscription ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
+                  {subscription ? "Active Subscription" : "Free Plan"}
+                </span>
+              </div>
+
+              {/* Breakup */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500">Plagiarism Check</span>
+                  <span className={subscription ? "text-green-600 font-medium line-through" : "text-slate-700"}>
+                    {subscription ? "₹50" : `₹${feeBreakup.plagiarism}`}
+                  </span>
+                </div>
+                {subscription && <div className="flex justify-end -mt-2"><span className="text-[10px] text-green-600">FREE with plan</span></div>}
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500">Platform Fee</span>
+                  <span className="text-slate-700 font-medium">₹{feeBreakup.platform}</span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500">Article Processing</span>
+                  <span className={subscription ? "text-green-600 font-medium line-through" : "text-slate-700"}>
+                    {subscription ? "₹100" : `₹${feeBreakup.processing}`}
+                  </span>
+                </div>
+                {subscription && <div className="flex justify-end -mt-2"><span className="text-[10px] text-green-600">FREE with plan</span></div>}
+              </div>
+
+              {/* Total */}
+              <div className="pt-3 border-t flex justify-between items-center">
+                <span className="text-sm font-bold text-slate-800 dark:text-slate-200">Total Payable</span>
+                <span className="text-lg font-extrabold text-indigo-600">₹{feeBreakup.total}</span>
+              </div>
+
+              {/* Checkout Button */}
+              {feeBreakup.total > 0 && (
+                <div className="pt-2">
+                  {subscription ? (
+                    <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3 text-center">
+                      <p className="text-xs text-indigo-700 font-medium mb-1">Total: ₹{feeBreakup.total}</p>
+                      <Button onClick={handleCheckout} className="w-full h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white">
+                        Proceed to Pay
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2 text-xs text-slate-600">
+                        <Lock size={12} /> Secure Payment via PayU
+                      </div>
+                      <Button onClick={handleCheckout} className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-md">
+                        Proceed to Checkout (₹{feeBreakup.total})
+                      </Button>
+                      <p className="text-[10px] text-center text-slate-400 mt-2">
+                        Includes taxes & fees
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {feeBreakup.total === 0 && (
+                <div className="bg-green-50 border border-green-100 p-3 rounded-lg text-center mt-2">
+                  <CheckCircle2 size={24} className="text-green-500 mx-auto mb-1" />
+                  <p className="text-xs font-bold text-green-700">No Payment Required</p>
+                  <p className="text-[10px] text-green-600">Covered by your plan</p>
+                </div>
+              )}
+            </div>
           </Card>
 
           {/* Similarity Card */}

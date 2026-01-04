@@ -2,12 +2,16 @@
 import admin from 'firebase-admin';
 import { Storage, Bucket, File } from '@google-cloud/storage';
 
+import { ensureInitialized } from '../config/database';
+
 /**
  * Helper to get the storage bucket instance.
  * Uses the firebase-admin initialized app's storage() bucket if available,
  * otherwise constructs a google-cloud/storage client using env vars.
  */
 export const getStorageBucket = (): Bucket => {
+  ensureInitialized();
+
   // Try firebase-admin bucket first (if admin has been initialized)
   try {
     // When admin is initialized, admin.storage() should be available

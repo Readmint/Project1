@@ -32,6 +32,11 @@ export default function PublishPage() {
     const [price, setPrice] = useState("0.00");
     const [publishing, setPublishing] = useState(false);
 
+    // New Fields
+    const [volume, setVolume] = useState("");
+    const [issue, setIssue] = useState("");
+    const [publicationType, setPublicationType] = useState("Journal");
+
     useEffect(() => {
         loadQueue();
     }, []);
@@ -53,6 +58,10 @@ export default function PublishPage() {
         setSelectedArticle(article);
         setIsFree(true);
         setPrice("0.00");
+        // Reset defaults
+        setVolume("");
+        setIssue("");
+        setPublicationType("Journal");
     };
 
     const confirmPublish = async () => {
@@ -64,6 +73,9 @@ export default function PublishPage() {
                 articleId: selectedArticle.id,
                 isFree,
                 price: isFree ? 0 : parseFloat(price),
+                volume,
+                issue,
+                publicationType
             };
 
             const res = await postJSON("/content-manager/publishing/publish", payload);
@@ -142,15 +154,54 @@ export default function PublishPage() {
 
             {/* PUBLISH DIALOG */}
             <Dialog open={!!selectedArticle} onOpenChange={(open) => !open && setSelectedArticle(null)}>
-                <DialogContent>
+                <DialogContent className="max-w-md">
                     <DialogHeader>
                         <DialogTitle>Publish Article</DialogTitle>
                         <DialogDescription>
-                            Configure visibility and pricing for <strong>{selectedArticle?.title}</strong>.
+                            Configure details for <strong>{selectedArticle?.title}</strong>.
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="space-y-4 py-4">
+                        {/* Publication Type */}
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Publication Type</label>
+                            <select
+                                className="w-full flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                value={publicationType}
+                                onChange={(e) => setPublicationType(e.target.value)}
+                            >
+                                <option value="Journal">Journal</option>
+                                <option value="Magazine">Magazine</option>
+                                <option value="Book">Book</option>
+                                <option value="Research Paper">Research Paper</option>
+                            </select>
+                        </div>
+
+                        {/* Volume & Issue */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Volume</label>
+                                <input
+                                    type="text"
+                                    value={volume}
+                                    onChange={(e) => setVolume(e.target.value)}
+                                    placeholder="e.g. 12"
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Issue</label>
+                                <input
+                                    type="text"
+                                    value={issue}
+                                    onChange={(e) => setIssue(e.target.value)}
+                                    placeholder="e.g. 4"
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                />
+                            </div>
+                        </div>
+
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Access Type</label>
                             <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">

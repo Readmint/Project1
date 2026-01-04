@@ -753,6 +753,17 @@ const updateArticleStatus = async (req, res) => {
             created_at: new Date()
         });
         logger_1.logger.info(`Article ${articleId} status changed from ${article.status} to ${status} by ${userId}`);
+        // [NEW] Trigger Certificate Generation if status is published
+        if (status === 'published' && article.status !== 'published') {
+            try {
+                // Lazy load to avoid circular dependency issues if any
+                const { createAndSendCertificate } = require('../controllers/certificate.controller');
+                createAndSendCertificate(articleId).catch((err) => logger_1.logger.error('Async cert generation failed', err));
+            }
+            catch (e) {
+                logger_1.logger.error('Failed to trigger certificate generation', e);
+            }
+        }
         res.status(200).json({ status: 'success', message: 'Status updated', data: { id: articleId, status } });
         return;
     }
@@ -1112,7 +1123,7 @@ function detectAIContent(text) {
         return { score: 0, details: ['Text too short for analysis'], web_score: 0, web_sources: [] };
     const details = [];
     let score = 0;
-    // 1. Phrase Matching (Expanded list & higher penalty)
+    // 1. Phrase Matching (Significantly Expanded for Modern LLMs)
     const aiPhrases = [
         "in conclusion", "it is important to note", "summary of the",
         "delve into", "comprehensive overview", "significant impact",
@@ -1121,21 +1132,45 @@ function detectAIContent(text) {
         "testament to", "integration of", "leveraging the power of",
         "transformative potential", "paradigm shift", "underscores the importance",
         "aforementioned", "it should be noted", "complex interplay",
-        "multifaceted", "nuanced approach", "instrumental in", "pivotal role"
+        "multifaceted", "nuanced approach", "instrumental in", "pivotal role",
+        // New additions
+        "rapidly evolving", "ever-changing", "increasingly important",
+        "in today's world", "vital aspect", "key component", "fundamental understanding",
+        "holistic approach", "synergistic effect", "navigating the complexities",
+        "it is essential to", "by and large", "on the other hand", "conversely",
+        "furthermore", "moreover", "in addition to", "not only but also",
+        "a diverse range of", "wide array of", "plethora of", "myriad of",
+        "in the context of", "deep dive", "uncover the nuances",
+        "rich tapestry", "vibrant ecosystem", "cornerstone of",
+        "beacon of", "testament to the", "harnessing the potential",
+        "unlocking the power", "driving force", "game changer",
+        "cutting-edge", "state-of-the-art", "seamless integration",
+        "robust framework", "dynamic nature", "intricate balance",
+        "delicate balance", "double-edged sword", "step in the right direction",
+        "pave the way", "dawn of a new era", "uncharted territory",
+        "vast potential", "immense possibilities", "stark contrast",
+        "notable example", "prime example", "case in point",
+        "illuminates the fact", "sheds light on", "brings to the forefront",
+        "highlights the need", "emphasizes the importance", "serves as a reminder",
+        "testifies to the", "speaks volumes", "bears witness to",
+        "stands as a", "remains to be seen", "only time will tell"
     ];
     let phraseHits = 0;
     const lowerText = text.toLowerCase();
     aiPhrases.forEach(p => {
+        // Check for whole word match to avoid false positives in substrings
+        // Simple regex for word boundary check or include spaces
         if (lowerText.includes(p))
             phraseHits++;
     });
     if (phraseHits > 0) {
-        // Aggressive: 1 hit = 15 points, max 60
-        const points = Math.min(60, phraseHits * 15);
+        // Aggressive: 1 hit = 5 points, but scale non-linearly
+        // If > 10 hits, it's very likely AI
+        const points = Math.min(70, phraseHits * 6);
         score += points;
         details.push(`Found ${phraseHits} common AI-typical phrases (+${points}%)`);
     }
-    // 2. Sentence Length Variance (Stricter)
+    // 2. Sentence Length Variance (Stricter & Burstiness)
     const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
     if (sentences.length > 5) {
         const lengths = sentences.map(s => s.trim().split(/\s+/).length);
@@ -1143,62 +1178,128 @@ function detectAIContent(text) {
         const variance = lengths.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / lengths.length;
         const stdDev = Math.sqrt(variance);
         const cv = stdDev / mean; // Coefficient of Variation
-        if (cv < 0.35) {
-            score += 50; // Higher penalty
-            details.push("Very low sentence length variance (Robotic structure +50%)");
+        // Human writing usually has CV > 0.5 (high variance)
+        // AI is more uniform, often 0.3 - 0.4
+        if (cv < 0.38) {
+            score += 40; // Very robotic
+            details.push("Extremely low sentence length variance (Robotic structure +40%)");
         }
-        else if (cv < 0.45) {
-            score += 30;
-            details.push("Low sentence variance (+30%)");
+        else if (cv < 0.48) {
+            score += 25;
+            details.push("Low sentence variance (+25%)");
         }
     }
-    // 3. Perplexity Proxy (Vocabulary)
+    // 3. Perplexity Proxy (Vocabulary Richness & Repetition)
     const words = text.toLowerCase().match(/[a-z]+/g) || [];
     if (words.length > 50) {
         const unique = new Set(words);
-        const ttr = unique.size / words.length;
-        if (ttr < 0.45 && words.length < 500) {
-            score += 20;
-            details.push("Low vocabulary diversity (+20%)");
+        const ttr = unique.size / words.length; // Type-Token Ratio
+        // AI tends to reuse "safe" words, but sometimes has high vocabulary if prompted to be complex.
+        // However, basic AI writing often has a middle-ground TTR.
+        // Let's look for "perfect grammar but lack of soul" - hard to detect with regex.
+        // We stick to low TTR as a sign of repetitive (safe) AI writing.
+        if (ttr < 0.40 && words.length < 800) {
+            score += 25;
+            details.push("Low vocabulary diversity (+25%)");
+        }
+        else if (ttr < 0.30) {
+            score += 40; // Very repetitive
+            details.push("Extremely repetitive vocabulary (+40%)");
         }
     }
     // Cap score
     score = Math.min(99, Math.max(0, score));
-    if (score < 20)
+    if (score < 25)
         details.push("Likely human-written");
-    else if (score > 60)
+    else if (score > 65)
         details.push("High probability of AI generation");
-    // --- Web Plagiarism Simulation ---
-    // Since we don't have a real API, we simulate a score based on keywords to look realistic for the demo.
-    // We'll deterministically generate a 'web score' based on text hash to be consistent (so re-running gives same result).
-    let webScore = 0;
-    const webSources = [];
-    const lower = text.toLowerCase();
-    // Specific catch for Lorem Ipsum
-    if (lower.includes("lorem ipsum") || lower.includes("dolor sit amet") || lower.includes("consectetur adipiscing")) {
-        webScore = 100;
-        webSources.push("lipsum.com (Exact Match)");
-        webSources.push("templates.com (Text Match)");
-        details.push("Contains standard placeholder text (Lorem Ipsum)");
+    // Removed mocked web score. Web score is now calculated via checkWebSimilarity.
+    return { score, details, web_score: 0, web_sources: [] };
+}
+/* --- Real Web Plagiarism Check Implementation --- */
+/**
+ * Checks web similarity by searching Google for text segments, scraping top results,
+ * and running TF-IDF comparison.
+ */
+async function checkWebSimilarity(text) {
+    if (!text || text.length < 100)
+        return { score: 0, sources: [] };
+    // 1. Generate search queries from the text (pick 2-3 significant sentences)
+    // Simple strategy: take the first sentence, a middle one, and a random one.
+    const cleanText = text.replace(/\s+/g, ' ').trim();
+    const sentences = cleanText.match(/[^.!?]+[.!?]+/g) || [];
+    const queries = [];
+    if (sentences && sentences.length > 0 && sentences[0])
+        queries.push(sentences[0].slice(0, 150));
+    if (sentences.length > 5)
+        queries.push(sentences[Math.floor(sentences.length / 2)].slice(0, 150));
+    if (sentences.length > 10)
+        queries.push(sentences[sentences.length - 2].slice(0, 150));
+    // Fallback if no sentences detected
+    if (queries.length === 0)
+        queries.push(cleanText.slice(0, 150));
+    const allUrls = new Set();
+    // Search
+    for (const q of queries) {
+        try {
+            const urls = await performWebSearch(q);
+            urls.forEach(u => allUrls.add(u));
+        }
+        catch (e) {
+            logger_1.logger.warn('Web search failed for query subset', e);
+        }
+        // Rate limit kindness
+        await new Promise(r => setTimeout(r, 500));
     }
-    else {
-        // Simple deterministic pseudo-random based on text length + unique words
-        const seed = words.length + uniqueWordsCount(text);
-        const pseudoRand = (seed % 40); // 0-39% baseline
-        // If AI score is high, web plagiarism is often lower (unique generated text), 
-        // but if it's copied from Wikipedia, it might be high.
-        if (score > 80) {
-            webScore = 5 + (seed % 10); // Low web match if purely AI generated
+    if (allUrls.size === 0)
+        return { score: 0, sources: [] };
+    // Scrape top unique URLs (max 5 to save time/bandwidth)
+    const urlsToScrape = Array.from(allUrls).slice(0, 5);
+    const scrapedDocs = [];
+    await Promise.all(urlsToScrape.map(async (url) => {
+        const pageText = await scrapeWebPage(url);
+        if (pageText && pageText.length > 200) {
+            scrapedDocs.push({ id: url, filename: url, text: pageText });
         }
-        else {
-            webScore = pseudoRand;
+    }));
+    if (scrapedDocs.length === 0)
+        return { score: 0, sources: [] };
+    // Compare using TF-IDF
+    const tfidf = new natural_1.TfIdf();
+    tfidf.addDocument(cleanText); // Doc 0 is our text
+    scrapedDocs.forEach((d, i) => {
+        tfidf.addDocument(d.text); // Doc i+1
+    });
+    // Calculate similarity of Doc 0 to each Scraped Doc
+    // We can't use the bulk function easily as it does N*N. 
+    // Let's manually get vector for Doc 0 and others.
+    // Build vocab from Doc 0 only to see how much of IT appears in others? 
+    // Or vocab from all. Let's reuse computeTfidfSimilarities logic or simplify.
+    // Converting our input text + scraped docs into the format for computeTfidfSimilarities
+    const docsForAnalysis = [
+        { id: 'input-text', filename: 'Input Text', buffer: Buffer.from(cleanText) },
+        ...scrapedDocs.map(d => ({ id: d.id, filename: d.filename, buffer: Buffer.from(d.text) }))
+    ];
+    const result = await computeTfidfSimilarities(docsForAnalysis);
+    // Find max similarity where one side is 'input-text'
+    let maxScore = 0;
+    const sources = [];
+    result.pairs.forEach(p => {
+        if (p.aId === 'input-text' || p.bId === 'input-text') {
+            // If the other doc is a scraped url
+            const otherId = p.aId === 'input-text' ? p.bId : p.aId;
+            if (p.score > maxScore)
+                maxScore = p.score;
+            if (p.score > 0.2) { // Threshold for listing as source
+                sources.push(`${otherId} (${(p.score * 100).toFixed(0)}%)`);
+            }
         }
-        if (webScore > 10) {
-            webSources.push("wikipedia.org (Simulated Match)");
-            webSources.push("scribd.com (Simulated Match)");
-        }
-    }
-    return { score, details, web_score: webScore, web_sources: webSources };
+    });
+    // Normalize score to 0-100
+    // TF-IDF cosine is 0-1. 
+    // scale it: > 0.8 is basically 100% plagiarized.
+    let finalScore = Math.min(100, (maxScore / 0.9) * 100);
+    return { score: Number(finalScore.toFixed(1)), sources: sources.slice(0, 5) };
 }
 function uniqueWordsCount(text) {
     return new Set(text.toLowerCase().match(/[a-z]+/g) || []).size;
@@ -1298,7 +1399,17 @@ const runPlagiarismCheck = async (req, res) => {
         }
         // --- AI Detection Step ---
         const aiResult = detectAIContent(combinedTextForAI);
-        // -------------------------
+        // --- Real Web Plagiarism Check ---
+        let webCheckResult = { score: 0, sources: [] };
+        try {
+            if (combinedTextForAI && combinedTextForAI.length > 100) {
+                webCheckResult = await checkWebSimilarity(combinedTextForAI);
+            }
+        }
+        catch (e) {
+            logger_1.logger.warn('Real web check failed', e);
+        }
+        // ------------------------------------
         // Decide JPlag language (body.language or default)
         const language = (req.body && req.body.language) || 'python3';
         // Create out dir
@@ -1394,9 +1505,11 @@ const runPlagiarismCheck = async (req, res) => {
         else {
             similaritySummary = { notice: 'jplag-failed-or-skipped' };
         }
-        // --- Inject AI Stats into Summary ---
+        // --- Inject AI & Web Stats into Summary ---
         similaritySummary.ai_score = aiResult.score;
         similaritySummary.ai_details = aiResult.details;
+        similaritySummary.web_score = webCheckResult.score;
+        similaritySummary.web_sources = webCheckResult.sources;
         // ------------------------------------
         const reportId = (0, uuid_1.v4)();
         // Persist report metadata in Firestore

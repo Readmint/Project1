@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 export declare const adminLogin: (req: Request, res: Response) => Promise<void>;
 export declare const createAdmin: (req: Request, res: Response) => Promise<void>;
 export declare const verifyAdmin: (req: Request, res: Response) => Promise<void>;
+export declare const forgotPassword: (req: Request, res: Response) => Promise<void>;
+export declare const resetPassword: (req: Request, res: Response) => Promise<void>;
 export declare const getPlatformHealth: (req: Request, res: Response) => Promise<void>;
 export declare const getSystemUsers: (req: Request, res: Response) => Promise<void>;
 export declare const manageUserRole: (req: Request, res: Response) => Promise<void>;

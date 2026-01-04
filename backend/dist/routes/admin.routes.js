@@ -8,6 +8,8 @@ const router = (0, express_1.Router)();
 router.post('/register', admin_controller_1.createAdmin);
 router.post('/verify', admin_controller_1.verifyAdmin);
 router.post('/login', admin_controller_1.adminLogin);
+router.post('/forgot-password', admin_controller_1.forgotPassword);
+router.post('/reset-password', admin_controller_1.resetPassword);
 // Protected (Requires Admin Token)
 router.get('/stats', auth_1.authenticate, (0, auth_1.authorize)('admin'), admin_controller_1.getAdminStats); // Kept for legacy
 router.get('/health', auth_1.authenticate, (0, auth_1.authorize)('admin'), admin_controller_1.getPlatformHealth);

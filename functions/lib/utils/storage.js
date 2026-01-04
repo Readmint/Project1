@@ -7,6 +7,7 @@ exports.deleteFile = exports.makeFilePublic = exports.getSignedUrl = exports.get
 // src/utils/storage.ts
 const firebase_admin_1 = __importDefault(require("firebase-admin"));
 const storage_1 = require("@google-cloud/storage");
+const database_1 = require("../config/database");
 /**
  * Helper to get the storage bucket instance.
  * Uses the firebase-admin initialized app's storage() bucket if available,
@@ -14,6 +15,7 @@ const storage_1 = require("@google-cloud/storage");
  */
 const getStorageBucket = () => {
     var _a;
+    (0, database_1.ensureInitialized)();
     // Try firebase-admin bucket first (if admin has been initialized)
     try {
         // When admin is initialized, admin.storage() should be available

@@ -24,19 +24,20 @@ const getTransporter = () => {
     }
     return transporter;
 };
-const sendEmail = async (to, subject, html) => {
+const sendEmail = async (to, subject, html, attachments = []) => {
     try {
         if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
             logger_1.logger.warn('Email credentials not found in environment variables. Email not sent.');
-            console.log(`[MOCK EMAIL] To: ${to}, Subject: ${subject}`);
+            console.log(`[MOCK EMAIL] To: ${to}, Subject: ${subject} (With ${attachments.length} attachments)`);
             return false;
         }
         const mailer = getTransporter();
         const info = await mailer.sendMail({
-            from: `"ReadMint Team" <${process.env.EMAIL_USER}>`,
+            from: `"MindRadix Team" <${process.env.EMAIL_USER}>`,
             to,
             subject,
             html,
+            attachments
         });
         logger_1.logger.info(`Email sent: ${info.messageId}`);
         return true;

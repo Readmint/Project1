@@ -10,26 +10,30 @@ let firestoreDb = null;
 const connectDatabase = async () => {
     try {
         // Connect to Firebase Firestore (for authentication / storage bucket)
-        if (process.env.FIREBASE_PROJECT_ID) {
+        const projectId = process.env.READMINT_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
+        const privateKey = process.env.READMINT_FIREBASE_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY;
+        const clientEmail = process.env.READMINT_FIREBASE_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL;
+        const storageBucket = process.env.READMINT_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET;
+        if (projectId) {
             console.log('🔄 Initializing Firebase Firestore...');
             const serviceAccount = {
-                projectId: process.env.FIREBASE_PROJECT_ID,
-                privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-                clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                projectId,
+                privateKey: privateKey?.replace(/\\n/g, '\n'),
+                clientEmail,
             };
             if (!firebase_admin_1.default.apps.length) {
                 firebase_admin_1.default.initializeApp({
                     credential: firebase_admin_1.default.credential.cert(serviceAccount),
-                    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`,
+                    storageBucket: storageBucket || `${projectId}.appspot.com`,
                 });
             }
             firestoreDb = firebase_admin_1.default.firestore();
             logger_1.logger.info('Connected to Firebase Firestore');
             console.log('✅ Connected to Firebase Firestore');
-            console.log('📦 Storage bucket:', process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`);
+            console.log('📦 Storage bucket:', storageBucket || `${projectId}.appspot.com`);
         }
         else {
-            logger_1.logger.warn('FIREBASE_PROJECT_ID not found in env, skipping Firebase init');
+            logger_1.logger.warn('FIREBASE_PROJECT_ID (or READMINT_ prefixed) not found in env, skipping Firebase init');
         }
         if (!firestoreDb) {
             throw new Error('Firestore database configuration not found or failed to initialize');
@@ -55,6 +59,17 @@ const getFirestoreDatabase = () => {
 exports.getFirestoreDatabase = getFirestoreDatabase;
 // Main getDatabase function - defaults to Firestore
 const getDatabase = () => {
+    if (!firestoreDb) {
+        // Lazy initialization for Cloud Functions or if connectDatabase wasn't called
+        if (!firebase_admin_1.default.apps.length) {
+            // Use default credentials (works in Cloud Functions)
+            firebase_admin_1.default.initializeApp();
+        }
+        // If initialized but firestoreDb references missing, get it
+        if (firebase_admin_1.default.apps.length && !firestoreDb) {
+            firestoreDb = firebase_admin_1.default.firestore();
+        }
+    }
     if (firestoreDb) {
         return firestoreDb;
     }

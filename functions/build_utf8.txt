@@ -1,0 +1,7 @@
+
+> build
+> tsc
+
+src/controllers/certificate.controller.ts(236,34): error TS7030: Not all code paths return a value.
+src/controllers/certificate.controller.ts(259,44): error TS7030: Not all code paths return a value.
+src/controllers/certificate.controller.ts(275,34): error TS7030: Not all code paths return a value.

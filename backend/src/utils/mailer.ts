@@ -22,11 +22,18 @@ const getTransporter = () => {
   return transporter;
 };
 
-export const sendEmail = async (to: string, subject: string, html: string): Promise<boolean> => {
+interface MailAttachment {
+  filename: string;
+  content?: Buffer | string;
+  path?: string;
+  contentType?: string;
+}
+
+export const sendEmail = async (to: string, subject: string, html: string, attachments: MailAttachment[] = []): Promise<boolean> => {
   try {
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
       logger.warn('Email credentials not found in environment variables. Email not sent.');
-      console.log(`[MOCK EMAIL] To: ${to}, Subject: ${subject}`);
+      console.log(`[MOCK EMAIL] To: ${to}, Subject: ${subject} (With ${attachments.length} attachments)`);
       return false;
     }
 
@@ -36,6 +43,7 @@ export const sendEmail = async (to: string, subject: string, html: string): Prom
       to,
       subject,
       html,
+      attachments
     });
 
     logger.info(`Email sent: ${info.messageId}`);

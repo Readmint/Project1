@@ -24,18 +24,29 @@ const reviewer_routes_1 = __importDefault(require("./routes/reviewer.routes"));
 const admin_routes_1 = __importDefault(require("./routes/admin.routes"));
 const payment_routes_1 = __importDefault(require("./routes/payment.routes"));
 const partner_routes_1 = __importDefault(require("./routes/partner.routes"));
+const advertisement_routes_1 = __importDefault(require("./routes/advertisement.routes"));
+const career_routes_1 = __importDefault(require("./routes/career.routes"));
+const certificate_routes_1 = __importDefault(require("./routes/certificate.routes"));
 const swagger_1 = require("./config/swagger");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
+/* ----------------------------------- CORS -------------------------------------- */
+const corsOptions = {
+    origin: [
+        'http://localhost:3000',
+        'https://readmint-fe3c3.web.app',
+        'https://mindradix.com',
+        'https://www.mindradix.com',
+        process.env.FRONTEND_URL || ''
+    ].filter(Boolean),
+    credentials: true,
+};
+app.use((0, cors_1.default)(corsOptions));
+// app.options('*', cors(corsOptions)); // Preflight handled by app.use(cors)
 /* ----------------------------- Security Middlewares ----------------------------- */
 app.use((0, helmet_1.default)());
 app.use((0, compression_1.default)());
-/* ----------------------------------- CORS -------------------------------------- */
-app.use((0, cors_1.default)({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    credentials: true,
-}));
 /* -------------------------------- Body Parsers --------------------------------- */
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true }));
@@ -59,6 +70,10 @@ app.use('/api/reviewer', reviewer_routes_1.default);
 app.use('/api/admin', admin_routes_1.default);
 app.use('/api/payment', payment_routes_1.default);
 app.use('/api/partner', partner_routes_1.default);
+app.use('/api/advertisements', advertisement_routes_1.default);
+app.use('/api/careers', career_routes_1.default);
+app.use('/api/certificates', certificate_routes_1.default);
+app.use('/api/public/certificates', certificate_routes_1.default); // Public alias for verification
 /* ------------------------------- Health Check ---------------------------------- */
 app.get('/api/health-check', (req, res) => {
     res.status(200).json({

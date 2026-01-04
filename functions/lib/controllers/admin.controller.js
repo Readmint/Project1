@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getFinancials = exports.getPlans = exports.getAdminStats = exports.getAdvancedAnalytics = exports.updateSystemSettings = exports.getSystemSettings = exports.createAnnouncement = exports.updateIncident = exports.createIncident = exports.getIncidents = exports.getAuditLogs = exports.verifyPlagiarismReport = exports.getPlagiarismMonitor = exports.adminContentAction = exports.getAllContent = exports.createUser = exports.manageUserRole = exports.getSystemUsers = exports.getPlatformHealth = exports.resetPassword = exports.forgotPassword = exports.verifyAdmin = exports.createAdmin = exports.adminLogin = void 0;
+exports.getPaymentReceipts = exports.getFinancials = exports.getPlans = exports.getAdminStats = exports.getAdvancedAnalytics = exports.updateSystemSettings = exports.getSystemSettings = exports.createAnnouncement = exports.updateIncident = exports.createIncident = exports.getIncidents = exports.getAuditLogs = exports.verifyPlagiarismReport = exports.getPlagiarismMonitor = exports.adminContentAction = exports.getAllContent = exports.createUser = exports.manageUserRole = exports.getSystemUsers = exports.getPlatformHealth = exports.resetPassword = exports.forgotPassword = exports.verifyAdmin = exports.createAdmin = exports.adminLogin = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jwt = __importStar(require("jsonwebtoken"));
 // import { getDatabase } from '../config/database';
@@ -329,26 +329,42 @@ const getPlatformHealth = async (req, res) => {
         const contentManagers = users.filter((u) => u.role === 'content_manager').length;
         const content = await (0, firestore_helpers_1.executeQuery)('content');
         const totalSubmissions = content.length;
+        // Robust Date Parser
+        const toDate = (d) => {
+            if (!d)
+                return null;
+            if (d.toDate && typeof d.toDate === 'function')
+                return d.toDate(); // Firestore
+            if (d._seconds)
+                return new Date(d._seconds * 1000); // Raw object
+            const parsed = new Date(d);
+            return isNaN(parsed.getTime()) ? null : parsed;
+        };
         // Date checks in memory
         const today = new Date().toISOString().split('T')[0];
-        const submissionsToday = content.filter((c) => c.created_at && new Date(c.created_at).toISOString().startsWith(today)).length;
+        const submissionsToday = content.filter((c) => {
+            const d = toDate(c.created_at);
+            return d && d.toISOString().startsWith(today);
+        }).length;
         const pendingReviews = content.filter((c) => c.status === 'submitted').length;
         const inReview = content.filter((c) => c.status === 'under_review').length;
-        const publishedToday = content.filter((c) => c.status === 'published' && c.updated_at && new Date(c.updated_at).toISOString().startsWith(today)).length;
+        const publishedToday = content.filter((c) => {
+            const d = toDate(c.updated_at);
+            return c.status === 'published' && d && d.toISOString().startsWith(today);
+        }).length;
         // Editor Queue
-        // assignments status in assigned/in_progress. Distinct article_id.
-        const assignments = await (0, firestore_helpers_1.executeQuery)('editor_assignments', [
-            { field: 'status', op: 'in', value: ['assigned', 'in_progress'] } // helper assumes 'op' handled (custom helper supports 'in'?)
-            // If helper calls underlying firestore 'in', good.
-        ]);
-        // If helper does NOT support 'in', we fetch all or multiple queries.
-        // Assuming helper pass-through. If not supported, we might get error.
-        // Fallback: Fetch all assignments? Or separate queries.
-        // Let's assume helper handles 'in' or we fetch all and filter.
-        // Since my previous helper code showed `conditions` array, and Firestore `where` supports `in`.
-        // BUT my helper signature: `op: WhereFilterOp`. Firestore `WhereFilterOp` includes 'in'.
-        // So it should work.
-        const activeEditorArticles = new Set(assignments.map((a) => a.article_id)).size;
+        let activeEditorArticles = 0;
+        try {
+            // Using 'in' operator for status
+            const assignments = await (0, firestore_helpers_1.executeQuery)('editor_assignments', [
+                { field: 'status', op: 'in', value: ['assigned', 'in_progress'] }
+            ]);
+            activeEditorArticles = new Set(assignments.map((a) => a.article_id)).size;
+        }
+        catch (qErr) {
+            logger_1.logger.warn('Failed to query editor_assignments for health check, defaulting to 0', qErr);
+            // Non-critical metric, don't crash
+        }
         const activeSessions = Math.floor(totalUsers * 0.15);
         res.status(200).json({
             status: 'success',
@@ -377,7 +393,11 @@ const getPlatformHealth = async (req, res) => {
     }
     catch (error) {
         logger_1.logger.error('Get platform health error:', error);
-        res.status(500).json({ status: 'error', message: 'Failed to fetch platform health' });
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to fetch platform health',
+            debug_error: error === null || error === void 0 ? void 0 : error.message
+        });
     }
 };
 exports.getPlatformHealth = getPlatformHealth;
@@ -1068,33 +1088,42 @@ exports.getPlans = getPlans;
 const getFinancials = async (req, res) => {
     try {
         const { range } = req.query; // '7d', '30d', '1y'
-        // Mock Data matching Frontend FinancialStats component
-        const mockFinancials = {
-            totalRevenue: 24500,
-            successfulTransactions: 120,
-            failedTransactions: 5,
-            // Keeping extra data just in case validation or other components need it
-            revenue: {
-                total: 24500,
-                growth: 12.5
-            },
+        // Fetch real data from payment_orders
+        const orders = await (0, firestore_helpers_1.executeQuery)('payment_orders');
+        // Calculate Stats
+        let totalRevenue = 0;
+        let successfulTransactions = 0;
+        let failedTransactions = 0;
+        orders.forEach((order) => {
+            const amount = parseFloat(order.total_amount || order.amount || 0);
+            if (order.status === 'success' || order.status === 'completed') {
+                successfulTransactions++;
+                if (!isNaN(amount)) {
+                    totalRevenue += amount;
+                }
+            }
+            else if (order.status === 'failed') {
+                failedTransactions++;
+            }
+        });
+        const realFinancials = {
+            totalRevenue,
+            successfulTransactions,
+            failedTransactions,
+            // Keep mock graph for now as we don't have historical data aggregation logic yet
             revenue_graph: [
-                { name: 'Jan', value: 4000 },
-                { name: 'Feb', value: 3000 },
-                { name: 'Mar', value: 2000 },
-                { name: 'Apr', value: 2780 },
-                { name: 'May', value: 1890 },
-                { name: 'Jun', value: 2390 },
-                { name: 'Jul', value: 3490 }
-            ],
-            recent_transactions: [
-                { id: 'tx_1', user: 'User A', amount: 50, status: 'completed', date: new Date().toISOString() },
-                { id: 'tx_2', user: 'User B', amount: 15, status: 'completed', date: new Date().toISOString() }
+                { name: 'Jan', value: 0 },
+                { name: 'Feb', value: 0 },
+                { name: 'Mar', value: 0 },
+                { name: 'Apr', value: 0 },
+                { name: 'May', value: 0 },
+                { name: 'Jun', value: 0 },
+                { name: 'Jul', value: totalRevenue }
             ]
         };
         res.status(200).json({
             status: 'success',
-            data: mockFinancials
+            data: realFinancials
         });
     }
     catch (error) {
@@ -1103,4 +1132,70 @@ const getFinancials = async (req, res) => {
     }
 };
 exports.getFinancials = getFinancials;
+const getPaymentReceipts = async (req, res) => {
+    try {
+        const { limit = 50, page = 1 } = req.query;
+        // Use 'payment_orders' to get all transactions (success/failed)
+        const orders = await (0, firestore_helpers_1.executeQuery)('payment_orders');
+        logger_1.logger.info(`Fetched ${orders.length} payment receipts from payment_orders`);
+        // Helper to safe-parse date
+        const getDate = (d) => {
+            if (!d)
+                return 0;
+            if (d.toDate && typeof d.toDate === 'function')
+                return d.toDate().getTime();
+            if (d._seconds)
+                return d._seconds * 1000;
+            return new Date(d).getTime();
+        };
+        // Sort by created_at desc
+        orders.sort((a, b) => {
+            const dateA = getDate(a.created_at);
+            const dateB = getDate(b.created_at);
+            return dateB - dateA;
+        });
+        const pageNum = Number(page);
+        const limitNum = Number(limit);
+        const startIndex = (pageNum - 1) * limitNum;
+        const endIndex = startIndex + limitNum;
+        const paginatedOrders = orders.slice(startIndex, endIndex);
+        // Enhance with User Details
+        const enrichedReceipts = await Promise.all(paginatedOrders.map(async (order) => {
+            let user = null;
+            if (order.user_id) {
+                user = await (0, firestore_helpers_1.getDoc)('users', order.user_id);
+            }
+            return {
+                id: order.id,
+                created_at: order.created_at,
+                amount: order.total_amount || order.amount || 0, // Map total_amount -> amount
+                status: order.status,
+                firstname: user ? user.name : 'Unknown User', // Frontend expects 'firstname' for name
+                email: user ? user.email : 'No Email',
+                user_id: order.user_id
+            };
+        }));
+        res.status(200).json({
+            status: 'success',
+            data: {
+                receipts: enrichedReceipts,
+                pagination: {
+                    total: orders.length,
+                    page: pageNum,
+                    limit: limitNum,
+                    pages: Math.ceil(orders.length / limitNum)
+                }
+            }
+        });
+    }
+    catch (error) {
+        logger_1.logger.error('Get payment receipts error:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to fetch receipts',
+            debug_error: error === null || error === void 0 ? void 0 : error.message
+        });
+    }
+};
+exports.getPaymentReceipts = getPaymentReceipts;
 //# sourceMappingURL=admin.controller.js.map

@@ -26,6 +26,8 @@ const payment_routes_1 = __importDefault(require("./routes/payment.routes"));
 const partner_routes_1 = __importDefault(require("./routes/partner.routes"));
 const advertisement_routes_1 = __importDefault(require("./routes/advertisement.routes"));
 const career_routes_1 = __importDefault(require("./routes/career.routes"));
+const certificate_routes_1 = __importDefault(require("./routes/certificate.routes"));
+const editorial_routes_1 = __importDefault(require("./routes/editorial.routes"));
 const swagger_1 = require("./config/swagger");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -50,6 +52,8 @@ app.use((0, compression_1.default)());
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true }));
 app.use('/uploads', express_1.default.static('uploads')); // Serve local uploads
+const multipartFix_1 = require("./middleware/multipartFix");
+app.use(multipartFix_1.fixMultipartRequest);
 /* ---------------------------------- Swagger ------------------------------------ */
 (0, swagger_1.setupSwagger)(app);
 /* ----------------------------------- Routes ------------------------------------ */
@@ -71,6 +75,9 @@ app.use('/api/payment', payment_routes_1.default);
 app.use('/api/partner', partner_routes_1.default);
 app.use('/api/advertisements', advertisement_routes_1.default);
 app.use('/api/careers', career_routes_1.default);
+app.use('/api/certificates', certificate_routes_1.default);
+app.use('/api/editorial', editorial_routes_1.default);
+app.use('/api/public/certificates', certificate_routes_1.default); // Public alias for verification
 /* ------------------------------- Health Check ---------------------------------- */
 app.get('/api/health-check', (req, res) => {
     res.status(200).json({
