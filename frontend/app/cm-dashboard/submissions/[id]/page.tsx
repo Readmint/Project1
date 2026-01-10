@@ -58,7 +58,12 @@ export default function SubmissionDetailsPage() {
                     </div>
 
                     <div className="flex gap-2">
-                        {/* Actions could go here */}
+                        <button
+                            onClick={() => router.push(`/cm-dashboard/review-design/${article.id}`)}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                        >
+                            <Tag size={16} /> Review Design
+                        </button>
                     </div>
                 </div>
             </div>
@@ -84,7 +89,11 @@ export default function SubmissionDetailsPage() {
                                     </span>
                                     <span className="flex items-center text-xs text-slate-400">
                                         <Clock size={12} className="mr-1" />
-                                        {new Date(event.date).toLocaleString()}
+                                        {(() => {
+                                            if (!event.date) return 'N/A';
+                                            const d = new Date(event.date);
+                                            return isNaN(d.getTime()) ? 'Invalid Date' : d.toLocaleString();
+                                        })()}
                                     </span>
                                 </div>
                                 <p className="text-slate-600 dark:text-slate-300 text-sm">

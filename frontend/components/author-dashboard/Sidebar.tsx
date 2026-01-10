@@ -12,7 +12,8 @@ import {
   LogOut,
   Menu,
   Info, // For Guidelines
-  BookOpen
+  BookOpen,
+  Award
 } from "lucide-react";
 
 import LogoutConfirmation from "../LogoutConfirmation";
@@ -28,6 +29,7 @@ const navGroups = [
       { label: "Dashboard", path: "/author-dashboard", icon: LayoutDashboard },
       { label: "Submit Article", path: "/author-dashboard/submit", icon: PenTool },
       { label: "My Articles", path: "/author-dashboard/articles", icon: FileText },
+      { label: "Certificates", path: "/author-dashboard/certificates", icon: Award },
       { label: "Subscription", path: "/author-dashboard/subscription", icon: CreditCard },
     ],
   },

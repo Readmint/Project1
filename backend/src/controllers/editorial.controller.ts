@@ -150,7 +150,13 @@ export const getApplications = async (req: Request, res: Response): Promise<void
         }));
 
         // Sort by submitted_at desc
-        processedApps.sort((a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime());
+        const toDate = (d: any) => {
+            if (!d) return 0;
+            try {
+                return d.toDate ? d.toDate().getTime() : new Date(d).getTime();
+            } catch (e) { return 0; }
+        };
+        processedApps.sort((a, b) => toDate(b.submitted_at) - toDate(a.submitted_at));
 
         res.status(200).json({ status: "success", data: processedApps });
     } catch (err: any) {

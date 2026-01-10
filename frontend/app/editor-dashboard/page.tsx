@@ -52,10 +52,11 @@ const badgeStyles: Record<string, string> = {
 
 export default function AssignedPage() {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'assigned' | 'submitted'>('assigned');
   const [search, setSearch] = useState("");
   const [modalArticle, setModalArticle] = useState<any | null>(null);
-
   const [assignedArticles, setAssignedArticles] = useState<any[]>([]);
+  const [submittedArticles, setSubmittedArticles] = useState<any[]>([]);
   const [submittedCount, setSubmittedCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -78,7 +79,7 @@ export default function AssignedPage() {
           author: item.author_name || "Unknown Author",
           dueDate: item.due_date ? new Date(item.due_date).toLocaleDateString() : 'No Deadline',
           priority: item.priority || 'Medium',
-          status: item.assignment_status === 'in_progress' ? 'In Progress' : item.assignment_status, // map if needed
+          status: item.assignment_status === 'in_progress' ? 'In Progress' : item.assignment_status,
           progress: item.assignment_status === 'assigned' ? 0 : 50,
           image: "/images/placeholder.jpg"
         }));
@@ -87,6 +88,17 @@ export default function AssignedPage() {
 
       if (submittedRes.status === 'success') {
         setSubmittedCount(submittedRes.data.length);
+        const mappedSubmitted = submittedRes.data.map((item: any) => ({
+          id: item.article_id,
+          title: item.title,
+          assignedDate: new Date(item.assigned_date).toLocaleDateString(),
+          completedDate: item.completed_at ? new Date(item.completed_at).toLocaleDateString() : 'N/A',
+          author: item.author_name || "Unknown Author",
+          status: item.article_status, // Article status (e.g. approved, submitted)
+          progress: 100,
+          image: "/images/placeholder.jpg"
+        }));
+        setSubmittedArticles(mappedSubmitted);
       }
     } catch (err) {
       console.error("Failed to fetch dashboard data", err);
@@ -95,19 +107,14 @@ export default function AssignedPage() {
     }
   };
 
+  // ... (handlers)
 
-  const handleOpenModal = (id: number) => {
-    const found = assignedArticles.find(a => a.id === id);
-    if (found) setModalArticle(found);
-  };
-
-  const closeModal = () => setModalArticle(null);
+  const displayedArticles = activeTab === 'assigned' ? assignedArticles : submittedArticles;
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors">
       <div className="max-w-6xl mx-auto px-4 py-12">
 
-        {/* Heading */}
         <motion.h1
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -125,8 +132,29 @@ export default function AssignedPage() {
           <StatCard label="Assigned Articles" value={assignedArticles.length} icon={ClipboardList} />
           <StatCard label="Reviewed (Submitted)" value={submittedCount} icon={FileCheck2} />
           <StatCard label="In Progress" value={assignedArticles.filter(a => a.status === 'In Progress' || a.status === 'in_progress').length} icon={BookOpen} />
-          {/* Placeholder for now */}
           <StatCard label="Needs Revision" value={0} icon={AlertTriangle} />
+        </div>
+
+        {/* TABS */}
+        <div className="flex gap-4 mb-6 border-b border-slate-200 dark:border-slate-700">
+          <button
+            onClick={() => setActiveTab('assigned')}
+            className={`pb-3 px-4 text-sm font-medium transition-colors border-b-2 ${activeTab === 'assigned'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+          >
+            Assigned (Active)
+          </button>
+          <button
+            onClick={() => setActiveTab('submitted')}
+            className={`pb-3 px-4 text-sm font-medium transition-colors border-b-2 ${activeTab === 'submitted'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+          >
+            Reviewed (History)
+          </button>
         </div>
 
         {/* Article Table */}
@@ -136,8 +164,8 @@ export default function AssignedPage() {
               <tr>
                 <th className="px-5 py-4">Article</th>
                 <th className="px-5 py-4">Author</th>
-                <th className="px-5 py-4">Due</th>
-                <th className="px-5 py-4">Priority</th>
+                <th className="px-5 py-4">{activeTab === 'assigned' ? 'Due' : 'Completed'}</th>
+                {activeTab === 'assigned' && <th className="px-5 py-4">Priority</th>}
                 <th className="px-5 py-4">Status</th>
                 <th className="px-5 py-4">Progress</th>
                 <th className="px-5 py-4 text-center">Actions</th>
@@ -145,14 +173,14 @@ export default function AssignedPage() {
             </thead>
 
             <tbody>
-              {assignedArticles.length === 0 ? (
+              {displayedArticles.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-5 py-8 text-center text-slate-500">
-                    No active assignments found.
+                    No {activeTab} articles found.
                   </td>
                 </tr>
               ) : (
-                assignedArticles
+                displayedArticles
                   .filter(a => a.title.toLowerCase().includes(search.toLowerCase()))
                   .map(article => (
                     <motion.tr
@@ -173,11 +201,14 @@ export default function AssignedPage() {
                       </td>
 
                       <td className="px-5 py-4 min-w-[120px] text-indigo-600 font-medium">
-                        {article.dueDate}
+                        {activeTab === 'assigned' ? article.dueDate : article.completedDate}
                       </td>
 
+                      {activeTab === 'assigned' && (
+                        <td className="px-5 py-4"><span className={badgeStyles[article.priority] || badgeStyles['Medium']}>{article.priority}</span></td>
+                      )}
+
                       <td className="px-5 py-4"><span className={badgeStyles[article.status] || badgeStyles['assigned']}>{article.status}</span></td>
-                      {/* <td className="px-5 py-4"><span className={badgeStyles[article.status]}>{article.status}</span></td> */}
 
                       {/* Progress Bar */}
                       <td className="px-5 py-4">
@@ -206,13 +237,26 @@ export default function AssignedPage() {
                           </Button>
 
 
-                          {/* EDIT → CMS Editor */}
-                          <Button
-                            onClick={() => router.push(`/editor-dashboard/design/${article.id}`)}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-full px-3 py-1.5"
-                          >
-                            <PenTool size={13} /> Edit
-                          </Button>
+                          {/* EDIT → CMS Editor (Only editable if not completed/approved if strict, or let them view?) */}
+                          {(activeTab === 'assigned' || article.status === 'changes_requested') && (
+                            <Button
+                              onClick={() => router.push(`/editor-dashboard/design/${article.id}`)}
+                              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-full px-3 py-1.5"
+                            >
+                              <PenTool size={13} /> Edit
+                            </Button>
+                          )}
+
+                          {/* Add History button for Submitted */}
+                          {activeTab === 'submitted' && (
+                            <Button
+                              onClick={() => router.push('/editor-dashboard/version-history')}
+                              variant="ghost"
+                              className="text-xs h-7 px-2"
+                            >
+                              <ClipboardList size={13} /> History
+                            </Button>
+                          )}
 
                         </div>
                       </td>

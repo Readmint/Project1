@@ -337,11 +337,29 @@ export const getPlatformHealth = async (req: Request, res: Response): Promise<vo
         const content = await executeQuery('content');
         const totalSubmissions = content.length;
         // Date checks in memory
+        // Date checks in memory
         const today = new Date().toISOString().split('T')[0];
-        const submissionsToday = content.filter((c: any) => c.created_at && new Date(c.created_at).toISOString().startsWith(today)).length;
+        const safeIso = (d: any) => {
+            if (!d) return null;
+            try {
+                const date = d.toDate ? d.toDate() : new Date(d);
+                if (isNaN(date.getTime())) return null;
+                return date.toISOString();
+            } catch (e) { return null; }
+        };
+
+        const submissionsToday = content.filter((c: any) => {
+            const iso = safeIso(c.created_at);
+            return iso && iso.startsWith(today);
+        }).length;
+
         const pendingReviews = content.filter((c: any) => c.status === 'submitted').length;
         const inReview = content.filter((c: any) => c.status === 'under_review').length;
-        const publishedToday = content.filter((c: any) => c.status === 'published' && c.updated_at && new Date(c.updated_at).toISOString().startsWith(today)).length;
+
+        const publishedToday = content.filter((c: any) => {
+            const iso = safeIso(c.updated_at);
+            return c.status === 'published' && iso && iso.startsWith(today);
+        }).length;
 
         // Editor Queue
         // assignments status in assigned/in_progress. Distinct article_id.

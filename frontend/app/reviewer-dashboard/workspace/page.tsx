@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { ArrowLeft, CheckCircle, AlertOctagon, FileText, Download } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { MagEditor } from "@/components/mag-editor/MagEditor";
 
 interface ReviewContent {
   id: string;
@@ -47,7 +48,11 @@ function ReviewWorkspaceContent() {
   const [comments, setComments] = useState("");
   const [suggestions, setSuggestions] = useState("");
   const [sending, setSending] = useState(false);
+
+
+  // ... inside component
   const [plagarismReport, setPlagarismReport] = useState<any>(null);
+  const [viewMode, setViewMode] = useState<'text' | 'design'>('text');
 
   useEffect(() => {
     if (articleId) {
@@ -60,7 +65,7 @@ function ReviewWorkspaceContent() {
   const loadPlagiarismStatus = async (id: string) => {
     try {
       const res = await getJSON(`/reviewer/plagiarism/status/${id}`);
-      if (res.status === 'success' && res.data) {
+      if (res.status === 'success' && res.data && res.data.similarity_summary?.similarity_score !== undefined) {
         setPlagarismReport(res.data.similarity_summary);
       }
     } catch (e) {
@@ -177,19 +182,47 @@ function ReviewWorkspaceContent() {
             {content.category_name}
           </p>
         </div>
+        <div>
+          <Button variant="outline" className="gap-2" onClick={() => router.push(`/reviewer-dashboard/review-design/${content.id}`)}>
+            <FileText size={16} /> View Designed Article
+          </Button>
+        </div>
       </section>
 
-      <section className="grid lg:grid-cols-4 gap-6">
+      <section className="grid lg:grid-cols-12 gap-6">
         {/* CONTENT PREVIEW */}
-        <div className="lg:col-span-2 bg-card border border-border rounded-lg shadow-sm p-8 space-y-6">
-          <h3 className="font-medium text-foreground border-b border-border pb-2">Content to Review</h3>
-          <div
-            className="prose dark:prose-invert max-w-none text-sm leading-relaxed font-serif"
-            dangerouslySetInnerHTML={{ __html: content.body || "No textual content available (check file download)." }}
-          />
+        <div className={`bg-card border border-border rounded-lg shadow-sm p-8 space-y-6 ${viewMode === 'design' ? 'lg:col-span-8' : 'lg:col-span-6'}`}>
+          <div className="flex items-center justify-between border-b border-border pb-2">
+            <h3 className="font-medium text-foreground">Content to Review</h3>
+            <div className="flex gap-2">
+              <button
+                className={`text-xs px-2 py-1 rounded ${viewMode === 'text' ? 'bg-indigo-100 text-indigo-700 font-medium' : 'text-slate-500 hover:bg-slate-100'}`}
+                onClick={() => setViewMode('text')}
+              >
+                Text Source
+              </button>
+              <button
+                className={`text-xs px-2 py-1 rounded ${viewMode === 'design' ? 'bg-indigo-100 text-indigo-700 font-medium' : 'text-slate-500 hover:bg-slate-100'}`}
+                onClick={() => setViewMode('design')}
+              >
+                Design Layout
+              </button>
+            </div>
+          </div>
+
+          {viewMode === 'text' ? (
+            <div
+              className="prose dark:prose-invert max-w-none text-sm leading-relaxed font-serif"
+              dangerouslySetInnerHTML={{ __html: content.body || "No textual content available (check file download)." }}
+            />
+          ) : (
+            <div className="h-[900px] w-full border border-slate-200 rounded-md overflow-hidden relative bg-slate-100">
+              <MagEditor articleId={content.id} readOnly={true} className="h-full w-full" />
+            </div>
+          )}
         </div>
 
-        <div className="lg:col-span-2 space-y-6">
+        <div className={`space-y-6 ${viewMode === 'design' ? 'lg:col-span-4' : 'lg:col-span-6'}`}>
 
           {/* ATTACHMENTS */}
           <div className="bg-card border border-border rounded-lg shadow-sm p-5 space-y-4">

@@ -14,6 +14,7 @@ import { TfIdf } from 'natural';
 import fetch from 'node-fetch';
 import mammoth from 'mammoth';
 import { getCollection, executeQuery, createDoc, updateDoc, getDoc, deleteDoc } from '../utils/firestore-helpers';
+import { sanitizeHtml } from '../utils/sanitizer';
 
 //
 // Robust pdf-parse loader to handle ESM / CommonJS interop
@@ -133,7 +134,7 @@ export const createArticle = async (req: Request, res: Response): Promise<void> 
       title: title.trim(),
       author_id: authorId,
       category_id: finalCategoryId,
-      content: content || '',
+      content: content ? sanitizeHtml(content) : '', // Sanitize content
       summary: summary || '',
       tags: tags || [], // array
       language: req.body.language || 'English',
@@ -213,7 +214,7 @@ export const updateArticleContent = async (req: Request, res: Response): Promise
     const updates: any = {};
     if (typeof title === 'string') updates.title = title.trim();
     if (typeof summary === 'string') updates.summary = summary;
-    if (typeof content === 'string') updates.content = content;
+    if (typeof content === 'string') updates.content = sanitizeHtml(content);
     if (category_id !== undefined) updates.category_id = category_id || null;
     if (tags !== undefined) updates.tags = tags || [];
     if (req.body.language !== undefined) updates.language = req.body.language;
@@ -236,6 +237,31 @@ export const updateArticleContent = async (req: Request, res: Response): Promise
     }
 
     await updateDoc('content', articleId, updates);
+
+    // [NEW] Create Version Snapshot
+    try {
+      // Fetch fresh for full snapshot
+      const updatedArticle: any = await getDoc('content', articleId);
+      if (updatedArticle) {
+        await createDoc('versions', {
+          article_id: articleId,
+          editor_id: null, // stored as null for author updates? or store author_id? Logic usually expects editor_id for editors. 
+          // We can leave it null or repurpose field. Let's stick to null for "Author" for now, 
+          // or verify if we need an 'author_id' field in versions schema.
+          // editor.controller.ts uses editor_id. 
+          // Let's add 'modified_by' to be generic? For now, standard behavior:
+          title: updatedArticle.title,
+          content: updatedArticle.content,
+          meta: {
+            notes: (updates.metadata && updates.metadata.editorNotes) ? updates.metadata.editorNotes : 'Author update',
+            updatedBy: userId
+          },
+          created_at: new Date()
+        });
+      }
+    } catch (vErr) {
+      logger.warn('Failed to create version snapshot', vErr);
+    }
 
     res.status(200).json({ status: 'success', message: 'Article updated', data: { id: articleId } });
     return;
@@ -316,17 +342,16 @@ export const completeAttachmentUpload = async (req: Request, res: Response): Pro
 export const uploadAttachment = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!requireAuth(req, res)) return;
-    const dbMy: any = getDatabase();
     const userId = req.user!.userId!;
     const { articleId } = req.params;
 
-    // Validate article exists and ownership in MySQL
-    const [articleRows]: any = await dbMy.execute('SELECT id, author_id FROM content WHERE id = ?', [articleId]);
-    if (!articleRows || articleRows.length === 0) {
+    // Validate article exists and ownership in Firestore
+    const article: any = await getDoc('content', articleId);
+    if (!article) {
       res.status(404).json({ status: 'error', message: 'Article not found' });
       return;
     }
-    const article = articleRows[0];
+
     if (article.author_id !== userId && !['admin', 'content_manager', 'editor'].includes(req.user!.role || '')) {
       res.status(403).json({ status: 'error', message: 'Forbidden to upload for this article' });
       return;
@@ -775,6 +800,24 @@ export const updateArticleStatus = async (req: Request, res: Response): Promise<
     });
 
     logger.info(`Article ${articleId} status changed from ${article.status} to ${status} by ${userId}`);
+
+    // [NEW] Version Snapshot on Status Change (e.g. Submit)
+    try {
+      await createDoc('versions', {
+        article_id: articleId,
+        editor_id: null,
+        title: article.title,
+        content: article.content, // Snapshot current content
+        meta: {
+          notes: `Status changed to ${status}`,
+          status_change: { from: article.status, to: status },
+          updatedBy: userId
+        },
+        created_at: new Date()
+      });
+    } catch (vErr) {
+      logger.warn('Failed to create version snapshot on status change', vErr);
+    }
 
     // [NEW] Trigger Certificate Generation if status is published
     if (status === 'published' && article.status !== 'published') {

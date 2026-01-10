@@ -86,6 +86,10 @@ export const createArticle = async (req: Request, res: Response): Promise<void> 
 
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ VALIDATION FAILED');
+      console.log('Request Body:', JSON.stringify(req.body, null, 2));
+      console.log('Errors:', JSON.stringify(errors.array(), null, 2));
+      logger.warn('createArticle validation errors:', errors.array());
       res.status(400).json({ status: 'error', message: 'Validation failed', errors: errors.array() });
       return;
     }
@@ -316,17 +320,16 @@ export const completeAttachmentUpload = async (req: Request, res: Response): Pro
 export const uploadAttachment = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!requireAuth(req, res)) return;
-    const dbMy: any = getDatabase();
     const userId = req.user!.userId!;
     const { articleId } = req.params;
 
-    // Validate article exists and ownership in MySQL
-    const [articleRows]: any = await dbMy.execute('SELECT id, author_id FROM content WHERE id = ?', [articleId]);
-    if (!articleRows || articleRows.length === 0) {
+    // Validate article exists and ownership in Firestore
+    const article: any = await getDoc('content', articleId);
+    if (!article) {
       res.status(404).json({ status: 'error', message: 'Article not found' });
       return;
     }
-    const article = articleRows[0];
+
     if (article.author_id !== userId && !['admin', 'content_manager', 'editor'].includes(req.user!.role || '')) {
       res.status(403).json({ status: 'error', message: 'Forbidden to upload for this article' });
       return;
@@ -698,13 +701,21 @@ export const getArticleDetails = async (req: Request, res: Response): Promise<vo
 
     // Fetch related
     // Attachments
-    const attachments = await executeQuery('attachments', [{ field: 'article_id', op: '==', value: articleId }]);
+    // Fetch related data in parallel with graceful degradation
+    const [attachmentsResult, workflowResult, reviewsResult] = await Promise.allSettled([
+      executeQuery('attachments', [{ field: 'article_id', op: '==', value: articleId }]),
+      executeQuery('workflow_events', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' }),
+      executeQuery('reviews', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' })
+    ]);
 
-    // Workflow
-    const workflow = await executeQuery('workflow_events', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' });
+    const attachments = attachmentsResult.status === 'fulfilled' ? attachmentsResult.value : [];
+    if (attachmentsResult.status === 'rejected') logger.warn('Failed to fetch attachments', attachmentsResult.reason);
 
-    // Reviews
-    const reviews = await executeQuery('reviews', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' });
+    const workflow = workflowResult.status === 'fulfilled' ? workflowResult.value : [];
+    if (workflowResult.status === 'rejected') logger.warn('Failed to fetch workflow', workflowResult.reason);
+
+    const reviews = reviewsResult.status === 'fulfilled' ? reviewsResult.value : [];
+    if (reviewsResult.status === 'rejected') logger.warn('Failed to fetch reviews', reviewsResult.reason);
 
     res.status(200).json({
       status: 'success',

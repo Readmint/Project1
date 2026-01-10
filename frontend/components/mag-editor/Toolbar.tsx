@@ -87,7 +87,12 @@ export function Toolbar({ onAdd, contentSuggestions, attachments }: ToolbarProps
                                         {contentSuggestions.map((item, idx) => (
                                             <div
                                                 key={idx}
-                                                className="p-3 bg-white border rounded-lg shadow-sm hover:border-indigo-500 hover:shadow-md cursor-pointer transition-all active:scale-95 group"
+                                                className="p-3 bg-white border rounded-lg shadow-sm hover:border-indigo-500 hover:shadow-md cursor-grab active:cursor-grabbing transition-all active:scale-95 group"
+                                                draggable
+                                                onDragStart={(e) => {
+                                                    e.dataTransfer.setData("application/json", JSON.stringify({ type: "text", content: item.content }));
+                                                    e.dataTransfer.effectAllowed = "copy";
+                                                }}
                                                 onClick={() => onAdd("text", item.content)}
                                             >
                                                 <span className="text-[10px] uppercase font-bold text-indigo-500 mb-1 block group-hover:text-indigo-600">{item.label}</span>
@@ -105,7 +110,15 @@ export function Toolbar({ onAdd, contentSuggestions, attachments }: ToolbarProps
                                             {attachments.map((att) => (
                                                 <div
                                                     key={att.id}
-                                                    className="p-3 bg-slate-100 rounded border flex items-center gap-2 cursor-pointer hover:bg-indigo-50 hover:border-indigo-300"
+                                                    className="p-3 bg-slate-100 rounded border flex items-center gap-2 cursor-grab active:cursor-grabbing hover:bg-indigo-50 hover:border-indigo-300"
+                                                    draggable
+                                                    onDragStart={(e) => {
+                                                        const isImage = att.mime_type?.startsWith('image/') || att.filename.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                                                        const type = isImage ? "image" : "text";
+                                                        const content = isImage ? att.public_url : `[Document: ${att.filename}]`;
+                                                        e.dataTransfer.setData("application/json", JSON.stringify({ type, content }));
+                                                        e.dataTransfer.effectAllowed = "copy";
+                                                    }}
                                                     onClick={() => {
                                                         // If image, add as image
                                                         if (att.mime_type?.startsWith('image/') || att.filename.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
@@ -147,7 +160,13 @@ export function Toolbar({ onAdd, contentSuggestions, attachments }: ToolbarProps
                                         {[1, 2, 3, 4].map((i) => (
                                             <div
                                                 key={i}
-                                                className="aspect-square bg-slate-200 rounded overflow-hidden cursor-pointer hover:opacity-90"
+                                                className="aspect-square bg-slate-200 rounded overflow-hidden cursor-grab active:cursor-grabbing hover:opacity-90"
+                                                draggable
+                                                onDragStart={(e) => {
+                                                    const url = `https://picsum.photos/300/300?random=${i}`;
+                                                    e.dataTransfer.setData("application/json", JSON.stringify({ type: "image", content: url }));
+                                                    e.dataTransfer.effectAllowed = "copy";
+                                                }}
                                                 onClick={() => onAdd("image", `https://picsum.photos/300/300?random=${i}`)}
                                             >
                                                 {/* eslint-disable-next-line @next/next/no-img-element */}

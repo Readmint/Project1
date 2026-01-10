@@ -14,6 +14,7 @@ type CanvasProps = {
     onLayerChange: (id: string, dir: 'up' | 'down') => void;
     onSetBackground: (id: string) => void;
     onDoubleClick: (x: number, y: number) => void;
+    onDropItem?: (type: "text" | "image", content: string, x: number, y: number) => void;
     scale: number;
     id?: string;
 };
@@ -23,7 +24,7 @@ type CanvasProps = {
 const PAGE_WIDTH = 794;
 const PAGE_HEIGHT = 1123;
 
-export function Canvas({ elements, selectedId, onSelect, onUpdate, onDelete, onLayerChange, onSetBackground, onDoubleClick, scale, id }: CanvasProps) {
+export function Canvas({ elements, selectedId, onSelect, onUpdate, onDelete, onLayerChange, onSetBackground, onDoubleClick, onDropItem, scale, id }: CanvasProps) {
     const canvasRef = useRef<HTMLDivElement>(null);
     const [contextMenu, setContextMenu] = useState<{ id: string, x: number, y: number } | null>(null);
 
@@ -50,43 +51,80 @@ export function Canvas({ elements, selectedId, onSelect, onUpdate, onDelete, onL
         onDoubleClick(x, y);
     };
 
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault(); // Necessary to allow dropping
+        e.dataTransfer.dropEffect = "copy";
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        if (!onDropItem || !canvasRef.current) return;
+
+        const rawData = e.dataTransfer.getData("application/json");
+        if (!rawData) return;
+
+        try {
+            const { type, content } = JSON.parse(rawData);
+
+            const rect = canvasRef.current.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / scale;
+            const y = (e.clientY - rect.top) / scale;
+
+            onDropItem(type, content, x, y);
+        } catch (err) {
+            console.error("Failed to parse drop data", err);
+        }
+    };
+
     return (
         <div
-            id={id}
-            ref={canvasRef}
-            className="bg-white shadow-2xl transition-transform duration-200 ease-out origin-top relative"
+            // Outer Wrapper - Sized to match visual scale
+            className="relative bg-white shadow-2xl transition-all duration-200 ease-out origin-top-left shrink-0"
             style={{
-                width: PAGE_WIDTH,
-                height: PAGE_HEIGHT,
-                transform: `scale(${scale})`,
+                width: PAGE_WIDTH * scale,
+                height: PAGE_HEIGHT * scale,
             }}
-            onClick={(e) => {
-                // Deselect if clicking blank area
-                if (e.target === canvasRef.current) {
-                    onSelect(null);
-                }
-            }}
-            onDoubleClick={handleDoubleClick}
         >
-            {/* Grid Pattern (Optional) */}
+            {/* Inner Content - Full size but scaled down */}
             <div
-                className="absolute inset-0 pointer-events-none opacity-20"
+                id={id}
+                ref={canvasRef}
+                className="relative overflow-hidden origin-top-left"
                 style={{
-                    backgroundImage: "radial-gradient(#ccc 1px, transparent 1px)",
-                    backgroundSize: "20px 20px"
+                    width: PAGE_WIDTH,
+                    height: PAGE_HEIGHT,
+                    transform: `scale(${scale})`,
                 }}
-            />
-
-            {elements.map((el) => (
-                <DraggableElement
-                    key={el.id}
-                    element={el}
-                    isSelected={selectedId === el.id}
-                    onSelect={() => onSelect(el.id)}
-                    onUpdate={(updates) => onUpdate(el.id, updates)}
-                    onContextMenu={(e) => handleContextMenu(e, el.id)}
+                onClick={(e) => {
+                    // Deselect if clicking blank area
+                    if (e.target === canvasRef.current) {
+                        onSelect(null);
+                    }
+                }}
+                onDoubleClick={handleDoubleClick}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+            >
+                {/* Grid Pattern (Optional) */}
+                <div
+                    className="absolute inset-0 pointer-events-none opacity-20"
+                    style={{
+                        backgroundImage: "radial-gradient(#ccc 1px, transparent 1px)",
+                        backgroundSize: "20px 20px"
+                    }}
                 />
-            ))}
+
+                {elements.map((el) => (
+                    <DraggableElement
+                        key={el.id}
+                        element={el}
+                        isSelected={selectedId === el.id}
+                        onSelect={() => onSelect(el.id)}
+                        onUpdate={(updates) => onUpdate(el.id, updates)}
+                        onContextMenu={(e) => handleContextMenu(e, el.id)}
+                    />
+                ))}
+            </div>
 
             {contextMenu && (
                 <div

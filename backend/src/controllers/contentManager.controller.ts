@@ -7,6 +7,8 @@ import stringSimilarity from 'string-similarity';
 // Using require to bypass strict TS module resolution issues with some packages
 const { search } = require('google-sr');
 
+import { createAndSendCertificate } from './certificate.controller';
+
 export const getSubmissions = async (req: Request, res: Response): Promise<void> => {
     try {
         // Fetch all content where status is one of the submitted states
@@ -61,12 +63,19 @@ export const getSubmissions = async (req: Request, res: Response): Promise<void>
                 // If not in schema, default Normal.
             }
 
+            const toDate = (d: any) => {
+                if (!d) return new Date();
+                try {
+                    return d.toDate ? d.toDate() : new Date(d);
+                } catch (e) { return new Date(); }
+            };
+
             return {
                 id: sub.id,
                 title: sub.title,
                 author: authorName,
                 category: categoryName,
-                date: new Date(sub.created_at).toLocaleDateString(),
+                date: toDate(sub.created_at).toLocaleDateString(), // Consider moving format to frontend
                 status: sub.status,
                 priority: priority,
                 assignedEditor: assignedEditor,
@@ -95,7 +104,23 @@ export const getEditors = async (req: Request, res: Response): Promise<void> => 
         const validEditors = await Promise.all(editors.map(async (u: any) => {
             // Find editor profile
             const profiles = await executeQuery('editors', [{ field: 'user_id', op: '==', value: u.id }]);
-            const editorId = profiles.length > 0 ? profiles[0].id : null;
+            let editorId = profiles.length > 0 ? profiles[0].id : null;
+
+            if (!editorId) {
+                // Auto-heal: Create editor profile if missing
+                try {
+                    const newProfile = await createDoc('editors', {
+                        user_id: u.id,
+                        specialization: 'General',
+                        capacity: 5,
+                        active_assignments: 0,
+                        created_at: new Date()
+                    });
+                    editorId = newProfile.id;
+                } catch (e) {
+                    logger.error(`Failed to auto-create editor profile for ${u.id}`, e);
+                }
+            }
 
             return {
                 name: u.name,
@@ -106,7 +131,7 @@ export const getEditors = async (req: Request, res: Response): Promise<void> => 
 
         res.status(200).json({
             status: 'success',
-            data: validEditors.filter(e => e.id !== null)
+            data: validEditors // No need to filter nulls if we handle creation or accept nulls temporarily
         });
     } catch (error: any) {
         logger.error('Get editors error:', error);
@@ -157,11 +182,22 @@ export const assignEditor = async (req: Request, res: Response): Promise<void> =
         const editorUser: any = users[0];
         // find editor profile
         const editorProfiles = await executeQuery('editors', [{ field: 'user_id', op: '==', value: editorUser.id }]);
+
+        let editorProfileId: string;
+
         if (editorProfiles.length === 0) {
-            res.status(404).json({ status: 'error', message: 'Editor profile missing' });
-            return;
+            // Auto-create
+            const newProfile = await createDoc('editors', {
+                user_id: editorUser.id,
+                specialization: 'General',
+                capacity: 5,
+                active_assignments: 0,
+                created_at: new Date()
+            });
+            editorProfileId = newProfile.id;
+        } else {
+            editorProfileId = editorProfiles[0].id;
         }
-        const editorProfileId = editorProfiles[0].id;
 
         // Create assignment
         await createDoc('editor_assignments', {
@@ -738,7 +774,7 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
 export const getReadyToPublish = async (req: Request, res: Response): Promise<void> => {
     try {
         const articles = await executeQuery('content', [
-            { field: 'status', op: '==', value: 'approved' }
+            { field: 'status', op: 'in', value: ['approved', 'Approved'] }
         ], undefined, { field: 'created_at', dir: 'asc' });
 
         const formatted = await Promise.all(articles.map(async (c: any) => {
@@ -824,6 +860,16 @@ export const publishContent = async (req: Request, res: Response): Promise<void>
                 entity_id: articleId,
                 created_at: new Date()
             });
+        }
+
+        // Generate Certificate
+        if (art.author_id) {
+            try {
+                await createAndSendCertificate(articleId);
+                logger.info(`Certificate generated for article ${articleId}`);
+            } catch (certErr) {
+                logger.error('Certificate generation failed (non-blocking):', certErr);
+            }
         }
 
         res.status(200).json({ status: 'success', message: 'Article published successfully' });

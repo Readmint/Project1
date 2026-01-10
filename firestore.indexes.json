@@ -1,0 +1,153 @@
+{
+    "indexes": [
+        {
+            "collectionGroup": "workflow_events",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "article_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "created_at",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "reviews",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "article_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "created_at",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "content",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "author_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "updated_at",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "content",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "author_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "updated_at",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "content",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "created_at",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "content",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "created_at",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "editor_assignments",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "article_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "communications",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "entity_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "entity_type",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "created_at",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "reviewer_assignments",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "reviewer_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "assigned_date",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "plagiarism_reports",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "article_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "created_at",
+                    "order": "DESCENDING"
+                }
+            ]
+        }
+    ],
+    "fieldOverrides": []
+}
