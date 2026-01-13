@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getJSON } from "@/lib/api";
+import { toast } from "react-hot-toast";
 import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -255,9 +257,15 @@ function MagazineRow({
                     </p>
 
                     <Button
-                      onClick={() =>
+                      onClick={() => {
+                        const userString = localStorage.getItem('user');
+                        if (!userString) {
+                          toast.error("Please login to read");
+                          router.push('/login');
+                          return;
+                        }
                         router.push(`/articles/${mag.id}/preview`)
-                      }
+                      }}
                       className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-xl flex justify-center gap-1"
                     >
                       <Eye size={12} /> Read Now
@@ -320,6 +328,7 @@ export default function IssuesPage() {
   const [search, setSearch] = useState("");
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [issuesList, setIssuesList] = useState<any[]>([]);
 
   const [bookmarks, setBookmarks] = useState<number[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -337,14 +346,14 @@ export default function IssuesPage() {
           localStorage.getItem("bookmarked_issues") || "[]"
         ) as number[];
         setBookmarks(storedBookmarks);
-      } catch {}
+      } catch { }
 
       try {
         const storedCart = JSON.parse(
           localStorage.getItem("cart_items") || "[]"
         ) as CartItem[];
         setCart(storedCart);
-      } catch {}
+      } catch { }
     }
 
     // Fake loading delay for shimmer
@@ -402,15 +411,15 @@ export default function IssuesPage() {
   };
 
   const topicData: Record<string, MagazineIssue[]> = {
-    "Trending Now": magazines.filter((m) => m.category === "Trending Now"),
-    "Editor’s Picks": magazines.filter((m) => m.category === "Editor’s Picks"),
-    "Popular Around You": magazines.filter(
+    "Trending Now": issuesList.filter((m) => m.category === "Trending Now"),
+    "Editor’s Picks": issuesList.filter((m) => m.category === "Editor’s Picks"),
+    "Popular Around You": issuesList.filter(
       (m) => m.category === "Popular Around You"
     ),
-    "New Releases": magazines.filter((m) => m.category === "New Releases"),
+    "New Releases": issuesList.filter((m) => m.category === "New Releases"),
   };
 
-  const filteredMagazines = magazines.filter((m) =>
+  const filteredMagazines = issuesList.filter((m) =>
     m.title.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -477,9 +486,15 @@ export default function IssuesPage() {
                         </p>
 
                         <Button
-                          onClick={() =>
+                          onClick={() => {
+                            const userString = localStorage.getItem('user');
+                            if (!userString) {
+                              toast.error("Please login to read");
+                              router.push('/login');
+                              return;
+                            }
                             router.push(`/articles/${mag.id}/preview`)
-                          }
+                          }}
                           className="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-xl"
                         >
                           Read Now →
@@ -522,7 +537,7 @@ export default function IssuesPage() {
                   icon={topic.icon}
                   items={
                     topicData[topic.label] ||
-                    magazines.filter((m) => m.category === topic.label)
+                    issuesList.filter((m) => m.category === topic.label)
                   }
                   isReader={isReader}
                   bookmarks={bookmarks}

@@ -65,6 +65,7 @@ setupSwagger(app);
 /* ----------------------------------- Routes ------------------------------------ */
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/featured', featuredRoutes);
 app.use('/api/articles', articleRoutes);
 app.use('/api/article', articleRoutes); // Fix: Enable access via /api/article/... (singular)
 app.use('/api', articleRoutes); // Fix: Enable access via /api/author/articles defined in articleRoutes
