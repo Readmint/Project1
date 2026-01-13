@@ -495,7 +495,7 @@ export default function ChatbotEditor({
       pushMessage({
         id: `b-ticket-err-${Date.now()}`,
         sender: "bot",
-        text: "❌ **Unable to create ticket.** Please try again in a few minutes or contact support@yourapp.com directly.",
+        text: "❌ **Unable to create ticket.** Please try again in a few minutes or contact info.mindradix@gmail.com directly.",
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         emotion: "thinking"
       });

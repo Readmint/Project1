@@ -98,7 +98,7 @@ export default function RefundPolicy() {
                     <section>
                         <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-3">5. Refund Process & Mandatory Proof</h2>
                         <ul className="list-disc pl-5 space-y-2">
-                            <li><strong>How to Apply:</strong> Email <a href="mailto:support@MindRadix.in" className="text-indigo-600 hover:underline">support@MindRadix.in</a> with the subject: &quot;Refund Request â€“ [Transaction ID]&quot;.</li>
+                            <li><strong>How to Apply:</strong> Email <a href="mailto:info.mindradix@gmail.com" className="text-indigo-600 hover:underline">info.mindradix@gmail.com</a> with the subject: &quot;Refund Request â€“ [Transaction ID]&quot;.</li>
                             <li><strong>Mandatory Documentation for Physical Products:</strong> To claim a refund/replacement for a wrong product, you MUST provide:
                                 <ul className="list-circle pl-5 mt-1 space-y-1">
                                     <li>A complete Unboxing Video (from start to finish, showing the shipping label clearly).</li>
@@ -125,7 +125,7 @@ export default function RefundPolicy() {
                         <p className="mb-2">For any queries related to payments, cancellations, or refunds:</p>
                         <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-md border border-slate-200 dark:border-slate-700">
                             <p><strong>Meadow Edutech Private Limited</strong></p>
-                            <p><strong>Email:</strong> <a href="mailto:support@MindRadix.in" className="text-indigo-600 hover:underline">support@MindRadix.in</a></p>
+                            <p><strong>Email:</strong> <a href="mailto:info.mindradix@gmail.com" className="text-indigo-600 hover:underline">info.mindradix@gmail.com</a></p>
                         </div>
                     </section>
 

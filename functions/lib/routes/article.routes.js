@@ -14,17 +14,17 @@ const router = express_1.default.Router();
  * Validation rules
  */
 const createArticleValidation = [
-    (0, express_validator_1.body)('title').isString().trim().notEmpty().withMessage('Title is required'),
-    (0, express_validator_1.body)('summary').optional().isString(),
-    (0, express_validator_1.body)('content').optional().isString(),
-    (0, express_validator_1.body)('category_id').optional().isString().withMessage('category_id must be a string'),
+    (0, express_validator_1.body)('title').isString().withMessage('Title must be a string').trim().notEmpty().withMessage('Title is required'),
+    (0, express_validator_1.body)('summary').optional({ nullable: true }).isString().withMessage('Summary must be a string'),
+    (0, express_validator_1.body)('content').optional({ nullable: true }).isString().withMessage('Content must be a string'),
+    (0, express_validator_1.body)('category_id').optional({ nullable: true }).isString().withMessage('category_id must be a string'),
     (0, express_validator_1.body)('tags').optional().isArray().withMessage('tags must be an array'),
     (0, express_validator_1.body)('tags.*').optional().isString().withMessage('each tag must be a string'),
     (0, express_validator_1.body)('status')
         .optional()
         .isIn(['draft', 'submitted'])
         .withMessage('status must be either draft or submitted'),
-    (0, express_validator_1.body)('issue_id').optional().isString(),
+    (0, express_validator_1.body)('issue_id').optional({ nullable: true }),
 ];
 const getSignedUrlValidation = [
     (0, express_validator_1.param)('articleId').isString().notEmpty().withMessage('articleId is required'),

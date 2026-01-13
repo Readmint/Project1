@@ -89,7 +89,7 @@ export default function ShippingDeliveryPolicy() {
                         <p className="mb-2">For any questions regarding your shipment or delivery status, please contact us:</p>
                         <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-md border border-slate-200 dark:border-slate-700">
                             <p><strong>Meadow Edutech Private Limited</strong></p>
-                            <p><strong>Email:</strong> <a href="mailto:support@MindRadix.in" className="text-indigo-600 hover:underline">support@MindRadix.in</a></p>
+                            <p><strong>Email:</strong> <a href="mailto:info.mindradix@gmail.com" className="text-indigo-600 hover:underline">info.mindradix@gmail.com</a></p>
                             <p><strong>Operating Hours:</strong> Mon-Sat (10:00 AM – 6:00 PM IST)</p>
                         </div>
                     </section>

@@ -57,7 +57,7 @@ export default function Footer() {
 
             <li className="flex items-center gap-3">
               <Mail className="w-5 h-5" />
-              support@MindRadix.in
+              info.mindradix@gmail.com
             </li>
 
             <li className="flex items-center gap-3">

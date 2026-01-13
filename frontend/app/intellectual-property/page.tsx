@@ -79,7 +79,7 @@ export default function IntellectualPropertyPolicy() {
                         <p className="mb-2">MindRadix respects the intellectual property of others. If you believe that your work has been copied in a way that constitutes copyright infringement:</p>
                         <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-md border border-slate-200 dark:border-slate-700">
                             <ul className="list-disc pl-5 space-y-1 mb-3">
-                                <li>You must submit a formal notice to <a href="mailto:support@MindRadix.in" className="text-indigo-600 hover:underline">support@MindRadix.in</a>.</li>
+                                <li>You must submit a formal notice to <a href="mailto:info.mindradix@gmail.com" className="text-indigo-600 hover:underline">info.mindradix@gmail.com</a>.</li>
                                 <li>The notice should include the URL of the infringing material, your contact details, and proof of your original ownership.</li>
                             </ul>
                             <p>MindRadix will investigate and take appropriate action (removal or disabling access) as per the Information Technology Act, India.</p>

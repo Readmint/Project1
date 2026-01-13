@@ -105,7 +105,7 @@ export default function PrivacyPolicy() {
                     <section>
                         <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-3">10. Intellectual Property & Takedown Procedure</h2>
                         <p>
-                            If you believe your privacy or copyright has been infringed, you may submit a Takedown Notice to support@MindRadix.in. Notices must include the specific URL, identification of the work, and your contact details.
+                            If you believe your privacy or copyright has been infringed, you may submit a Takedown Notice to info.mindradix@gmail.com. Notices must include the specific URL, identification of the work, and your contact details.
                         </p>
                     </section>
 
@@ -136,7 +136,7 @@ export default function PrivacyPolicy() {
                         <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-md border border-slate-200 dark:border-slate-700">
                             <p><strong>Name:</strong> Mr. Amit Sharma</p>
                             <p><strong>Designation:</strong> Grievance Redressal Officer</p>
-                            <p><strong>Email:</strong> support@MindRadix.in</p>
+                            <p><strong>Email:</strong> info.mindradix@gmail.com</p>
                             <p><strong>Address:</strong> Meadow Edutech Pvt Ltd, Office No. 123, 1st Floor, Tech Park, Jaipur, Rajasthan, India - 302001</p>
                         </div>
                     </section>

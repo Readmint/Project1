@@ -117,7 +117,7 @@ export default function TermsAndConditions() {
                                 <li><strong>11.2 Subscriptions:</strong> Users may cancel subscriptions at any time, but no refunds will be issued for the remaining active period.</li>
                                 <li><strong>11.3 Physical Goods:</strong> Orders for physical products can be cancelled for a full refund only within 24 hours of placing the order. No refund will be issued if the parcel is packed, a delivery partner is assigned, or the order is dispatched.</li>
                                 <li><strong>11.4 Wrong Product:</strong> Refund/Replacement for physical goods applies only for "Wrong Product" delivery, subject to a mandatory Unboxing Video as proof.</li>
-                                <li><strong>11.5 Duplicate Payments:</strong> Must be reported to <a href="mailto:support@MindRadix.in" className="text-indigo-600 hover:underline">support@MindRadix.in</a> within 7 working days for a reversal claim.</li>
+                                <li><strong>11.5 Duplicate Payments:</strong> Must be reported to <a href="mailto:info.mindradix@gmail.com" className="text-indigo-600 hover:underline">info.mindradix@gmail.com</a> within 7 working days for a reversal claim.</li>
                             </ul>
                         </section>
 
@@ -250,7 +250,7 @@ export default function TermsAndConditions() {
                             <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-md">
                                 <p><strong>Name:</strong> Mr. Amit Sharma</p>
                                 <p><strong>Designation:</strong> Grievance Redressal Officer</p>
-                                <p><strong>Email:</strong> <a href="mailto:support@MindRadix.in" className="text-indigo-600 hover:underline">support@MindRadix.in</a></p>
+                                <p><strong>Email:</strong> <a href="mailto:info.mindradix@gmail.com" className="text-indigo-600 hover:underline">info.mindradix@gmail.com</a></p>
                                 <p><strong>Address:</strong> Meadow Edutech Pvt Ltd, Office No. 123, 1st Floor, Tech Park, Jaipur, Rajasthan, India - 302001</p>
                             </div>
                         </section>
@@ -258,7 +258,7 @@ export default function TermsAndConditions() {
                         <section>
                             <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-3">Contact Us</h2>
                             <p className="mb-1"><strong>Meadow Edutech Private Limited</strong></p>
-                            <p><strong>Email:</strong> <a href="mailto:support@MindRadix.in" className="text-indigo-600 hover:underline">support@MindRadix.in</a></p>
+                            <p><strong>Email:</strong> <a href="mailto:info.mindradix@gmail.com" className="text-indigo-600 hover:underline">info.mindradix@gmail.com</a></p>
                         </section>
 
                         <div className="pt-6 border-t border-slate-200 dark:border-slate-700 mt-8">

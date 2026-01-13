@@ -120,6 +120,10 @@ const createArticle = async (req, res) => {
             return;
         const errors = (0, express_validator_1.validationResult)(req);
         if (!errors.isEmpty()) {
+            console.log('❌ VALIDATION FAILED');
+            console.log('Request Body:', JSON.stringify(req.body, null, 2));
+            console.log('Errors:', JSON.stringify(errors.array(), null, 2));
+            logger_1.logger.warn('createArticle validation errors:', errors.array());
             res.status(400).json({ status: 'error', message: 'Validation failed', errors: errors.array() });
             return;
         }
@@ -329,16 +333,14 @@ const uploadAttachment = async (req, res) => {
     try {
         if (!requireAuth(req, res))
             return;
-        const dbMy = (0, database_1.getDatabase)();
         const userId = req.user.userId;
         const { articleId } = req.params;
-        // Validate article exists and ownership in MySQL
-        const [articleRows] = await dbMy.execute('SELECT id, author_id FROM content WHERE id = ?', [articleId]);
-        if (!articleRows || articleRows.length === 0) {
+        // Validate article exists and ownership in Firestore
+        const article = await (0, firestore_helpers_1.getDoc)('content', articleId);
+        if (!article) {
             res.status(404).json({ status: 'error', message: 'Article not found' });
             return;
         }
-        const article = articleRows[0];
         if (article.author_id !== userId && !['admin', 'content_manager', 'editor'].includes(req.user.role || '')) {
             res.status(403).json({ status: 'error', message: 'Forbidden to upload for this article' });
             return;
@@ -684,11 +686,21 @@ const getArticleDetails = async (req, res) => {
         }
         // Fetch related
         // Attachments
-        const attachments = await (0, firestore_helpers_1.executeQuery)('attachments', [{ field: 'article_id', op: '==', value: articleId }]);
-        // Workflow
-        const workflow = await (0, firestore_helpers_1.executeQuery)('workflow_events', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' });
-        // Reviews
-        const reviews = await (0, firestore_helpers_1.executeQuery)('reviews', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' });
+        // Fetch related data in parallel with graceful degradation
+        const [attachmentsResult, workflowResult, reviewsResult] = await Promise.allSettled([
+            (0, firestore_helpers_1.executeQuery)('attachments', [{ field: 'article_id', op: '==', value: articleId }]),
+            (0, firestore_helpers_1.executeQuery)('workflow_events', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' }),
+            (0, firestore_helpers_1.executeQuery)('reviews', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' })
+        ]);
+        const attachments = attachmentsResult.status === 'fulfilled' ? attachmentsResult.value : [];
+        if (attachmentsResult.status === 'rejected')
+            logger_1.logger.warn('Failed to fetch attachments', attachmentsResult.reason);
+        const workflow = workflowResult.status === 'fulfilled' ? workflowResult.value : [];
+        if (workflowResult.status === 'rejected')
+            logger_1.logger.warn('Failed to fetch workflow', workflowResult.reason);
+        const reviews = reviewsResult.status === 'fulfilled' ? reviewsResult.value : [];
+        if (reviewsResult.status === 'rejected')
+            logger_1.logger.warn('Failed to fetch reviews', reviewsResult.reason);
         res.status(200).json({
             status: 'success',
             message: 'Article details fetched',

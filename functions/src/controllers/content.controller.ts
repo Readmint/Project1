@@ -241,6 +241,9 @@ export const submitDesign = async (req: Request, res: Response): Promise<void> =
     const { id } = req.params;
     const { designData } = req.body;
 
+    // [NEW] Get User ID (Assuming auth middleware attached it)
+    const userId = (req as any).user?.userId;
+
     const article: any = await getDoc('content', id);
     if (!article) {
       res.status(404).json({ status: 'error', message: 'Article not found' });
@@ -270,6 +273,61 @@ export const submitDesign = async (req: Request, res: Response): Promise<void> =
       note: 'Design submitted by Editor for review',
       created_at: new Date()
     });
+
+    // [NEW] Update Editor Assignment to 'Completed' & Create Version
+    if (userId) {
+      // 1. Resolve Editor ID
+      const editorDocs = await executeQuery('editors', [{ field: 'user_id', op: '==', value: userId }]);
+      const editorId = editorDocs.length > 0 ? editorDocs[0].id : null;
+
+      if (editorId) {
+        // 2. Create Version Snapshot
+        await createDoc('versions', {
+          article_id: id,
+          editor_id: editorId,
+          title: article.title, // or from design data?
+          content: null, // This is design submission, maybe store design snapshot? 
+          // Current version schema expects 'content' string. 
+          // We can convert designData to string or leave null. 
+          // Let's store stringified designData in content for now or just null.
+          meta: {
+            type: 'design_submission',
+            finalized: true,
+            finalizedBy: userId
+          },
+          created_at: new Date()
+        });
+
+        // 3. Update/Create Assignment
+        const assignments = await executeQuery('editor_assignments', [
+          { field: 'article_id', op: '==', value: id },
+          { field: 'editor_id', op: '==', value: editorId }
+        ]);
+
+        if (assignments.length > 0) {
+          for (const assign of assignments) {
+            if ((assign as any).status !== 'cancelled') {
+              await updateDoc('editor_assignments', assign.id, {
+                status: 'completed',
+                updated_at: new Date()
+              });
+            }
+          }
+        } else {
+          // Create self-assignment as completed
+          await createDoc('editor_assignments', {
+            editor_id: editorId,
+            article_id: id,
+            assigned_by: null,
+            assigned_date: new Date(),
+            due_date: null,
+            priority: 'Medium',
+            status: 'completed',
+            updated_at: new Date()
+          });
+        }
+      }
+    }
 
     res.status(200).json({
       status: 'success',

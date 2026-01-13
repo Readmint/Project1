@@ -138,7 +138,7 @@ export default function AboutPage() {
                         <div className="space-y-4 text-slate-600 dark:text-slate-400">
                             <div className="flex items-center justify-center gap-2">
                                 <Mail className="w-4 h-4" />
-                                <a href="mailto:support@mindradix.com" className="hover:text-indigo-600">support@mindradix.com</a>
+                                <a href="mailto:info.mindradix@gmail.com" className="hover:text-indigo-600">info.mindradix@gmail.com</a>
                             </div>
                             <div className="flex items-center justify-center gap-2">
                                 <Globe className="w-4 h-4" />

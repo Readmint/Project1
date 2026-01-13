@@ -61,7 +61,7 @@ export default function GuidelinesPage() {
               If you encounter workflow issues, role conflicts, or technical errors, reach out to the support team.
             </p>
             <div className="flex flex-col gap-1 text-sm text-slate-600 dark:text-slate-300">
-              <p>Email: <span className="text-indigo-600">support@readmint.example.com</span></p>
+              <p>Email: <span className="text-indigo-600">info.mindradix@gmail.com</span></p>
               <p>Slack Channel: <span className="text-indigo-600">#cm-support</span></p>
             </div>
             <button className="mt-2 inline-flex items-center gap-2 bg-indigo-600 text-white text-xs px-3 py-1.5 rounded-lg w-fit">

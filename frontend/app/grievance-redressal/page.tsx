@@ -31,7 +31,7 @@ export default function GrievanceRedressalPolicy() {
                             <p><strong>Name of the Officer:</strong> Mr. Amit Sharma</p>
                             <p><strong>Designation:</strong> Grievance Redressal Officer</p>
                             <p><strong>Company:</strong> Meadow Edutech Private Limited (MindRadix)</p>
-                            <p><strong>Email Address:</strong> <a href="mailto:support@MindRadix.in" className="text-indigo-600 hover:underline">support@MindRadix.in</a></p>
+                            <p><strong>Email Address:</strong> <a href="mailto:info.mindradix@gmail.com" className="text-indigo-600 hover:underline">info.mindradix@gmail.com</a></p>
                             <p><strong>Address:</strong> Meadow Edutech Pvt Ltd, Office No. 123, 1st Floor, Tech Park, Jaipur, Rajasthan, India - 302001</p>
                         </div>
                     </section>

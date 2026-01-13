@@ -279,7 +279,7 @@ export default function AssignedPage() {
           >
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold">{modalArticle.title}</h2>
-              <Button variant="ghost" onClick={closeModal}><X size={18} /></Button>
+              <Button variant="ghost" onClick={() => setModalArticle(null)}><X size={18} /></Button>
             </div>
 
             <div className="flex gap-4">

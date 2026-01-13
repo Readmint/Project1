@@ -86,7 +86,7 @@ export default function PlagiarismEthicsPolicy() {
                         <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-3">8. Reporting Ethical Concerns</h2>
                         <p className="mb-2">If any reader or user identifies a case of plagiarism or ethical breach on our platform, they are encouraged to report it to our editorial team at:</p>
                         <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-md border border-slate-200 dark:border-slate-700">
-                            <p><strong>Email:</strong> <a href="mailto:support@MindRadix.in" className="text-indigo-600 hover:underline">support@MindRadix.in</a></p>
+                            <p><strong>Email:</strong> <a href="mailto:info.mindradix@gmail.com" className="text-indigo-600 hover:underline">info.mindradix@gmail.com</a></p>
                             <p>We investigate all such claims with confidentiality and rigor.</p>
                         </div>
                     </section>

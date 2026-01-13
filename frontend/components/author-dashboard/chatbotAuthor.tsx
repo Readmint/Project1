@@ -79,7 +79,7 @@ export default function ChatbotAuthor({
   const [userData, setUserData] = useState<any>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
   const [hasLoadedUser, setHasLoadedUser] = useState(false);
-  
+
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const typingTimerRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -90,17 +90,17 @@ export default function ChatbotAuthor({
     const loadUser = () => {
       try {
         const userDataString = localStorage.getItem("user");
-        
+
         if (userDataString) {
           const parsedUser = JSON.parse(userDataString);
-          
+
           // Validate user object has required fields
           if (parsedUser && (parsedUser.uid || parsedUser.email)) {
             // Only update if user has changed
             if (!user || user.uid !== parsedUser.uid) {
               console.log("Chatbot: User found in localStorage:", parsedUser);
               setUser(parsedUser);
-              
+
               // Only fetch Firestore details if we have a uid
               if (parsedUser.uid) {
                 fetchUserDetails(parsedUser.uid);
@@ -180,7 +180,7 @@ export default function ChatbotAuthor({
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("userLogin", handleLoginEvent);
       window.removeEventListener("userLogout", handleLogoutEvent);
-      
+
       if (checkIntervalRef.current) {
         clearInterval(checkIntervalRef.current);
         checkIntervalRef.current = null;
@@ -221,18 +221,18 @@ export default function ChatbotAuthor({
   // Initialize with animated welcome - only once
   useEffect(() => {
     if (messages.length > 0) return;
-    
+
     // Only show welcome message after we've attempted to load user
     if (hasLoadedUser) {
-      const welcomeMessage = user 
+      const welcomeMessage = user
         ? `👋 Welcome back${user.name ? ` ${user.name}` : user.displayName ? ` ${user.displayName}` : ''}! I'm your Author Assistant.\n\nI can help you with:\n\n📝 **Writing Issues** - Content, formatting, plagiarism\n💰 **Payment Questions** - Earnings, invoices, payment methods\n🔧 **Technical Problems** - Uploads, saving, submissions\n💡 **General Help** - Certificates, permissions\n👤 **Account Support** - Profile, login issues\n\nAsk me anything or select a topic below!`
         : `👋 Hello! I'm your Author Assistant.\n\nI can help you with:\n\n📝 **Writing Issues** - Content, formatting, plagiarism\n💰 **Payment Questions** - Earnings, invoices, payment methods\n🔧 **Technical Problems** - Uploads, saving, submissions\n💡 **General Help** - Certificates, permissions\n👤 **Account Support** - Profile, login issues\n\n${!user ? '⚠️ **Note:** Please log in to create support tickets.\n\n' : ''}Ask me anything or select a topic below!`;
-      
+
       setMessages([
-        { 
-          id: "b-welcome", 
-          sender: "bot", 
-          text: welcomeMessage, 
+        {
+          id: "b-welcome",
+          sender: "bot",
+          text: welcomeMessage,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           emotion: "happy"
         },
@@ -244,18 +244,18 @@ export default function ChatbotAuthor({
   useEffect(() => {
     const q = query.trim().toLowerCase();
     let result = issues;
-    
+
     if (activeCategory !== "all") {
       result = result.filter(i => i.category === activeCategory);
     }
-    
+
     if (q) {
-      result = result.filter(i => 
-        i.title.toLowerCase().includes(q) || 
+      result = result.filter(i =>
+        i.title.toLowerCase().includes(q) ||
         i.answer.toLowerCase().includes(q)
       );
     }
-    
+
     setFiltered(result);
   }, [query, issues, activeCategory]);
 
@@ -283,13 +283,13 @@ export default function ChatbotAuthor({
 
   function simulateBotTyping(finalText: string, emotion: "happy" | "thinking" | "helping" = "helping") {
     const botId = `b-${Date.now()}`;
-    pushMessage({ 
-      id: botId, 
-      sender: "bot", 
-      text: "", 
-      isTyping: true, 
+    pushMessage({
+      id: botId,
+      sender: "bot",
+      text: "",
+      isTyping: true,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      emotion 
+      emotion
     });
 
     // Typing effect with varying speeds
@@ -301,11 +301,11 @@ export default function ChatbotAuthor({
       if (idx < finalText.length) {
         const char = finalText[idx];
         idx++;
-        
+
         setMessages(prev =>
-          prev.map(m => 
-            m.id === botId 
-              ? { ...m, text: finalText.slice(0, idx), isTyping: idx < finalText.length } 
+          prev.map(m =>
+            m.id === botId
+              ? { ...m, text: finalText.slice(0, idx), isTyping: idx < finalText.length }
               : m
           )
         );
@@ -321,14 +321,14 @@ export default function ChatbotAuthor({
   }
 
   function handleQuickQuestion(it: Issue) {
-    pushMessage({ 
-      id: `u-${it.id}-${Date.now()}`, 
-      sender: "user", 
-      text: it.title, 
+    pushMessage({
+      id: `u-${it.id}-${Date.now()}`,
+      sender: "user",
+      text: it.title,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       emotion: "thinking"
     });
-    
+
     // Add creative prefixes based on category
     const prefixes = {
       writing: "📝 **Writing Support:** ",
@@ -337,28 +337,28 @@ export default function ChatbotAuthor({
       general: "💡 **General Guidance:** ",
       account: "👤 **Account Support:** "
     };
-    
+
     const prefix = prefixes[it.category || "general"];
     simulateBotTyping(`${prefix}\n\n${it.answer}\n\n${it.moreLink ? `📚 Learn more: ${it.moreLink}` : ''}`, "helping");
-    
+
     setTimeout(() => inputRef.current?.focus(), 300);
   }
 
   function handleSendCustom() {
     const text = input.trim();
     if (!text) return;
-    
-    pushMessage({ 
-      id: `u-custom-${Date.now()}`, 
-      sender: "user", 
-      text, 
+
+    pushMessage({
+      id: `u-custom-${Date.now()}`,
+      sender: "user",
+      text,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       emotion: "thinking"
     });
     setInput("");
 
-    const match = issues.find(i => 
-      i.title.toLowerCase().includes(text.toLowerCase()) || 
+    const match = issues.find(i =>
+      i.title.toLowerCase().includes(text.toLowerCase()) ||
       i.answer.toLowerCase().includes(text.toLowerCase())
     );
 
@@ -367,7 +367,7 @@ export default function ChatbotAuthor({
     } else {
       const isLoggedIn = user && (user.uid || user.email);
       simulateBotTyping(`❓ **I couldn't find an exact match for your question.**\n\nHere are your options:\n\n1️⃣ **Search by category** - Select a category above to narrow down\n2️⃣ **Create a support ticket** - I'll help you raise this to our team\n3️⃣ **Try rephrasing** - Use different keywords\n\n${isLoggedIn ? 'Would you like to create a ticket for this issue?' : '⚠️ **Please log in to create support tickets.**'}`, "thinking");
-      
+
       // Auto-fill ticket form with user's query if logged in
       if (isLoggedIn) {
         setTimeout(() => {
@@ -382,12 +382,12 @@ export default function ChatbotAuthor({
 
   async function createTicketFromLatest() {
     const isLoggedIn = user && (user.uid || user.email);
-    
+
     if (!isLoggedIn) {
-      pushMessage({ 
-        id: `b-login-required-${Date.now()}`, 
-        sender: "bot", 
-        text: "🔒 **Login Required**\n\nYou need to be logged in to create support tickets.\n\nPlease log in to your account first, then try creating the ticket again.", 
+      pushMessage({
+        id: `b-login-required-${Date.now()}`,
+        sender: "bot",
+        text: "🔒 **Login Required**\n\nYou need to be logged in to create support tickets.\n\nPlease log in to your account first, then try creating the ticket again.",
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         emotion: "thinking"
       });
@@ -396,16 +396,16 @@ export default function ChatbotAuthor({
 
     const lastUser = [...messages].reverse().find(m => m.sender === "user");
     if (!lastUser) {
-      pushMessage({ 
-        id: `b-ticket-err-${Date.now()}`, 
-        sender: "bot", 
-        text: "❌ Please ask a question first before creating a ticket.", 
+      pushMessage({
+        id: `b-ticket-err-${Date.now()}`,
+        sender: "bot",
+        text: "❌ Please ask a question first before creating a ticket.",
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         emotion: "thinking"
       });
       return;
     }
-    
+
     // Show ticket modal for user confirmation
     setTicketSubject(lastUser.text.length > 50 ? lastUser.text.substring(0, 50) + "..." : lastUser.text);
     setTicketDescription(lastUser.text);
@@ -414,12 +414,12 @@ export default function ChatbotAuthor({
 
   async function handleCreateTicket() {
     const isLoggedIn = user && (user.uid || user.email);
-    
+
     if (!isLoggedIn) {
-      pushMessage({ 
-        id: `b-ticket-err-${Date.now()}`, 
-        sender: "bot", 
-        text: "❌ Please log in to create a support ticket.", 
+      pushMessage({
+        id: `b-ticket-err-${Date.now()}`,
+        sender: "bot",
+        text: "❌ Please log in to create a support ticket.",
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         emotion: "thinking"
       });
@@ -430,10 +430,10 @@ export default function ChatbotAuthor({
     // Get user data from localStorage or Firestore
     const currentUser = user || userData;
     if (!currentUser) {
-      pushMessage({ 
-        id: `b-ticket-err-${Date.now()}`, 
-        sender: "bot", 
-        text: "❌ Invalid user data. Please log in again.", 
+      pushMessage({
+        id: `b-ticket-err-${Date.now()}`,
+        sender: "bot",
+        text: "❌ Invalid user data. Please log in again.",
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         emotion: "thinking"
       });
@@ -442,7 +442,7 @@ export default function ChatbotAuthor({
     }
 
     setIsCreatingTicket(true);
-    
+
     try {
       // Prepare user data with fallbacks
       const userEmail = currentUser.email || currentUser.userEmail || "No email provided";
@@ -480,11 +480,11 @@ export default function ChatbotAuthor({
       // Close modal and show success
       setShowTicketModal(false);
       setIsCreatingTicket(false);
-      
-      pushMessage({ 
-        id: `b-ticket-ok-${Date.now()}`, 
-        sender: "bot", 
-        text: `✅ **Support Ticket Created Successfully!**\n\n📋 **Ticket Details:**\n• Subject: ${ticketSubject}\n• Category: ${activeCategory !== "all" ? activeCategory : "General"}\n• Status: Open\n• Priority: Medium\n\n📧 **Notification sent to:** ${userEmail}\n\nOur support team will review your request and respond within 24 hours. You'll receive email updates on your ticket status. Thank you for your patience!`, 
+
+      pushMessage({
+        id: `b-ticket-ok-${Date.now()}`,
+        sender: "bot",
+        text: `✅ **Support Ticket Created Successfully!**\n\n📋 **Ticket Details:**\n• Subject: ${ticketSubject}\n• Category: ${activeCategory !== "all" ? activeCategory : "General"}\n• Status: Open\n• Priority: Medium\n\n📧 **Notification sent to:** ${userEmail}\n\nOur support team will review your request and respond within 24 hours. You'll receive email updates on your ticket status. Thank you for your patience!`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         emotion: "happy"
       });
@@ -494,10 +494,10 @@ export default function ChatbotAuthor({
       setTicketDescription("");
     } catch (err) {
       console.error("Firestore ticket error:", err);
-      pushMessage({ 
-        id: `b-ticket-err-${Date.now()}`, 
-        sender: "bot", 
-        text: "❌ **Unable to create ticket.** Please try again in a few minutes or contact support@yourapp.com directly.", 
+      pushMessage({
+        id: `b-ticket-err-${Date.now()}`,
+        sender: "bot",
+        text: "❌ **Unable to create ticket.** Please try again in a few minutes or contact info.mindradix@gmail.com directly.",
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         emotion: "thinking"
       });
@@ -520,9 +520,9 @@ export default function ChatbotAuthor({
   const getUserRoleDisplay = () => {
     const currentUser = user || userData;
     if (!currentUser) return "";
-    
+
     const role = currentUser.role || "";
-    switch(role) {
+    switch (role) {
       case 'author':
         return 'Author';
       case 'reader':
@@ -544,12 +544,12 @@ export default function ChatbotAuthor({
   const getUserDisplayName = () => {
     const currentUser = user || userData;
     if (!currentUser) return "";
-    
-    return currentUser.name || 
-           currentUser.displayName || 
-           currentUser.userName || 
-           (currentUser.email ? currentUser.email.split("@")[0] : "") || 
-           "User";
+
+    return currentUser.name ||
+      currentUser.displayName ||
+      currentUser.userName ||
+      (currentUser.email ? currentUser.email.split("@")[0] : "") ||
+      "User";
   };
 
   // Get user email
@@ -579,7 +579,7 @@ export default function ChatbotAuthor({
                   {/* Status indicator */}
                   <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${botMood === "idle" ? "bg-emerald-500" : botMood === "thinking" ? "bg-amber-500 animate-pulse" : "bg-blue-500"}`} />
                 </div>
-                
+
                 <div className="flex-1">
                   <h2 className="text-xl font-bold text-white">
                     Author Support Assistant
@@ -597,7 +597,7 @@ export default function ChatbotAuthor({
                     </div>
                   </div>
                 </div>
-                
+
                 <button
                   onClick={() => setOpen(false)}
                   className="p-2 rounded-full hover:bg-white/20 transition-all duration-300"
@@ -616,11 +616,10 @@ export default function ChatbotAuthor({
                     <button
                       key={cat.id}
                       onClick={() => setActiveCategory(cat.id)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 transform hover:scale-105 flex flex-col items-center min-w-[100px] ${
-                        activeCategory === cat.id 
-                          ? `${cat.color} text-white shadow-lg` 
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 transform hover:scale-105 flex flex-col items-center min-w-[100px] ${activeCategory === cat.id
+                          ? `${cat.color} text-white shadow-lg`
                           : "bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 shadow"
-                      }`}
+                        }`}
                       title={cat.description}
                     >
                       <span>{cat.label.split(' ')[0]}</span>
@@ -629,7 +628,7 @@ export default function ChatbotAuthor({
                   ))}
                 </div>
               </div>
-              
+
               {/* Search bar */}
               <div className="relative">
                 <input
@@ -648,16 +647,16 @@ export default function ChatbotAuthor({
             </div>
 
             {/* Chat transcript */}
-            <div 
+            <div
               ref={transcriptRef}
               className="flex-1 p-6 space-y-4 overflow-y-auto max-h-[300px] bg-white dark:bg-gray-900"
             >
               {messages.map(m => (
                 <div key={m.id} className={`flex ${m.sender === "user" ? "justify-end" : "justify-start"} animate-fade-in`}>
-                  <div className={`max-w-[85%] ${m.sender === "user" 
-                    ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-2xl rounded-br-sm shadow-lg' 
+                  <div className={`max-w-[85%] ${m.sender === "user"
+                    ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-2xl rounded-br-sm shadow-lg'
                     : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-2xl rounded-bl-sm shadow'
-                  } p-4 transition-all duration-300`}>
+                    } p-4 transition-all duration-300`}>
                     <div className="whitespace-pre-wrap leading-relaxed">{m.text}</div>
                     <div className={`flex items-center justify-between mt-2 text-xs ${m.sender === "user" ? 'text-blue-200' : 'text-gray-500'}`}>
                       <span>{m.time}</span>
@@ -668,9 +667,9 @@ export default function ChatbotAuthor({
                     {m.isTyping && (
                       <div className="mt-3 flex items-center gap-2">
                         <div className="flex gap-1">
-                          <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{animationDelay: "0ms"}} />
-                          <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{animationDelay: "150ms"}} />
-                          <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{animationDelay: "300ms"}} />
+                          <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                          <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                         </div>
                         <span className="text-xs opacity-70">Assistant is typing...</span>
                       </div>
@@ -689,7 +688,7 @@ export default function ChatbotAuthor({
                     {filtered.length} available
                   </span>
                 </h3>
-                
+
                 <div className="grid grid-cols-1 gap-2 max-h-[120px] overflow-y-auto pr-2">
                   {filtered.slice(0, 5).map(it => (
                     <button
@@ -727,11 +726,11 @@ export default function ChatbotAuthor({
                     ref={inputRef}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => { 
-                      if (e.key === "Enter" && !e.shiftKey) { 
-                        e.preventDefault(); 
-                        handleSendCustom(); 
-                      } 
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendCustom();
+                      }
                     }}
                     placeholder="💬 Type your question here... (Press Enter to send)"
                     className="w-full px-5 py-4 pl-14 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 text-gray-800 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400"
@@ -742,7 +741,7 @@ export default function ChatbotAuthor({
                     </svg>
                   </div>
                 </div>
-                
+
                 <div className="flex gap-2">
                   <button
                     onClick={handleSendCustom}
@@ -754,7 +753,7 @@ export default function ChatbotAuthor({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                     </svg>
                   </button>
-                  
+
                   <button
                     onClick={createTicketFromLatest}
                     className="px-5 py-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium hover:from-amber-600 hover:to-orange-600 transform hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
@@ -765,7 +764,7 @@ export default function ChatbotAuthor({
                   </button>
                 </div>
               </div>
-              
+
               <div className="mt-4 flex justify-between items-center text-xs text-gray-500">
                 <div className="flex items-center gap-2">
                   {isLoggedIn ? (
@@ -784,13 +783,13 @@ export default function ChatbotAuthor({
                   )}
                 </div>
                 <div className="flex gap-3">
-                  <button 
+                  <button
                     onClick={() => setMessages([])}
                     className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                   >
                     Clear chat
                   </button>
-                  <button 
+                  <button
                     onClick={() => window.open('/help', '_blank')}
                     className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                   >
@@ -818,7 +817,7 @@ export default function ChatbotAuthor({
                   ✕
                 </button>
               </div>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -833,7 +832,7 @@ export default function ChatbotAuthor({
                     disabled={isCreatingTicket}
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Description
@@ -847,20 +846,20 @@ export default function ChatbotAuthor({
                     disabled={isCreatingTicket}
                   />
                 </div>
-                
+
                 {isLoggedIn && (
                   <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
                     <h4 className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">Ticket will be created for:</h4>
                     <p className="text-sm text-blue-700 dark:text-blue-400">
-                      <span className="font-medium">Name:</span> {getUserDisplayName()}<br/>
-                      <span className="font-medium">Email:</span> {getUserEmail()}<br/>
-                      <span className="font-medium">Role:</span> {getUserRoleDisplay()}<br/>
+                      <span className="font-medium">Name:</span> {getUserDisplayName()}<br />
+                      <span className="font-medium">Email:</span> {getUserEmail()}<br />
+                      <span className="font-medium">Role:</span> {getUserRoleDisplay()}<br />
                       <span className="font-medium">User ID:</span> {(user?.uid || userData?.uid) ? `${(user?.uid || userData?.uid).substring(0, 8)}...` : "Local User"}
                     </p>
                   </div>
                 )}
               </div>
-              
+
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={() => setShowTicketModal(false)}
@@ -891,21 +890,20 @@ export default function ChatbotAuthor({
 
       {/* Floating action button */}
       <button
-        onClick={() => { 
-          setOpen(s => !s); 
-          setTimeout(() => inputRef.current?.focus(), 200); 
+        onClick={() => {
+          setOpen(s => !s);
+          setTimeout(() => inputRef.current?.focus(), 200);
         }}
-        className={`relative w-16 h-16 rounded-2xl flex items-center justify-center shadow-2xl transform transition-all duration-500 hover:scale-110 ${
-          open 
-            ? 'bg-gradient-to-br from-indigo-600 to-purple-600 rotate-45' 
+        className={`relative w-16 h-16 rounded-2xl flex items-center justify-center shadow-2xl transform transition-all duration-500 hover:scale-110 ${open
+            ? 'bg-gradient-to-br from-indigo-600 to-purple-600 rotate-45'
             : 'bg-gradient-to-br from-indigo-600 to-blue-600 hover:rotate-12'
-        }`}
+          }`}
         title="Author Support Assistant"
       >
         <div className="relative text-white text-2xl">
           {open ? '✕' : '💬'}
         </div>
-        
+
         {/* Notification badge */}
         {!open && messages.length > 1 && (
           <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs flex items-center justify-center animate-pulse">

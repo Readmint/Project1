@@ -33,7 +33,7 @@ const sendEmail = async (to, subject, html, attachments = []) => {
         }
         const mailer = getTransporter();
         const info = await mailer.sendMail({
-            from: `"ReadMint Team" <${process.env.EMAIL_USER}>`,
+            from: `"MindRadix Team" <${process.env.EMAIL_USER}>`,
             to,
             subject,
             html,
