@@ -29,17 +29,17 @@ const router = express.Router();
  * Validation rules
  */
 const createArticleValidation = [
-  body('title').isString().withMessage('Title must be a string').trim().notEmpty().withMessage('Title is required'),
-  body('summary').optional({ nullable: true }).isString().withMessage('Summary must be a string'),
-  body('content').optional({ nullable: true }).isString().withMessage('Content must be a string'),
-  body('category_id').optional({ nullable: true }).isString().withMessage('category_id must be a string'),
+  body('title').isString().trim().notEmpty().withMessage('Title is required'),
+  body('summary').optional().isString(),
+  body('content').optional().isString(),
+  body('category_id').optional().isString().withMessage('category_id must be a string'),
   body('tags').optional().isArray().withMessage('tags must be an array'),
   body('tags.*').optional().isString().withMessage('each tag must be a string'),
   body('status')
     .optional()
     .isIn(['draft', 'submitted'])
     .withMessage('status must be either draft or submitted'),
-  body('issue_id').optional({ nullable: true }),
+  body('issue_id').optional().isString(),
 ];
 
 const getSignedUrlValidation = [

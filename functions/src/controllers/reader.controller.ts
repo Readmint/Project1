@@ -279,6 +279,7 @@ export const getArticleDetails = async (req: Request, res: Response): Promise<vo
         has_access: hasAccess,
         is_bookmarked: isBookmarked,
         attachments,
+        design_data: hasAccess && article.design_data ? (typeof article.design_data === 'string' ? JSON.parse(article.design_data) : article.design_data) : null,
         social: {
           likes: likeCount,
           is_liked: isLiked,

@@ -3,14 +3,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteBoardMember = exports.downloadResume = exports.updateApplicationStatus = exports.addBoardMember = exports.getBoardMembers = exports.getApplications = exports.submitApplication = void 0;
+exports.deleteBoardMember = exports.addBoardMember = exports.getBoardMembers = exports.getApplications = exports.submitApplication = void 0;
 const uuid_1 = require("uuid");
 const logger_1 = require("../utils/logger");
 const firestore_helpers_1 = require("../utils/firestore-helpers");
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const storage_1 = require("../utils/storage");
-const mailer_1 = require("../utils/mailer");
 /* --------------------------------------------------------------------------
    Helpers / Middleware
    -------------------------------------------------------------------------- */
@@ -21,28 +20,18 @@ const requireAuth = (req, res) => {
     }
     return true;
 };
-const requireAdmin = async (req, res) => {
+const requireAdmin = (req, res) => {
     if (!requireAuth(req, res))
         return false;
-    // Check against DB to ensure role is up-to-date (handles stale tokens)
-    try {
-        const user = await (0, firestore_helpers_1.getDoc)('users', req.user.userId);
-        if (!user) {
-            res.status(401).json({ status: "error", message: "User not found" });
-            return false;
-        }
-        const role = user.role;
-        if (role !== 'admin' && role !== 'content_manager') {
-            res.status(403).json({ status: "error", message: "Forbidden: Admin access required" });
-            return false;
-        }
-        return true;
-    }
-    catch (e) {
-        logger_1.logger.error('Error verifying admin role', e);
-        res.status(500).json({ status: "error", message: "Internal Auth Error" });
+    // Assuming 'admin' or 'content_manager' can manage headers? 
+    // User asked for "Admin" specifically, but usually CMs also manage content.
+    // Checking both for flexibility, or strictly 'admin'.
+    const role = req.user.role;
+    if (role !== 'admin' && role !== 'content_manager') {
+        res.status(403).json({ status: "error", message: "Forbidden: Admin access required" });
         return false;
     }
+    return true;
 };
 /* --------------------------------------------------------------------------
    PUBLIC: Submit Application
@@ -101,31 +90,8 @@ exports.submitApplication = [
                 currentAffiliation,
                 currentDesignation, linkedin: linkedin || null, googleScholar: googleScholar || null, resume_storage_path: resumeUrl, resume_original_name: resumeName, status: 'pending', submitted_at: new Date() }, req.body // Save other dynamic fields like 'subjectExpertise' if passed
             );
+            // Clean up duplicates or undefined/nulls if needed, firestore handles it.
             await (0, firestore_helpers_1.createDoc)('editorial_applications', applicationData, applicationId);
-            // 3. Send Confirmation Email
-            const emailSubject = `Application Received: Editorial Board (${role})`;
-            const emailHtml = `
-                <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                    <h2>Thank you for applying, ${fullName}!</h2>
-                    <p>We have received your application for the position of <strong>${role}</strong> at MindRadiX.</p>
-                    <p>Our editorial committee will review your profile, qualifications, and experience. We will get back to you regarding the next steps.</p>
-                    <br/>
-                    <p><strong>Application Details:</strong></p>
-                    <ul>
-                        <li><strong>Reference ID:</strong> ${applicationId}</li>
-                        <li><strong>Date:</strong> ${new Date().toLocaleDateString()}</li>
-                    </ul>
-                    <br/>
-                    <p>Best Regards,<br/><strong>MindRadiX Editorial Team</strong></p>
-                </div>
-            `;
-            // Import sendEmail from '../utils/mailer' needs to be at top, but we can dynamic import or assume it's there. 
-            // I will add the import in a separate block if needed, but here I'll assume I can just use it if I add the import.
-            // Wait, I need to add the import first. 
-            // I will cancel this replacement and do imports first? No, I'll do this block and then add imports at valid location.
-            // Actually, I can't add imports with replace_file_content if I'm targeting this block.
-            // I'll trust myself to add the import in the next tool call properly.
-            await (0, mailer_1.sendEmail)(email, emailSubject, emailHtml);
             res.status(200).json({ status: "success", message: "Application submitted successfully" });
         }
         catch (err) {
@@ -149,9 +115,9 @@ const getApplications = async (req, res) => {
         const processedApps = await Promise.all(apps.map(async (app) => {
             if (app.resume_storage_path) {
                 try {
-                    // We will now use a Proxy Download endpoint.
-                    // Just return the path. Frontend will construct /api/editorial/download-resume?path=...
-                    return Object.assign(Object.assign({}, app), { resume_url: null, resume_path: app.resume_storage_path });
+                    // Generate short-lived signed URL for admin
+                    const signedUrl = await (0, storage_1.getSignedUrl)(app.resume_storage_path, 'read', 60 * 60 * 1000); // 1 hour
+                    return Object.assign(Object.assign({}, app), { resume_url: signedUrl });
                 }
                 catch (e) {
                     return app;
@@ -160,7 +126,17 @@ const getApplications = async (req, res) => {
             return app;
         }));
         // Sort by submitted_at desc
-        processedApps.sort((a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime());
+        const toDate = (d) => {
+            if (!d)
+                return 0;
+            try {
+                return d.toDate ? d.toDate().getTime() : new Date(d).getTime();
+            }
+            catch (e) {
+                return 0;
+            }
+        };
+        processedApps.sort((a, b) => toDate(b.submitted_at) - toDate(a.submitted_at));
         res.status(200).json({ status: "success", data: processedApps });
     }
     catch (err) {
@@ -202,7 +178,7 @@ exports.addBoardMember = [
     uploadMemberImage.single('image'),
     async (req, res) => {
         try {
-            if (!await requireAdmin(req, res))
+            if (!requireAdmin(req, res))
                 return;
             const { name, role, affiliation, bio, color } = req.body;
             if (!name || !role) {
@@ -238,161 +214,17 @@ exports.addBoardMember = [
         }
         catch (err) {
             logger_1.logger.error("addBoardMember error", err);
-            res.status(500).json({
-                status: "error",
-                message: "Failed to add board member",
-                debug_error: err === null || err === void 0 ? void 0 : err.message,
-                debug_stack: err === null || err === void 0 ? void 0 : err.stack
-            });
+            res.status(500).json({ status: "error", message: "Failed to add board member" });
         }
     }
 ];
-/* --------------------------------------------------------------------------
-   ADMIN: Update Application Status
-   POST /api/editorial/applications/update-status
-   -------------------------------------------------------------------------- */
-const updateApplicationStatus = async (req, res) => {
-    try {
-        if (!await requireAdmin(req, res))
-            return;
-        const { applicationId, status, reason, interviewDate, interviewTime, interviewLink } = req.body;
-        // status: 'interview', 'approved', 'rejected'
-        if (!applicationId || !status) {
-            res.status(400).json({ status: "error", message: "Application ID and Status required" });
-            return;
-        }
-        const appData = await (0, firestore_helpers_1.getDoc)('editorial_applications', applicationId);
-        if (!appData) {
-            res.status(404).json({ status: "error", message: "Application not found" });
-            return;
-        }
-        const { email, fullName, role } = appData;
-        // Perform Update
-        await (0, firestore_helpers_1.updateDoc)('editorial_applications', applicationId, {
-            status,
-            reviewed_at: new Date(),
-            rejection_reason: reason || null,
-            interview_details: status === 'interview' ? {
-                date: interviewDate,
-                time: interviewTime,
-                link: interviewLink
-            } : null
-        });
-        // Send Email Notification
-        let subject = "";
-        let htmlBody = "";
-        const emailStyles = `font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px;`;
-        if (status === 'interview') {
-            subject = `Invitation for Interview: Editorial Board (${role})`;
-            htmlBody = `
-                <div style="${emailStyles}">
-                    <h3>Dear ${fullName},</h3>
-                    <p>We are pleased to inform you that your application for the <strong>${role}</strong> position at MindRadiX has been shortlisted.</p>
-                    <p>We would like to invite you for a brief discussion/interview.</p>
-                    <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                        <p><strong>Date:</strong> ${interviewDate || 'To be decided'}</p>
-                        <p><strong>Time:</strong> ${interviewTime || ''}</p>
-                        <p><strong>Link:</strong> <a href="${interviewLink || '#'}">${interviewLink || 'Link will be shared soon'}</a></p>
-                    </div>
-                    <p>Please confirm your availability by replying to this email.</p>
-                    <p>Best Regards,<br/><strong>MindRadiX Editorial Team</strong></p>
-                </div>
-            `;
-        }
-        else if (status === 'approved') {
-            subject = `Congratulations! Selected for Editorial Board (${role})`;
-            htmlBody = `
-                <div style="${emailStyles}">
-                    <h3>Dear Dr./Mr./Ms. ${fullName},</h3>
-                    <p>Congratulations! We are delighted to inform you that you have been selected to join the <strong>MindRadiX Editorial Board</strong> as <strong>${role}</strong>.</p>
-                    <p>We were impressed by your profile and expertise. An official appointment letter and certificate will be issued shortly.</p>
-                    <p>Welcome to the team!</p>
-                    <br/>
-                    <p>Best Regards,<br/><strong>MindRadiX Editorial Team</strong></p>
-                </div>
-            `;
-        }
-        else if (status === 'rejected') {
-            subject = `Update on your Application: Editorial Board (${role})`;
-            htmlBody = `
-                <div style="${emailStyles}">
-                    <h3>Dear ${fullName},</h3>
-                    <p>Thank you for giving us the opportunity to review your application for the <strong>${role}</strong> position at MindRadiX.</p>
-                    <p>We appreciate the time you took to apply and your interest in our journal. After careful consideration, we have decided to move forward with other candidates who more closely align with our current specific needs.</p>
-                    ${reason ? `<div style="background-color: #fff1f2; padding: 15px; border-radius: 8px; border: 1px solid #ffe4e6; color: #9f1239; margin: 10px 0;"><strong>Feedback:</strong> ${reason}</div>` : ''}
-                    <p>This does not reflect on your detailed qualifications, and we will keep your profile in our talent pool for future openings.</p>
-                    <p>We wish you the very best in your professional endeavors.</p>
-                    <br/>
-                    <p>Sincerely,<br/><strong>MindRadiX Editorial Team</strong></p>
-                </div>
-            `;
-        }
-        if (subject && htmlBody) {
-            await (0, mailer_1.sendEmail)(email, subject, htmlBody);
-        }
-        res.status(200).json({ status: "success", message: `Application ${status}` });
-    }
-    catch (err) {
-        logger_1.logger.error("updateApplicationStatus error", err);
-        res.status(500).json({ status: "error", message: "Failed to update status" });
-    }
-};
-exports.updateApplicationStatus = updateApplicationStatus;
-/* --------------------------------------------------------------------------
-   ADMIN: Download Resume (Proxy)
-   GET /api/editorial/download-resume
-   query: path (storage path)
-   -------------------------------------------------------------------------- */
-const downloadResume = async (req, res) => {
-    try {
-        // Authenticate (Admin Only) via Query Token? 
-        // Browsers opening links don't send Authorization headers easily unless we use cookies or simple token param.
-        // Let's expect '?token=...'
-        let token = req.query.token;
-        if (!token && req.headers.authorization) {
-            token = req.headers.authorization.split(' ')[1];
-        }
-        // We can't reuse middleware easily here if it relies strictly on Headers. 
-        // Let's do a manual verify for safety OR just assume if they have the valid path + token.
-        // For simplicity/speed in this fix, I'll allow it if they have a valid token (any valid user? NO, Admin).
-        // Check `functions/src/middleware/auth.ts` verifyToken logic logic duplication?
-        // I will trust 'requireAdmin' logic if I can mock the request.. 
-        // Actually, let's just use `requireAdmin` but note that for a direct link `<a href...>` we need to append token.
-        // Let's Assume the frontend will fetch a blob using axios/fetch with headers, then create object URL. 
-        // That is cleaner than query params.
-        if (!await requireAdmin(req, res))
-            return;
-        const storagePath = req.query.path;
-        if (!storagePath) {
-            res.status(400).json({ status: "error", message: "Path is required" });
-            return;
-        }
-        const bucket = (0, storage_1.getStorageBucket)();
-        const file = bucket.file(storagePath);
-        const [exists] = await file.exists();
-        if (!exists) {
-            res.status(404).json({ status: "error", message: "File not found" });
-            return;
-        }
-        // Determine Mime Type
-        const [metadata] = await file.getMetadata();
-        res.setHeader('Content-Type', metadata.contentType || 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="${path_1.default.basename(storagePath)}"`);
-        file.createReadStream().pipe(res);
-    }
-    catch (err) {
-        logger_1.logger.error("downloadResume error", err);
-        res.status(500).json({ status: "error", message: "Download failed" });
-    }
-};
-exports.downloadResume = downloadResume;
 /* --------------------------------------------------------------------------
    ADMIN: Delete Board Member
    DELETE /api/editorial/board/:id
    -------------------------------------------------------------------------- */
 const deleteBoardMember = async (req, res) => {
     try {
-        if (!await requireAdmin(req, res))
+        if (!requireAdmin(req, res))
             return;
         const { id } = req.params;
         await (0, firestore_helpers_1.deleteDoc)('editorial_board', id);

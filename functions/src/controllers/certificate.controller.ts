@@ -26,98 +26,97 @@ export const generateCertificatePDF = async (certData: any): Promise<Buffer> => 
             const doc = new PDFDocument({
                 layout: 'landscape',
                 size: 'A4',
-                margin: 50
+                margin: 0
             });
 
             const buffers: Buffer[] = [];
             doc.on('data', buffers.push.bind(buffers));
             doc.on('end', () => resolve(Buffer.concat(buffers)));
 
-            // QR Code
+            // Colors
+            const goldColor = '#D4AF37';
+            const navyColor = '#0A2463';
+            const darkGrey = '#333333';
+
+            // --- BORDER ---
+            doc.rect(20, 20, doc.page.width - 40, doc.page.height - 40)
+                .lineWidth(5)
+                .stroke(navyColor);
+
+            doc.rect(25, 25, doc.page.width - 50, doc.page.height - 50)
+                .lineWidth(2)
+                .stroke(goldColor);
+
+            // --- HEADER ---
+            doc.moveDown(2);
+            doc.font('Helvetica-Bold').fontSize(24).fillColor(navyColor)
+                .text('MINDRADIX', { align: 'center' });
+
+            doc.font('Helvetica').fontSize(10).fillColor(darkGrey)
+                .text('Excellence in Digital Publishing', { align: 'center' });
+
+            doc.moveDown(2);
+
+            // Main Title
+            doc.font('Helvetica-Bold').fontSize(42).fillColor(goldColor)
+                .text('CERTIFICATE OF PUBLICATION', { align: 'center' });
+
+            doc.moveDown(1);
+            doc.font('Helvetica').fontSize(14).fillColor(darkGrey)
+                .text('This certificate is proudly awarded to', { align: 'center' });
+
+            doc.moveDown(1);
+
+            // --- AUTHOR NAME ---
+            doc.font('Helvetica-Bold').fontSize(32).fillColor(navyColor)
+                .text(certData.authorName, { align: 'center' });
+
+            doc.moveDown(0.5);
+            doc.rect(200, doc.y, doc.page.width - 400, 2).fill(goldColor);
+            doc.moveDown(1);
+
+            // --- DETAILS ---
+            doc.font('Helvetica').fontSize(14).fillColor(darkGrey)
+                .text('In recognition of the publication of the article entitled', { align: 'center' });
+
+            doc.moveDown(1);
+
+            // Article Title (Handle wrapping if long)
+            doc.font('Helvetica-BoldOblique').fontSize(20).fillColor(navyColor)
+                .text(`"${certData.articleTitle}"`, { align: 'center', width: 600 } as any);
+
+            doc.moveDown(1);
+            doc.font('Helvetica').fontSize(14).fillColor(darkGrey)
+                .text(`Published in MindRadix ${certData.publicationType} on ${certData.publishedDate}`, { align: 'center' });
+
+            doc.moveDown(4);
+
+            // --- SIGNATURES & FOOTER ---
+            const bottomY = 480;
+
+            // QR Code Generation
             const verifyUrl = `${process.env.FRONTEND_URL || 'https://mindradix.com'}/verify-certificate?id=${certData.id}`;
             const qrDataUrl = await QRCode.toDataURL(verifyUrl);
             const qrImage = Buffer.from(qrDataUrl.split(',')[1], 'base64');
 
-            // Colors
-            const primaryColor = '#000000';
-            const secondaryColor = '#444444';
+            // Left Signature
+            doc.lineWidth(1).moveTo(100, bottomY).lineTo(300, bottomY).stroke(navyColor);
+            doc.font('Helvetica-Bold').fontSize(12).fillColor(navyColor)
+                .text('Dr. S. K. Singh', 100, bottomY + 10, { width: 200, align: 'center' });
+            doc.font('Helvetica').fontSize(10).fillColor(darkGrey)
+                .text('Editor-in-Chief', 100, bottomY + 25, { width: 200, align: 'center' });
 
-            // Design based on image provided
+            // Right Signature
+            doc.lineWidth(1).moveTo(540, bottomY).lineTo(740, bottomY).stroke(navyColor);
+            doc.font('Helvetica-Bold').fontSize(12).fillColor(navyColor)
+                .text('MindRadix Admin', 540, bottomY + 10, { width: 200, align: 'center' });
+            doc.font('Helvetica').fontSize(10).fillColor(darkGrey)
+                .text('Authorized Signatory', 540, bottomY + 25, { width: 200, align: 'center' });
 
-            // Header: CERTIFICATE
-            doc.font('Helvetica-Bold').fontSize(36).fillColor(primaryColor)
-                .text('CERTIFICATE', { align: 'center' });
-
-            doc.moveDown(0.5);
-
-            // Subheader: This is to certify that
-            doc.font('Helvetica').fontSize(14).fillColor(secondaryColor)
-                .text('This is to certify that', { align: 'center' });
-
-            doc.moveDown(1);
-
-            // Author Name
-            doc.font('Helvetica-Bold').fontSize(28).fillColor(primaryColor)
-                .text(certData.authorName, { align: 'center' });
-
-            doc.moveDown(0.5);
-
-            // Successfully published text
-            doc.font('Helvetica').fontSize(14).fillColor(secondaryColor)
-                .text('has successfully published his/her original work entitled', { align: 'center' });
-
-            doc.moveDown(1);
-
-            // Article Title
-            doc.font('Helvetica-BoldOblique').fontSize(22).fillColor(primaryColor)
-                .text(`"${certData.articleTitle}"`, { align: 'center' });
-
-            doc.moveDown(0.5);
-
-            // "on MindRadiX"
-            doc.font('Helvetica').fontSize(14).fillColor(secondaryColor)
-                .text('on ', { continued: true, align: 'center' })
-                .font('Helvetica-Bold').text('MindRadiX.');
-
-            doc.moveDown(1.5);
-
-            // Disclaimer text
-            doc.font('Helvetica').fontSize(10).fillColor(secondaryColor)
-                .text('The above-mentioned work has been published in accordance with the editorial and publication guidelines followed by MindRadiX.', { align: 'center' });
-
-            doc.moveDown(2);
-
-            // Publication Details Row
-            const yPos = doc.y;
-
-            doc.font('Helvetica-Bold').fontSize(12).fillColor(primaryColor)
-                .text(`Publication Type: ${certData.publicationType}`, 50, yPos, { width: 350, align: 'right' });
-
-            doc.text(`Publication Date: ${certData.publishedDate}`, 450, yPos, { width: 350, align: 'left' });
-
-            doc.moveDown(4);
-
-            // Signatures & QR Row
-            const bottomY = 450;
-
-            // Editor signature (Left)
-            doc.font('Helvetica').fontSize(10).fillColor(secondaryColor)
-                .text('Signature of Editor-in-Chief', 100, bottomY);
-            doc.font('Helvetica-Bold').text('Name: Dr. S. K. Singh', 100, bottomY + 15); // Placeholder name or configured
-
-            // Authorized Signatory (Right)
-            doc.font('Helvetica').fontSize(10).fillColor(secondaryColor)
-                .text('Signature of Authorized Signatory', 550, bottomY);
-            doc.font('Helvetica-Bold').text('Name: MindRadiX Admin', 550, bottomY + 15);
-
-            // QR Code (Center)
-            doc.image(qrImage, 350, bottomY - 30, { width: 100, height: 100 });
-            doc.font('Helvetica').fontSize(9).text('QR Code (Scan to Verify)', 320, bottomY + 75, { width: 160, align: 'center' });
-            doc.font('Helvetica-Bold').fontSize(9).text(`Certificate ID: ${certData.id}`, 320, bottomY + 90, { width: 160, align: 'center' });
-
-            // Footer
-            doc.font('Helvetica-Bold').fontSize(12).text('MindRadiX', 0, 530, { align: 'center' });
-            doc.font('Helvetica').fontSize(10).text(`Date of Issue: ${certData.issueDate}`, 0, 545, { align: 'center' });
+            // Badge / QR Code Center
+            doc.image(qrImage, (doc.page.width / 2) - 40, bottomY - 50, { width: 80, height: 80 });
+            doc.font('Helvetica').fontSize(8).fillColor(darkGrey)
+                .text(`Certificate ID: ${certData.id}`, (doc.page.width / 2) - 100, bottomY + 40, { width: 200, align: 'center' });
 
             doc.end();
 
@@ -233,22 +232,23 @@ export const createAndSendCertificate = async (articleId: string) => {
  * Controller: Get Certificate Verification
  * GET /api/certificates/:certId/verify
  */
-export const verifyCertificate = async (req: any, res: Response) => {
+export const verifyCertificate = async (req: Request, res: Response) => {
     try {
         const { certId } = req.params;
         const cert: any = await getDoc('certificates' as any, certId);
 
         if (!cert) {
-            return res.status(404).json({ status: 'error', message: 'Certificate not found' });
+            res.status(404).json({ status: 'error', message: 'Certificate not found' });
+            return;
         }
 
-        return res.status(200).json({
+        res.status(200).json({
             status: 'success',
             message: 'Certificate is valid',
             data: cert
         });
     } catch (err: any) {
-        return res.status(500).json({ status: 'error', message: 'Verification failed', error: err.message });
+        res.status(500).json({ status: 'error', message: 'Verification failed', error: err.message });
     }
 };
 
@@ -256,15 +256,18 @@ export const verifyCertificate = async (req: any, res: Response) => {
  * Controller: Generate Manual (Admin)
  * POST /api/admin/certificates/generate
  */
-export const generateCertificateManually = async (req: any, res: Response) => {
+export const generateCertificateManually = async (req: Request, res: Response) => {
     try {
         const { articleId } = req.body;
-        if (!articleId) return res.status(400).json({ message: 'articleId required' });
+        if (!articleId) {
+            res.status(400).json({ message: 'articleId required' });
+            return;
+        }
 
         const cert = await createAndSendCertificate(articleId);
-        return res.status(200).json({ status: 'success', data: cert });
+        res.status(200).json({ status: 'success', data: cert });
     } catch (e: any) {
-        return res.status(500).json({ status: 'error', message: e.message });
+        res.status(500).json({ status: 'error', message: e.message });
     }
 }
 
@@ -272,10 +275,11 @@ export const generateCertificateManually = async (req: any, res: Response) => {
  * Controller: Get User Certificates
  * GET /api/certificates/my-certificates
  */
-export const getMyCertificates = async (req: any, res: Response) => {
+export const getMyCertificates = async (req: Request, res: Response) => {
     try {
         if (!req.user || !req.user.userId) {
-            return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+            res.status(401).json({ status: 'error', message: 'Unauthorized' });
+            return;
         }
         const userId = req.user.userId;
 
@@ -291,9 +295,9 @@ export const getMyCertificates = async (req: any, res: Response) => {
             public_url: c.public_url
         }));
 
-        return res.status(200).json({ status: 'success', data: { certificates: data } });
+        res.status(200).json({ status: 'success', data: { certificates: data } });
 
     } catch (e: any) {
-        return res.status(500).json({ status: 'error', message: e.message });
+        res.status(500).json({ status: 'error', message: e.message });
     }
 };

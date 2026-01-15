@@ -18,10 +18,11 @@ export const getFeaturedContent = async (req: Request, res: Response): Promise<v
         if (u) authorName = u.name;
       }
 
-      // Category is often stored as ID. If we have a categories collection, we could fetch it.
-      // Assuming category_id stores the name directly or we skip specific category name lookup for now 
-      // as categories collection usage is minimal in migration plan.
-      const categoryName = c.category_id || 'General';
+      let categoryName = c.category_id || 'General';
+      if (c.category_id) {
+        const cat: any = await getDoc('categories', c.category_id);
+        if (cat) categoryName = cat.name;
+      }
 
       return { ...c, author_name: authorName, category_name: categoryName };
     }));
@@ -56,7 +57,12 @@ export const getTrendingContent = async (req: Request, res: Response): Promise<v
         const u: any = await getDoc('users', c.author_id);
         if (u) authorName = u.name;
       }
-      return { ...c, author_name: authorName, category_name: c.category_id || 'General' };
+      let categoryName = c.category_id || 'General';
+      if (c.category_id) {
+        const cat: any = await getDoc('categories', c.category_id);
+        if (cat) categoryName = cat.name;
+      }
+      return { ...c, author_name: authorName, category_name: categoryName };
     }));
 
     res.status(200).json({
@@ -86,7 +92,12 @@ export const getLatestContent = async (req: Request, res: Response): Promise<voi
         const u: any = await getDoc('users', c.author_id);
         if (u) authorName = u.name;
       }
-      return { ...c, author_name: authorName, category_name: c.category_id || 'General' };
+      let categoryName = c.category_id || 'General';
+      if (c.category_id) {
+        const cat: any = await getDoc('categories', c.category_id);
+        if (cat) categoryName = cat.name;
+      }
+      return { ...c, author_name: authorName, category_name: categoryName };
     }));
 
     res.status(200).json({

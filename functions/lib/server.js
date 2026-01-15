@@ -13,6 +13,7 @@ const logger_1 = require("./utils/logger");
 const database_1 = require("./config/database");
 const errorHandler_1 = require("./middleware/errorHandler");
 const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
+const featured_routes_1 = __importDefault(require("./routes/featured.routes"));
 const content_routes_1 = __importDefault(require("./routes/content.routes"));
 const subscription_routes_1 = __importDefault(require("./routes/subscription.routes"));
 const author_routes_1 = __importDefault(require("./routes/author.routes"));
@@ -52,15 +53,15 @@ app.use((0, compression_1.default)());
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true }));
 app.use('/uploads', express_1.default.static('uploads')); // Serve local uploads
-const multipartFix_1 = require("./middleware/multipartFix");
-app.use(multipartFix_1.fixMultipartRequest);
 /* ---------------------------------- Swagger ------------------------------------ */
 (0, swagger_1.setupSwagger)(app);
 /* ----------------------------------- Routes ------------------------------------ */
 // Routes
 app.use('/api/auth', auth_routes_1.default);
+app.use('/api/featured', featured_routes_1.default);
 app.use('/api/articles', article_routes_1.default);
 app.use('/api/article', article_routes_1.default); // Fix: Enable access via /api/article/... (singular)
+app.use('/api', article_routes_1.default); // Fix: Enable access via /api/author/articles defined in articleRoutes
 app.use('/api/authors', author_routes_1.default);
 app.use('/api/editors', editor_routes_1.default);
 app.use('/api/subscription', subscription_routes_1.default);
@@ -99,10 +100,28 @@ app.use(errorHandler_1.errorHandler);
 const startServer = async () => {
     try {
         await (0, database_1.connectDatabase)();
-        app.listen(PORT, () => {
+        const server = app.listen(PORT, () => {
             logger_1.logger.info(`Server running on port ${PORT}`);
             console.log(`🚀 ReadMint Backend running at http://localhost:${PORT}`);
             console.log(`📚 Swagger Docs: http://localhost:${PORT}/api/docs`);
+        });
+        server.on('error', (err) => {
+            if (err.code === 'EADDRINUSE') {
+                console.error(`❌ Port ${PORT} is already in use. Please close other instances.`);
+                logger_1.logger.error(`Port ${PORT} is in use`, err);
+                process.exit(1);
+            }
+            else {
+                logger_1.logger.error('Server error:', err);
+            }
+        });
+        process.on('unhandledRejection', (err) => {
+            console.error('Unhandled Rejection:', err);
+            logger_1.logger.error('Unhandled Rejection', err);
+        });
+        process.on('uncaughtException', (err) => {
+            console.error('Uncaught Exception:', err);
+            logger_1.logger.error('Uncaught Exception', err);
         });
     }
     catch (error) {

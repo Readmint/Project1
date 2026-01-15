@@ -336,14 +336,19 @@ const getSubmittedForEditor = async (req, res) => {
             return;
         }
         const editorId = editorDocs[0].id;
-        // Fetch assignments where status is completed
+        // Fetch ALL assignments for this editor to avoid index issues with status
         const assignments = await (0, firestore_helpers_1.executeQuery)('editor_assignments', [
-            { field: 'editor_id', op: '==', value: editorId },
-            { field: 'status', op: '==', value: 'completed' }
+            { field: 'editor_id', op: '==', value: editorId }
         ]);
-        // Manual Join
+        // Manual Join & Filter
         const results = await Promise.all(assignments.map(async (ea) => {
             var _a, _b, _c;
+            // Filter for completed or those that might have been finalized but status missed (fallback logic could go here)
+            // For now, stricly 'completed' or 'submitted'?
+            // Let's allow 'completed' AND also check if the assignment led to a finalize action if we tracked it?
+            // Simple memory filter:
+            if (ea.status !== 'completed')
+                return null;
             const article = await (0, firestore_helpers_1.getDoc)('content', ea.article_id);
             if (!article)
                 return null;
@@ -360,11 +365,6 @@ const getSubmittedForEditor = async (req, res) => {
             }
             let categoryName = null;
             if (article.category_id) {
-                // we store just category_id usually, but maybe we want name. 
-                // If category_id IS the name (which it often is in previous code 'General' etc), use it.
-                // If it's an ID, we might need to fetch categories collection? 
-                // In SQL migration it was a join. Assuming category_id might be UUID or Name.
-                // Let's assume it's just a string or we skip fetching category name if it's elaborate.
                 categoryName = article.category_id;
             }
             return {
@@ -381,7 +381,11 @@ const getSubmittedForEditor = async (req, res) => {
                 author_name: authorName
             };
         }));
-        const validResults = results.filter((r) => r !== null).sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime());
+        const validResults = results.filter((r) => r !== null).sort((a, b) => {
+            const tA = new Date(a.completed_at || 0).getTime();
+            const tB = new Date(b.completed_at || 0).getTime();
+            return tB - tA;
+        });
         res.status(200).json({ status: 'success', data: validResults });
     }
     catch (err) {
@@ -740,14 +744,30 @@ const finalizeEditing = async (req, res) => {
                 { field: 'article_id', op: '==', value: id },
                 { field: 'editor_id', op: '==', value: editorId }
             ]);
-            // Update all matching assignments (should be 1)
-            for (const assign of assignments) {
-                if (assign.status !== 'cancelled') {
-                    await (0, firestore_helpers_1.updateDoc)('editor_assignments', assign.id, {
-                        status: 'completed',
-                        updated_at: new Date()
-                    });
+            if (assignments.length > 0) {
+                // Update all matching assignments (should be 1)
+                for (const assign of assignments) {
+                    if (assign.status !== 'cancelled') {
+                        await (0, firestore_helpers_1.updateDoc)('editor_assignments', assign.id, {
+                            status: 'completed',
+                            updated_at: new Date()
+                        });
+                    }
                 }
+            }
+            else {
+                // [NEW] If no assignment exists (e.g. self-picked or open pool), create one as completed
+                // This ensures it appears in the Submitted list
+                await (0, firestore_helpers_1.createDoc)('editor_assignments', {
+                    editor_id: editorId,
+                    article_id: id,
+                    assigned_by: null, // Self
+                    assigned_date: new Date(),
+                    due_date: null,
+                    priority: 'Medium',
+                    status: 'completed',
+                    updated_at: new Date()
+                });
             }
         }
         res.status(200).json({ status: 'success', message: 'Editing finalized', data: { id, status: targetStatus } });

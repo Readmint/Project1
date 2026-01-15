@@ -10,41 +10,8 @@ import { useState, useEffect } from "react";
 import { getJSON } from "@/lib/api";
 import { toast } from "react-hot-toast";
 
-// Featured Magazine Mock Data (you can replace with API)
-const featuredMagazines = [
-  {
-    id: 1,
-    title: "Tech Today - December",
-    category: "Trending Now",
-    cover: "/covers/trending-ai.jpg",
-    articles: 12,
-    price: "$5.99",
-  },
-  {
-    id: 2,
-    title: "Editor’s Vision 2025",
-    category: "Editor's Picks",
-    cover: "/covers/editors-startups.jpg",
-    articles: 10,
-    price: "$4.99",
-  },
-  {
-    id: 3,
-    title: "Design Futures 2026",
-    category: "New Releases",
-    cover: "/covers/new-design.jpg",
-    articles: 6,
-    price: "$6.00",
-  },
-  {
-    id: 4,
-    title: "Eco Innovations",
-    category: "Trending Now",
-    cover: "/covers/neutral-tech.jpg",
-    articles: 14,
-    price: "$3.99",
-  },
-];
+// Featured Magazine Mock Data removed
+const featuredMagazines: any[] = [];
 
 export default function FeaturedMagazines() {
   const router = useRouter();
@@ -54,9 +21,17 @@ export default function FeaturedMagazines() {
   useEffect(() => {
     async function fetchFeatured() {
       try {
-        const res = await getJSON('/featured/trending');
-        if (res && res.status === 'success') {
-          setMagazines(res.data.trending || []);
+        const res = await getJSON('/featured/latest');
+        if (res && res.data && res.data.latest && res.data.latest.length > 0) {
+          setMagazines(res.data.latest);
+        } else {
+          // Fallback or try trending
+          const resTrending = await getJSON('/featured/trending');
+          if (resTrending && resTrending.data && resTrending.data.trending && resTrending.data.trending.length > 0) {
+            setMagazines(resTrending.data.trending);
+          } else {
+            setMagazines([]);
+          }
         }
       } catch (err) {
         console.error("Failed to fetch featured magazines", err);
@@ -74,18 +49,17 @@ export default function FeaturedMagazines() {
       router.push('/login');
       return;
     }
-    router.push(`/articles/${magId}/preview`);
+    router.push(`/reader/article/${magId}`);
   };
-
 
   return (
     <div className="max-w-6xl mx-auto px-4 space-y-10">
 
       {/* Section Header */}
       <div className="text-center">
-        <h2 className="text-3xl font-bold mb-3">Featured & Trending</h2>
+        <h2 className="text-3xl font-bold mb-3">Latest & Trending</h2>
         <p className="text-slate-600 dark:text-slate-300 max-w-xl mx-auto">
-          Explore trending issues, editor-recommended reads, and our latest premium magazine releases.
+          Explore our latest releases and trending stories.
         </p>
       </div>
 
@@ -96,7 +70,7 @@ export default function FeaturedMagazines() {
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-64 bg-slate-100 dark:bg-slate-800 rounded-2xl animate-pulse" />
           ))
-        ) : (
+        ) : magazines.length > 0 ? (
           magazines.slice(0, 4).map((mag, i) => (
             <motion.div
               key={mag.id}
@@ -104,34 +78,50 @@ export default function FeaturedMagazines() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
             >
-              <Card className="overflow-hidden bg-white dark:bg-slate-800 shadow-lg rounded-2xl border border-slate-200 dark:border-slate-700 h-full flex flex-col">
+              <Card className="overflow-hidden bg-white dark:bg-slate-800 shadow-lg rounded-2xl border border-slate-200 dark:border-slate-700 h-full flex flex-col hover:shadow-xl transition-shadow">
 
                 {/* Cover Image */}
-                <div className="relative w-full h-40 bg-slate-200 dark:bg-slate-700">
+                <div className="relative w-full h-48 bg-slate-200 dark:bg-slate-700">
                   <Image
                     src={mag.cover_image || "/covers/trending-ai.jpg"}
                     alt={mag.title}
                     fill
                     className="object-cover"
                   />
+                  {!mag.is_free && (
+                    <span className="absolute top-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full backdrop-blur-sm">
+                      Premium
+                    </span>
+                  )}
                 </div>
 
                 {/* Card Details */}
                 <CardContent className="p-4 text-center space-y-2 flex-1 flex flex-col">
-                  <span className="text-[10px] bg-indigo-100 dark:bg-indigo-700/40 text-indigo-600 dark:text-indigo-300 px-2 py-0.5 rounded-full w-fit font-medium mx-auto">
-                    {mag.category_name}
-                  </span>
+                  {mag.category_name && (
+                    <span className="text-[10px] bg-indigo-100 dark:bg-indigo-700/40 text-indigo-600 dark:text-indigo-300 px-2 py-0.5 rounded-full w-fit font-medium mx-auto">
+                      {mag.category_name}
+                    </span>
+                  )}
 
                   <h4 className="font-semibold text-md line-clamp-2 min-h-[3rem]">{mag.title}</h4>
                   <p className="text-[12px] text-slate-500 line-clamp-2">
-                    {mag.summary || (mag.content ? mag.content.substring(0, 60) + "..." : "No summary")}
+                    {mag.summary || (mag.content ? mag.content.replace(/<[^>]*>?/gm, '').substring(0, 60) + "..." : "No summary")}
                   </p>
+
                   <div className="flex-1"></div>
+
+                  <div className="flex items-center justify-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    {mag.is_free ? (
+                      <span className="text-green-600">Free</span>
+                    ) : (
+                      <span>{mag.price ? `₹${mag.price}` : "Paid"}</span>
+                    )}
+                  </div>
 
                   {/* Read Button */}
                   <Button
                     onClick={() => handleReadNow(mag.id)}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-xl flex justify-center gap-1 mt-3"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-xl flex justify-center gap-1"
                   >
                     <Eye size={12} /> Read Now
                   </Button>
@@ -140,6 +130,10 @@ export default function FeaturedMagazines() {
               </Card>
             </motion.div>
           ))
+        ) : (
+          <div className="col-span-full text-center py-10 text-slate-500">
+            No articles available at the moment.
+          </div>
         )}
 
       </div>

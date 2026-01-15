@@ -11,13 +11,13 @@ exports.logger = winston_1.default.createLogger({
     format: logFormat,
     defaultMeta: { service: 'readmint-backend' },
     transports: [
-        // In Cloud Functions, use Console which maps to Cloud Logging
-        new winston_1.default.transports.Console({
-            format: winston_1.default.format.combine(winston_1.default.format.colorize(), winston_1.default.format.simple())
-        })
+        new winston_1.default.transports.File({ filename: 'logs/error.log', level: 'error' }),
+        new winston_1.default.transports.File({ filename: 'logs/combined.log' })
     ]
 });
-// Optionally add file logging only in dev if needed,
-// but local dev usually likes console too.
-// Keeping it simple: Console for all environments is safest for serverless.
+if (process.env.NODE_ENV !== 'production') {
+    exports.logger.add(new winston_1.default.transports.Console({
+        format: winston_1.default.format.combine(winston_1.default.format.colorize(), winston_1.default.format.simple())
+    }));
+}
 //# sourceMappingURL=logger.js.map

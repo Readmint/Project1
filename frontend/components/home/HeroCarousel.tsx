@@ -10,26 +10,20 @@ const slides = [
   {
     title: "Top Trending Article",
     subtitle: "What the world is reading right now",
-    image: "/images/trending.jpg",
+    image: "/images/Blue Orange Objects  Education .svg",
     href: "/articles/1",
   },
   {
     title: "New Releases",
     subtitle: "Freshly published stories from top contributors",
-    image: "/images/new-release.jpg",
+    image: "/images/Blue and White Minimalist .svg",
     href: "/articles/2",
   },
   {
     title: "Editor’s Pick",
     subtitle: "Hand-selected stories curated by our editorial team",
-    image: "/images/editors-pick.jpg",
+    image: "/images/Orange And Cream Modern .svg",
     href: "/articles/3",
-  },
-  {
-    title: "Premium Content Highlights",
-    subtitle: "Exclusive long-form features for subscribers",
-    image: "/images/premium.jpg",
-    href: "/premium",
   },
 ];
 
@@ -53,7 +47,9 @@ export default function HeroCarousel() {
         src={slide.image}
         alt={slide.title}
         fill
-        className="object-cover opacity-80"
+        quality={100}
+        priority
+        className="object-contain opacity-100 p-2"
       />
 
       {/* Overlay */}
@@ -81,11 +77,10 @@ export default function HeroCarousel() {
           <div
             key={i}
             onClick={() => setIndex(i)}
-            className={`w-3 h-3 rounded-full cursor-pointer ${
-              i === index
-                ? "bg-white"
-                : "bg-white/40 hover:bg-white/70 transition"
-            }`}
+            className={`w-3 h-3 rounded-full cursor-pointer ${i === index
+              ? "bg-white"
+              : "bg-white/40 hover:bg-white/70 transition"
+              }`}
           ></div>
         ))}
       </div>

@@ -214,7 +214,7 @@ export default function EditorialApplicationPage() {
                                 <Input name="email" type="email" value={formData.email} onChange={handleInputChange} required placeholder="email@university.edu" />
                             </InputWrapper>
                             <InputWrapper label="Mobile / WhatsApp *">
-                                <Input name="mobile" value={formData.mobile} onChange={handleInputChange} required placeholder="+91 98765 43210" />
+                                <Input name="mobile" value={formData.mobile} onChange={handleInputChange} required placeholder="+91 870 888 6307" />
                             </InputWrapper>
                             <InputWrapper label="Country *">
                                 <Input name="country" value={formData.country} onChange={handleInputChange} required />

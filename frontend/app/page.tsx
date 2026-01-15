@@ -129,7 +129,7 @@ export default function HomePage() {
       return;
     }
 
-    try { localStorage.setItem('guest_contact', JSON.stringify(contactData)); } catch {}
+    try { localStorage.setItem('guest_contact', JSON.stringify(contactData)); } catch { }
 
     const payload: PayPayload = {
       planId: contactPlan.id,
@@ -186,10 +186,10 @@ export default function HomePage() {
 
               <Button
                 className="w-full bg-indigo-600 text-white hover:bg-indigo-700"
-                onClick={() => handleEnquire(ad)}
+                onClick={() => router.push('/advertisement')}
                 disabled={loadingPlan !== null}
               >
-                {loadingPlan === ad.id ? "Processing..." : "Book Advertisement"}
+                Learn More & Advertise
               </Button>
             </Card>
           ))}

@@ -58,7 +58,7 @@ function useHistory<T>(initialState: T) {
     return { state: history[currentIndex], setState, undo, redo, canUndo: currentIndex > 0, canRedo: currentIndex < history.length - 1 };
 }
 
-export function MagEditor({ articleId, readOnly = false, className = "" }: { articleId: string, readOnly?: boolean, className?: string }) {
+export function MagEditor({ articleId, readOnly = false, className = "", initialData = null, initialAttachments = [] }: { articleId: string, readOnly?: boolean, className?: string, initialData?: any, initialAttachments?: any[] }) {
     const router = useRouter();
     const [scale, setScale] = useState(readOnly ? 0.8 : 0.6);
     const [pageCount, setPageCount] = useState(1); // Track number of pages
@@ -96,6 +96,36 @@ export function MagEditor({ articleId, readOnly = false, className = "" }: { art
 
     useEffect(() => {
         const fetchArticle = async () => {
+            // Use initialData if provided (Reader Mode)
+            if (initialData) {
+                console.log("MagEditor using initialData:", initialData);
+                setArticleData({
+                    title: initialData.title,
+                    author: initialData.author_name || (Array.isArray(initialData.co_authors) ? initialData.co_authors.join(", ") : "Unknown Author"),
+                    issn: "ISSN 2025-001",
+                    volume: "Vol. 1, Issue 1",
+                    abstract: initialData.synopsis || "No abstract provided.", // reader uses synopsis
+                    body: initialData.content || ""
+                });
+                setAttachments(initialAttachments || []);
+
+                if (initialData.design_data) {
+                    try {
+                        const design = typeof initialData.design_data === 'string' ? JSON.parse(initialData.design_data) : initialData.design_data;
+                        if (design) {
+                            if (design.elements) setElements(design.elements);
+                            if (design.coverData) setCoverData(design.coverData);
+                            if (design.pages || design.pageCount) setPageCount(design.pages || design.pageCount);
+                            // Also set scale?
+                            if (design.scale) setScale(readOnly ? design.scale : 0.6);
+                        }
+                    } catch (e) {
+                        console.error("Failed to parse initial design data", e);
+                    }
+                }
+                return;
+            }
+
             try {
                 const res = await getJSON(`/author/articles/${articleId}`);
 
@@ -138,7 +168,7 @@ export function MagEditor({ articleId, readOnly = false, className = "" }: { art
         if (articleId) {
             fetchArticle();
         }
-    }, [articleId]);
+    }, [articleId, initialData, initialAttachments]);
 
     const handleUpdateElement = (id: string, updates: Partial<EditorElement>) => {
         // Prevent updates if locked (unless we implement unlock feature later, but 'locked' usually means read-only)
@@ -421,7 +451,7 @@ export function MagEditor({ articleId, readOnly = false, className = "" }: { art
                         </Button>
                     )}
                     <div>
-                        <h1 className="font-bold text-sm">{readOnly ? "Review Design" : "Untitled Design"}</h1>
+                        <h1 className="font-bold text-sm">{articleData.title || (readOnly ? "Article Design" : "Untitled Design")}</h1>
                         <p className="text-xs text-slate-500">A4 • {pageCount} Pages {readOnly ? "(Read Only)" : ""}</p>
                     </div>
                 </div>

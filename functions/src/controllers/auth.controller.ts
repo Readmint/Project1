@@ -109,13 +109,13 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
     // Send OTP email
     const transporter = createTransporter();
     await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+      from: `"MindRadix Team" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: 'Password Reset OTP - E-Magazine',
+      subject: 'Password Reset OTP - MindRadix',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #4F46E5;">Password Reset Request</h2>
-          <p>You requested to reset your password for your E-Magazine account.</p>
+          <p>You requested to reset your password for your MindRadix account.</p>
           <p>Your OTP for password reset is:</p>
           <div style="background: #f8fafc; padding: 20px; text-align: center; margin: 20px 0;">
             <h1 style="color: #4F46E5; margin: 0; font-size: 32px; letter-spacing: 5px;">${otp}</h1>
@@ -123,7 +123,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
           <p>This OTP will expire in 10 minutes.</p>
           <p>If you didn't request this, please ignore this email.</p>
           <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-          <p style="color: #6b7280; font-size: 14px;">E-Magazine Team</p>
+          <p style="color: #6b7280; font-size: 14px;">MindRadix Team</p>
         </div>
       `,
     });
@@ -236,16 +236,16 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
     // Send confirmation email
     const transporter = createTransporter();
     await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+      from: `"MindRadix Team" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: 'Password Reset Successful - E-Magazine',
+      subject: 'Password Reset Successful - MindRadix',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #4F46E5;">Password Reset Successful</h2>
-          <p>Your password has been successfully reset for your E-Magazine account.</p>
+          <p>Your password has been successfully reset for your MindRadix account.</p>
           <p>If you did not make this change, please contact our support team immediately.</p>
           <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-          <p style="color: #6b7280; font-size: 14px;">E-Magazine Team</p>
+          <p style="color: #6b7280; font-size: 14px;">MindRadix Team</p>
         </div>
       `,
     });
@@ -280,12 +280,12 @@ export const sendVerificationEmail = async (req: Request, res: Response): Promis
     const transporter = createTransporter();
 
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"MindRadix Team" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: 'Verify Your Email - E-Magazine',
+      subject: 'Verify Your Email - MindRadix',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #4F46E5;">Welcome to E-Magazine!</h2>
+          <h2 style="color: #4F46E5;">Welcome to MindRadix!</h2>
           <p>Please use the following OTP to verify your email address:</p>
           <div style="background: #f8fafc; padding: 20px; text-align: center; margin: 20px 0;">
             <h1 style="color: #4F46E5; margin: 0; font-size: 32px; letter-spacing: 5px;">${otp}</h1>
@@ -293,7 +293,7 @@ export const sendVerificationEmail = async (req: Request, res: Response): Promis
           <p>This OTP will expire in 10 minutes.</p>
           <p>If you didn't request this, please ignore this email.</p>
           <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-          <p style="color: #6b7280; font-size: 14px;">E-Magazine Team</p>
+          <p style="color: #6b7280; font-size: 14px;">MindRadix Team</p>
         </div>
       `,
     };
@@ -402,12 +402,12 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     try {
       const transporter = createTransporter();
       await transporter.sendMail({
-        from: process.env.EMAIL_USER,
+        from: `"MindRadix Team" <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: 'Verify Your Email - E-Magazine',
+        subject: 'Verify Your Email - MindRadix',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #4F46E5;">Welcome to ReadMint!</h2>
+            <h2 style="color: #4F46E5;">Welcome to MindRadix!</h2>
             <p>Please use the following OTP to verify your email address:</p>
             <div style="background: #f8fafc; padding: 20px; text-align: center; margin: 20px 0;">
               <h1 style="color: #4F46E5; margin: 0; font-size: 32px; letter-spacing: 5px;">${otp}</h1>
@@ -415,7 +415,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
             <p>This OTP will expire in 10 minutes.</p>
             <p>If you didn't request this, please ignore this email.</p>
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-            <p style="color: #6b7280; font-size: 14px;">ReadMint Team</p>
+            <p style="color: #6b7280; font-size: 14px;">MindRadix Team</p>
           </div>
         `,
       });
@@ -685,9 +685,9 @@ export const resendVerification = async (req: Request, res: Response): Promise<v
 
     const transporter = createTransporter();
     await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+      from: `"MindRadix Team" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: 'Verify Your Email - E-Magazine',
+      subject: 'Verify Your Email - MindRadix',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #4F46E5;">Verify Your Email</h2>
@@ -698,7 +698,7 @@ export const resendVerification = async (req: Request, res: Response): Promise<v
           <p>This OTP will expire in 10 minutes.</p>
           <p>If you didn't request this, please ignore this email.</p>
           <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-          <p style="color: #6b7280; font-size: 14px;">E-Magazine Team</p>
+          <p style="color: #6b7280; font-size: 14px;">MindRadix Team</p>
         </div>
       `,
     });

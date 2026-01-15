@@ -45,6 +45,7 @@ interface ArticleDetails {
 import { Heart, MessageCircle, Send, User, Languages } from "lucide-react";
 import { postJSON } from "@/lib/api";
 import { useLanguage } from "@/context/LanguageContext";
+import { MagEditor } from "@/components/mag-editor/MagEditor";
 
 export default function ArticlePage() {
     const params = useParams();
@@ -147,6 +148,23 @@ export default function ArticlePage() {
 
     if (!article) return null;
 
+    // Use MagEditor for formatted content if design_data exists AND user has access
+    // If no access, we still show social bar and lock screen logic?
+    // Actually, design_data usually implies "full content". If locked, we probably shouldn't show design view unless it supports "preview pages".
+    // For now, if has_access AND article.design_data (added to interface via backend response), show MagEditor.
+    // BUT we need to support the social bar etc. MagEditor is full screen usually.
+    // Let's wrap MagEditor or put it in place of "CONTENT" section.
+    // Actually, MagEditor is a full "Reader" experience.
+    // Let's decide: If designed, show MagEditor in a container, but keep Header/Comments?
+    // Or full screen MagEditor? The user request said "see how you are displaying it in the reviewer part it should be in that format".
+    // Reviewer part shows "View Designed Article" -> MagEditor full screen readOnly.
+    // So let's provide a toggle or if design exists, default to it?
+    // Reviewer workspace has "Text Source" vs "Design Layout".
+    // Reader arguably prefers Design Layout.
+
+    // Let's check if we have design data
+    const hasDesign = article.has_access && (article as any).design_data;
+
     return (
         <div className="max-w-4xl mx-auto px-4 py-8">
             <Link href="/reader-dashboard" className="inline-flex items-center text-slate-500 hover:text-indigo-600 mb-6">
@@ -196,7 +214,19 @@ export default function ArticlePage() {
                 <div className="p-8">
                     {article.has_access ? (
                         <div className="prose dark:prose-invert max-w-none">
-                            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.content || "") }} />
+                            {hasDesign ? (
+                                <div className="h-[900px] w-full border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden relative bg-slate-100 dark:bg-slate-900">
+                                    <MagEditor
+                                        articleId={article.id}
+                                        readOnly={true}
+                                        className="h-full w-full"
+                                        initialData={article as any} // Pass full article including design_data
+                                        initialAttachments={article.attachments}
+                                    />
+                                </div>
+                            ) : (
+                                <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.content || "") }} />
+                            )}
                         </div>
                     ) : (
                         <div className="flex flex-col items-center justify-center py-12 text-center">

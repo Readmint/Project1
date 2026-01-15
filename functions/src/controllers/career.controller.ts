@@ -108,16 +108,17 @@ export const getRole = async (req: Request, res: Response) => {
         const role = await firestore.getDoc('career_roles', id);
 
         if (!role) {
-            return res.status(404).json({ status: 'error', message: 'Job role not found' });
+            res.status(404).json({ status: 'error', message: 'Job role not found' });
+            return;
         }
 
-        return res.status(200).json({
+        res.status(200).json({
             status: 'success',
             data: { role }
         });
     } catch (error) {
         logger.error('Error fetching job role', error);
-        return res.status(500).json({ status: 'error', message: 'Internal server error' });
+        res.status(500).json({ status: 'error', message: 'Internal server error' });
     }
 };
 
@@ -223,17 +224,18 @@ export const updateApplicationStatus = async (req: Request, res: Response) => {
         const { status } = req.body;
 
         if (!['pending', 'reviewed', 'interviewing', 'rejected', 'hired'].includes(status)) {
-            return res.status(400).json({ status: 'error', message: 'Invalid status' });
+            res.status(400).json({ status: 'error', message: 'Invalid status' });
+            return;
         }
 
         await firestore.updateDoc('career_applications', id, { status });
 
-        return res.status(200).json({
+        res.status(200).json({
             status: 'success',
             message: 'Application status updated'
         });
     } catch (error) {
         logger.error('Error updating application status', error);
-        return res.status(500).json({ status: 'error', message: 'Internal server error' });
+        res.status(500).json({ status: 'error', message: 'Internal server error' });
     }
 };

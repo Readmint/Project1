@@ -44,8 +44,7 @@ type CollectionName =
     | 'career_roles'
     | 'career_applications'
     | 'certificates'
-    | 'editorial_board'
-    | 'editorial_applications';
+    | 'editorial_board';
 
 export const getCollection = (collectionName: CollectionName) => {
     const db = getDatabase();

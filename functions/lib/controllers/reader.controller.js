@@ -260,7 +260,7 @@ const getArticleDetails = async (req, res) => {
         res.status(200).json({
             status: 'success',
             data: Object.assign(Object.assign({}, article), { content: hasAccess ? article.content : null, // Hide content if locked
-                synopsis, has_access: hasAccess, is_bookmarked: isBookmarked, attachments, social: {
+                synopsis, has_access: hasAccess, is_bookmarked: isBookmarked, attachments, design_data: hasAccess && article.design_data ? (typeof article.design_data === 'string' ? JSON.parse(article.design_data) : article.design_data) : null, social: {
                     likes: likeCount,
                     is_liked: isLiked,
                     comments

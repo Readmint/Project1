@@ -10,6 +10,7 @@ const mailer_1 = require("../utils/mailer");
 const string_similarity_1 = __importDefault(require("string-similarity"));
 // Using require to bypass strict TS module resolution issues with some packages
 const { search } = require('google-sr');
+const certificate_controller_1 = require("./certificate.controller");
 const getSubmissions = async (req, res) => {
     try {
         // Fetch all content where status is one of the submitted states
@@ -56,12 +57,22 @@ const getSubmissions = async (req, res) => {
                 // Priority check? Stored on assignment? "ea.priority" was in SQL join. 
                 // If not in schema, default Normal.
             }
+            const toDate = (d) => {
+                if (!d)
+                    return new Date();
+                try {
+                    return d.toDate ? d.toDate() : new Date(d);
+                }
+                catch (e) {
+                    return new Date();
+                }
+            };
             return {
                 id: sub.id,
                 title: sub.title,
                 author: authorName,
                 category: categoryName,
-                date: new Date(sub.created_at).toLocaleDateString(),
+                date: toDate(sub.created_at).toLocaleDateString(), // Consider moving format to frontend
                 status: sub.status,
                 priority: priority,
                 assignedEditor: assignedEditor,
@@ -88,7 +99,23 @@ const getEditors = async (req, res) => {
         const validEditors = await Promise.all(editors.map(async (u) => {
             // Find editor profile
             const profiles = await (0, firestore_helpers_1.executeQuery)('editors', [{ field: 'user_id', op: '==', value: u.id }]);
-            const editorId = profiles.length > 0 ? profiles[0].id : null;
+            let editorId = profiles.length > 0 ? profiles[0].id : null;
+            if (!editorId) {
+                // Auto-heal: Create editor profile if missing
+                try {
+                    const newProfile = await (0, firestore_helpers_1.createDoc)('editors', {
+                        user_id: u.id,
+                        specialization: 'General',
+                        capacity: 5,
+                        active_assignments: 0,
+                        created_at: new Date()
+                    });
+                    editorId = newProfile.id;
+                }
+                catch (e) {
+                    logger_1.logger.error(`Failed to auto-create editor profile for ${u.id}`, e);
+                }
+            }
             return {
                 name: u.name,
                 id: editorId, // editor profile id
@@ -97,7 +124,7 @@ const getEditors = async (req, res) => {
         }));
         res.status(200).json({
             status: 'success',
-            data: validEditors.filter(e => e.id !== null)
+            data: validEditors // No need to filter nulls if we handle creation or accept nulls temporarily
         });
     }
     catch (error) {
@@ -147,11 +174,21 @@ const assignEditor = async (req, res) => {
         const editorUser = users[0];
         // find editor profile
         const editorProfiles = await (0, firestore_helpers_1.executeQuery)('editors', [{ field: 'user_id', op: '==', value: editorUser.id }]);
+        let editorProfileId;
         if (editorProfiles.length === 0) {
-            res.status(404).json({ status: 'error', message: 'Editor profile missing' });
-            return;
+            // Auto-create
+            const newProfile = await (0, firestore_helpers_1.createDoc)('editors', {
+                user_id: editorUser.id,
+                specialization: 'General',
+                capacity: 5,
+                active_assignments: 0,
+                created_at: new Date()
+            });
+            editorProfileId = newProfile.id;
         }
-        const editorProfileId = editorProfiles[0].id;
+        else {
+            editorProfileId = editorProfiles[0].id;
+        }
         // Create assignment
         await (0, firestore_helpers_1.createDoc)('editor_assignments', {
             editor_id: editorProfileId,
@@ -170,7 +207,7 @@ const assignEditor = async (req, res) => {
           <p><b>Assigned by:</b> ${managerName}</p>
           <p>Please log in to your dashboard to review it.</p>
           <br/>
-          <p>Best regards,<br/>ReadMint Team</p>
+          <p>Best regards,<br/>MindRadix Team</p>
         `;
         await (0, mailer_1.sendEmail)(editorUser.email, emailSubject, emailBody);
         // Notify
@@ -240,7 +277,7 @@ const assignReviewer = async (req, res) => {
           <p>Deadline: ${deadline || 'Not specified'}</p>
           <p>Please log in to your dashboard to start the review.</p>
           <br/>
-          <p>Best regards,<br/>ReadMint Team</p>
+          <p>Best regards,<br/>MindRadix Team</p>
         `;
         await (0, mailer_1.sendEmail)(reviewerUser.email, emailSubject, emailBody);
         await (0, firestore_helpers_1.createDoc)('notifications', {
@@ -381,7 +418,7 @@ const sendMessage = async (req, res) => {
             <p>You have received a new message:</p>
             <p style="background-color: #f3f4f6; padding: 10px; border-radius: 5px;">${message}</p>
             <br/>
-            <p>Best regards,<br/>ReadMint Team</p>
+            <p>Best regards,<br/>MindRadix Team</p>
         `;
         await (0, mailer_1.sendEmail)(receiver.email, emailSubject, emailBody);
         await (0, firestore_helpers_1.createDoc)('communications', {
@@ -671,7 +708,7 @@ exports.getSubmissionDetails = getSubmissionDetails;
 const getReadyToPublish = async (req, res) => {
     try {
         const articles = await (0, firestore_helpers_1.executeQuery)('content', [
-            { field: 'status', op: '==', value: 'approved' }
+            { field: 'status', op: 'in', value: ['approved', 'Approved'] }
         ], undefined, { field: 'created_at', dir: 'asc' });
         const formatted = await Promise.all(articles.map(async (c) => {
             let authorName = 'Unknown';
@@ -751,6 +788,16 @@ const publishContent = async (req, res) => {
                 entity_id: articleId,
                 created_at: new Date()
             });
+        }
+        // Generate Certificate
+        if (art.author_id) {
+            try {
+                await (0, certificate_controller_1.createAndSendCertificate)(articleId);
+                logger_1.logger.info(`Certificate generated for article ${articleId}`);
+            }
+            catch (certErr) {
+                logger_1.logger.error('Certificate generation failed (non-blocking):', certErr);
+            }
         }
         res.status(200).json({ status: 'success', message: 'Article published successfully' });
     }

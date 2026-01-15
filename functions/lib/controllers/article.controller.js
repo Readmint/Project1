@@ -52,6 +52,7 @@ const natural_1 = require("natural");
 const node_fetch_1 = __importDefault(require("node-fetch"));
 const mammoth_1 = __importDefault(require("mammoth"));
 const firestore_helpers_1 = require("../utils/firestore-helpers");
+const sanitizer_1 = require("../utils/sanitizer");
 //
 // Robust pdf-parse loader to handle ESM / CommonJS interop
 //
@@ -120,10 +121,6 @@ const createArticle = async (req, res) => {
             return;
         const errors = (0, express_validator_1.validationResult)(req);
         if (!errors.isEmpty()) {
-            console.log('❌ VALIDATION FAILED');
-            console.log('Request Body:', JSON.stringify(req.body, null, 2));
-            console.log('Errors:', JSON.stringify(errors.array(), null, 2));
-            logger_1.logger.warn('createArticle validation errors:', errors.array());
             res.status(400).json({ status: 'error', message: 'Validation failed', errors: errors.array() });
             return;
         }
@@ -158,7 +155,7 @@ const createArticle = async (req, res) => {
             title: title.trim(),
             author_id: authorId,
             category_id: finalCategoryId,
-            content: content || '',
+            content: content ? (0, sanitizer_1.sanitizeHtml)(content) : '', // Sanitize content
             summary: summary || '',
             tags: tags || [], // array
             language: req.body.language || 'English',
@@ -230,7 +227,7 @@ const updateArticleContent = async (req, res) => {
         if (typeof summary === 'string')
             updates.summary = summary;
         if (typeof content === 'string')
-            updates.content = content;
+            updates.content = (0, sanitizer_1.sanitizeHtml)(content);
         if (category_id !== undefined)
             updates.category_id = category_id || null;
         if (tags !== undefined)
@@ -253,6 +250,31 @@ const updateArticleContent = async (req, res) => {
             return;
         }
         await (0, firestore_helpers_1.updateDoc)('content', articleId, updates);
+        // [NEW] Create Version Snapshot
+        try {
+            // Fetch fresh for full snapshot
+            const updatedArticle = await (0, firestore_helpers_1.getDoc)('content', articleId);
+            if (updatedArticle) {
+                await (0, firestore_helpers_1.createDoc)('versions', {
+                    article_id: articleId,
+                    editor_id: null, // stored as null for author updates? or store author_id? Logic usually expects editor_id for editors. 
+                    // We can leave it null or repurpose field. Let's stick to null for "Author" for now, 
+                    // or verify if we need an 'author_id' field in versions schema.
+                    // editor.controller.ts uses editor_id. 
+                    // Let's add 'modified_by' to be generic? For now, standard behavior:
+                    title: updatedArticle.title,
+                    content: updatedArticle.content,
+                    meta: {
+                        notes: (updates.metadata && updates.metadata.editorNotes) ? updates.metadata.editorNotes : 'Author update',
+                        updatedBy: userId
+                    },
+                    created_at: new Date()
+                });
+            }
+        }
+        catch (vErr) {
+            logger_1.logger.warn('Failed to create version snapshot', vErr);
+        }
         res.status(200).json({ status: 'success', message: 'Article updated', data: { id: articleId } });
         return;
     }
@@ -686,21 +708,11 @@ const getArticleDetails = async (req, res) => {
         }
         // Fetch related
         // Attachments
-        // Fetch related data in parallel with graceful degradation
-        const [attachmentsResult, workflowResult, reviewsResult] = await Promise.allSettled([
-            (0, firestore_helpers_1.executeQuery)('attachments', [{ field: 'article_id', op: '==', value: articleId }]),
-            (0, firestore_helpers_1.executeQuery)('workflow_events', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' }),
-            (0, firestore_helpers_1.executeQuery)('reviews', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' })
-        ]);
-        const attachments = attachmentsResult.status === 'fulfilled' ? attachmentsResult.value : [];
-        if (attachmentsResult.status === 'rejected')
-            logger_1.logger.warn('Failed to fetch attachments', attachmentsResult.reason);
-        const workflow = workflowResult.status === 'fulfilled' ? workflowResult.value : [];
-        if (workflowResult.status === 'rejected')
-            logger_1.logger.warn('Failed to fetch workflow', workflowResult.reason);
-        const reviews = reviewsResult.status === 'fulfilled' ? reviewsResult.value : [];
-        if (reviewsResult.status === 'rejected')
-            logger_1.logger.warn('Failed to fetch reviews', reviewsResult.reason);
+        const attachments = await (0, firestore_helpers_1.executeQuery)('attachments', [{ field: 'article_id', op: '==', value: articleId }]);
+        // Workflow
+        const workflow = await (0, firestore_helpers_1.executeQuery)('workflow_events', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' });
+        // Reviews
+        const reviews = await (0, firestore_helpers_1.executeQuery)('reviews', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' });
         res.status(200).json({
             status: 'success',
             message: 'Article details fetched',
@@ -763,6 +775,24 @@ const updateArticleStatus = async (req, res) => {
             created_at: new Date()
         });
         logger_1.logger.info(`Article ${articleId} status changed from ${article.status} to ${status} by ${userId}`);
+        // [NEW] Version Snapshot on Status Change (e.g. Submit)
+        try {
+            await (0, firestore_helpers_1.createDoc)('versions', {
+                article_id: articleId,
+                editor_id: null,
+                title: article.title,
+                content: article.content, // Snapshot current content
+                meta: {
+                    notes: `Status changed to ${status}`,
+                    status_change: { from: article.status, to: status },
+                    updatedBy: userId
+                },
+                created_at: new Date()
+            });
+        }
+        catch (vErr) {
+            logger_1.logger.warn('Failed to create version snapshot on status change', vErr);
+        }
         // [NEW] Trigger Certificate Generation if status is published
         if (status === 'published' && article.status !== 'published') {
             try {

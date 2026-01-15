@@ -14,6 +14,7 @@ import { TfIdf } from 'natural';
 import fetch from 'node-fetch';
 import mammoth from 'mammoth';
 import { getCollection, executeQuery, createDoc, updateDoc, getDoc, deleteDoc } from '../utils/firestore-helpers';
+import { sanitizeHtml } from '../utils/sanitizer';
 
 //
 // Robust pdf-parse loader to handle ESM / CommonJS interop
@@ -86,10 +87,6 @@ export const createArticle = async (req: Request, res: Response): Promise<void> 
 
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.log('❌ VALIDATION FAILED');
-      console.log('Request Body:', JSON.stringify(req.body, null, 2));
-      console.log('Errors:', JSON.stringify(errors.array(), null, 2));
-      logger.warn('createArticle validation errors:', errors.array());
       res.status(400).json({ status: 'error', message: 'Validation failed', errors: errors.array() });
       return;
     }
@@ -137,7 +134,7 @@ export const createArticle = async (req: Request, res: Response): Promise<void> 
       title: title.trim(),
       author_id: authorId,
       category_id: finalCategoryId,
-      content: content || '',
+      content: content ? sanitizeHtml(content) : '', // Sanitize content
       summary: summary || '',
       tags: tags || [], // array
       language: req.body.language || 'English',
@@ -217,7 +214,7 @@ export const updateArticleContent = async (req: Request, res: Response): Promise
     const updates: any = {};
     if (typeof title === 'string') updates.title = title.trim();
     if (typeof summary === 'string') updates.summary = summary;
-    if (typeof content === 'string') updates.content = content;
+    if (typeof content === 'string') updates.content = sanitizeHtml(content);
     if (category_id !== undefined) updates.category_id = category_id || null;
     if (tags !== undefined) updates.tags = tags || [];
     if (req.body.language !== undefined) updates.language = req.body.language;
@@ -240,6 +237,31 @@ export const updateArticleContent = async (req: Request, res: Response): Promise
     }
 
     await updateDoc('content', articleId, updates);
+
+    // [NEW] Create Version Snapshot
+    try {
+      // Fetch fresh for full snapshot
+      const updatedArticle: any = await getDoc('content', articleId);
+      if (updatedArticle) {
+        await createDoc('versions', {
+          article_id: articleId,
+          editor_id: null, // stored as null for author updates? or store author_id? Logic usually expects editor_id for editors. 
+          // We can leave it null or repurpose field. Let's stick to null for "Author" for now, 
+          // or verify if we need an 'author_id' field in versions schema.
+          // editor.controller.ts uses editor_id. 
+          // Let's add 'modified_by' to be generic? For now, standard behavior:
+          title: updatedArticle.title,
+          content: updatedArticle.content,
+          meta: {
+            notes: (updates.metadata && updates.metadata.editorNotes) ? updates.metadata.editorNotes : 'Author update',
+            updatedBy: userId
+          },
+          created_at: new Date()
+        });
+      }
+    } catch (vErr) {
+      logger.warn('Failed to create version snapshot', vErr);
+    }
 
     res.status(200).json({ status: 'success', message: 'Article updated', data: { id: articleId } });
     return;
@@ -701,21 +723,13 @@ export const getArticleDetails = async (req: Request, res: Response): Promise<vo
 
     // Fetch related
     // Attachments
-    // Fetch related data in parallel with graceful degradation
-    const [attachmentsResult, workflowResult, reviewsResult] = await Promise.allSettled([
-      executeQuery('attachments', [{ field: 'article_id', op: '==', value: articleId }]),
-      executeQuery('workflow_events', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' }),
-      executeQuery('reviews', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' })
-    ]);
+    const attachments = await executeQuery('attachments', [{ field: 'article_id', op: '==', value: articleId }]);
 
-    const attachments = attachmentsResult.status === 'fulfilled' ? attachmentsResult.value : [];
-    if (attachmentsResult.status === 'rejected') logger.warn('Failed to fetch attachments', attachmentsResult.reason);
+    // Workflow
+    const workflow = await executeQuery('workflow_events', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' });
 
-    const workflow = workflowResult.status === 'fulfilled' ? workflowResult.value : [];
-    if (workflowResult.status === 'rejected') logger.warn('Failed to fetch workflow', workflowResult.reason);
-
-    const reviews = reviewsResult.status === 'fulfilled' ? reviewsResult.value : [];
-    if (reviewsResult.status === 'rejected') logger.warn('Failed to fetch reviews', reviewsResult.reason);
+    // Reviews
+    const reviews = await executeQuery('reviews', [{ field: 'article_id', op: '==', value: articleId }], 100, { field: 'created_at', dir: 'desc' });
 
     res.status(200).json({
       status: 'success',
@@ -786,6 +800,24 @@ export const updateArticleStatus = async (req: Request, res: Response): Promise<
     });
 
     logger.info(`Article ${articleId} status changed from ${article.status} to ${status} by ${userId}`);
+
+    // [NEW] Version Snapshot on Status Change (e.g. Submit)
+    try {
+      await createDoc('versions', {
+        article_id: articleId,
+        editor_id: null,
+        title: article.title,
+        content: article.content, // Snapshot current content
+        meta: {
+          notes: `Status changed to ${status}`,
+          status_change: { from: article.status, to: status },
+          updatedBy: userId
+        },
+        created_at: new Date()
+      });
+    } catch (vErr) {
+      logger.warn('Failed to create version snapshot on status change', vErr);
+    }
 
     // [NEW] Trigger Certificate Generation if status is published
     if (status === 'published' && article.status !== 'published') {

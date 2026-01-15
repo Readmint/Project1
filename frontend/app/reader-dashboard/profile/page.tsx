@@ -30,7 +30,7 @@ interface ReaderProfile {
 const defaultProfile: ReaderProfile = {
   name: "Aditya Sharma",
   email: "aditya@example.com",
-  phone: "+91 98765 43210",
+  phone: "+91 870 888 6307",
   location: "Delhi, India",
   avatar: "/images/user-avatar.jpg",
   bio: "Passionate reader exploring technology, culture, and world affairs.",
@@ -276,7 +276,7 @@ function SubscriptionModal({ open, onClose, subscription, billing }: any) {
   return (
     <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
       <motion.div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-2xl shadow-xl border border-slate-300 dark:border-slate-700 p-6 space-y-6">
-        
+
         {/* Header */}
         <div className="flex justify-between items-center">
           <h2 className="text-lg font-bold flex items-center gap-2">

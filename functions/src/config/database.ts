@@ -27,7 +27,6 @@ export const connectDatabase = async (): Promise<void> => {
       }
 
       firestoreDb = admin.firestore();
-      firestoreDb.settings({ ignoreUndefinedProperties: true });
       logger.info('Connected to Firebase Firestore');
       console.log('✅ Connected to Firebase Firestore');
       console.log('📦 Storage bucket:', storageBucket || `${projectId}.appspot.com`);
@@ -45,42 +44,35 @@ export const connectDatabase = async (): Promise<void> => {
   }
 };
 
-export const ensureInitialized = () => {
-  if (!admin.apps.length) {
-    // Use default credentials (works in Cloud Functions)
-    try {
-      const projectId = process.env.READMINT_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
-      const storageBucket = process.env.READMINT_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || (projectId ? `${projectId}.appspot.com` : undefined);
-
-      admin.initializeApp({
-        storageBucket: storageBucket
-      });
-      console.log('✅ Firebase Admin Initialized (Lazy)');
-    } catch (e) {
-      console.error('Failed to lazy initialize Firebase Admin', e);
-      // Fallback - might already be initialized?
-      if (!admin.apps.length) throw e;
-    }
-  }
-};
-
 export const getStorageBucket = () => {
-  ensureInitialized();
   return admin.storage().bucket();
 };
 
 export const getFirestoreDatabase = (): any => {
   if (!firestoreDb) {
-    if (!admin.apps.length) ensureInitialized();
-    firestoreDb = admin.firestore();
-    firestoreDb.settings({ ignoreUndefinedProperties: true });
+    throw new Error('Firestore database not initialized');
   }
   return firestoreDb;
 };
 
 // Main getDatabase function - defaults to Firestore
 export const getDatabase = (): any => {
-  return getFirestoreDatabase();
+  if (!firestoreDb) {
+    // Lazy initialization for Cloud Functions or if connectDatabase wasn't called
+    if (!admin.apps.length) {
+      // Use default credentials (works in Cloud Functions)
+      admin.initializeApp();
+    }
+    // If initialized but firestoreDb references missing, get it
+    if (admin.apps.length && !firestoreDb) {
+      firestoreDb = admin.firestore();
+    }
+  }
+
+  if (firestoreDb) {
+    return firestoreDb;
+  }
+  throw new Error('No database initialized');
 };
 
 /**

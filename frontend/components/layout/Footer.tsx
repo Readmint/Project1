@@ -62,7 +62,7 @@ export default function Footer() {
 
             <li className="flex items-center gap-3">
               <Phone className="w-5 h-5" />
-              +91 98765 43210
+              +91 870 888 6307
             </li>
 
             <li className="flex items-center gap-3">

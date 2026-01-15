@@ -59,17 +59,16 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static('uploads')); // Serve local uploads
 
-import { fixMultipartRequest } from './middleware/multipartFix';
-app.use(fixMultipartRequest);
-
 /* ---------------------------------- Swagger ------------------------------------ */
 setupSwagger(app);
 
 /* ----------------------------------- Routes ------------------------------------ */
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/featured', featuredRoutes);
 app.use('/api/articles', articleRoutes);
 app.use('/api/article', articleRoutes); // Fix: Enable access via /api/article/... (singular)
+app.use('/api', articleRoutes); // Fix: Enable access via /api/author/articles defined in articleRoutes
 app.use('/api/authors', authorRoutes);
 app.use('/api/editors', editorRoutes);
 app.use('/api/subscription', subscriptionRoutes);
@@ -114,10 +113,30 @@ const startServer = async () => {
     await connectDatabase();
 
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`);
       console.log(`🚀 ReadMint Backend running at http://localhost:${PORT}`);
       console.log(`📚 Swagger Docs: http://localhost:${PORT}/api/docs`);
+    });
+
+    server.on('error', (err: any) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${PORT} is already in use. Please close other instances.`);
+        logger.error(`Port ${PORT} is in use`, err);
+        process.exit(1);
+      } else {
+        logger.error('Server error:', err);
+      }
+    });
+
+    process.on('unhandledRejection', (err) => {
+      console.error('Unhandled Rejection:', err);
+      logger.error('Unhandled Rejection', err);
+    });
+
+    process.on('uncaughtException', (err) => {
+      console.error('Uncaught Exception:', err);
+      logger.error('Uncaught Exception', err);
     });
   } catch (error) {
     logger.error('❌ Server failed to start:', error);

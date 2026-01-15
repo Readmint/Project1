@@ -185,8 +185,11 @@ function BoardMemberCard({ member, index }: { member: any; index: number }) {
                 <CardContent className="p-6 flex flex-col flex-1">
                     <div className="flex items-start justify-between mb-4">
                         <div className="relative w-16 h-16 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800 border items-center justify-center flex text-2xl">
-                            {/* Fallback to Initials if no image */}
-                            {member.name.split(" ").map((n: any) => n[0]).join("").slice(0, 2)}
+                            {member.image ? (
+                                <img src={member.image} alt={member.name} className="w-full h-full object-cover" />
+                            ) : (
+                                member.name.split(" ").map((n: any) => n[0]).join("").slice(0, 2)
+                            )}
                         </div>
 
                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${member.color}`}>
