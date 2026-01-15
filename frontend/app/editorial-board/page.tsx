@@ -120,20 +120,12 @@ export default function EditorialBoardPage() {
                             className="relative hidden md:block"
                         >
                             {/* Decorative background elements or image */}
-                            <div className="relative h-[500px] w-full bg-slate-200 dark:bg-slate-800 rounded-3xl overflow-hidden shadow-2xl">
-                                <Image
-                                    src="/images/editorial-team.jpg"
+                            <div className="relative w-full rounded-3xl overflow-hidden shadow-2xl bg-slate-200 dark:bg-slate-800">
+                                <img
+                                    src="/images/Blue%20White%20Modern%20Meet%20The%20Team%20Collection%20LinkedIn%20Post.svg"
                                     alt="Editorial Team"
-                                    fill
-                                    className="object-cover"
-                                // placeholder="blur"
+                                    className="w-full h-auto object-contain"
                                 />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-8">
-                                    <div className="text-white">
-                                        <p className="font-medium text-lg">"Excellence in every publication."</p>
-                                        <p className="text-white/80 text-sm mt-1">- ReadMint Board</p>
-                                    </div>
-                                </div>
                             </div>
                         </motion.div>
 

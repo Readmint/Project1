@@ -219,7 +219,7 @@ export const assignEditor = async (req: Request, res: Response): Promise<void> =
           <p><b>Assigned by:</b> ${managerName}</p>
           <p>Please log in to your dashboard to review it.</p>
           <br/>
-          <p>Best regards,<br/>ReadMint Team</p>
+          <p>Best regards,<br/>MindRadix Team</p>
         `;
         await sendEmail(editorUser.email, emailSubject, emailBody);
 
@@ -293,7 +293,7 @@ export const assignReviewer = async (req: Request, res: Response): Promise<void>
           <p>Deadline: ${deadline || 'Not specified'}</p>
           <p>Please log in to your dashboard to start the review.</p>
           <br/>
-          <p>Best regards,<br/>ReadMint Team</p>
+          <p>Best regards,<br/>MindRadix Team</p>
         `;
         await sendEmail(reviewerUser.email, emailSubject, emailBody);
 
@@ -439,7 +439,7 @@ export const sendMessage = async (req: Request, res: Response): Promise<void> =>
             <p>You have received a new message:</p>
             <p style="background-color: #f3f4f6; padding: 10px; border-radius: 5px;">${message}</p>
             <br/>
-            <p>Best regards,<br/>ReadMint Team</p>
+            <p>Best regards,<br/>MindRadix Team</p>
         `;
 
         await sendEmail(receiver.email, emailSubject, emailBody);

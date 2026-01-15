@@ -135,9 +135,9 @@ export const createAdmin = async (req: Request, res: Response): Promise<void> =>
         try {
             const transporter = createTransporter();
             await transporter.sendMail({
-                from: process.env.EMAIL_USER,
+                from: `"MindRadix Team" <${process.env.EMAIL_USER}>`,
                 to: email,
-                subject: 'Verify Admin Account - ReadMint',
+                subject: 'Verify Admin Account - MindRadix',
                 html: `
                   <div style="font-family: Arial, sans-serif; padding: 20px;">
                     <h2>Verify Admin Access</h2>
@@ -243,9 +243,9 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
 
         const transporter = createTransporter();
         await transporter.sendMail({
-            from: process.env.EMAIL_USER,
+            from: `"MindRadix Team" <${process.env.EMAIL_USER}>`,
             to: email,
-            subject: 'Reset Admin Password - ReadMint',
+            subject: 'Reset Admin Password - MindRadix',
             html: `
               <div style="font-family: Arial, sans-serif; padding: 20px;">
                 <h2>Password Reset Request</h2>
@@ -1039,7 +1039,7 @@ export const createAnnouncement = async (req: Request, res: Response): Promise<v
                         <p>Dear ${user.name},</p>
                         <p>${message}</p>
                         <br/>
-                        <p>Best regards,<br/>ReadMint Admin Team</p>
+                        <p>Best regards,<br/>MindRadix Team</p>
                     </div>`
                 )
             );
