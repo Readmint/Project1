@@ -1503,3 +1503,5 @@
 {"level":"info","message":"Running web search for article 396d5b30-b7ff-4ba5-959a-1fa1c1b13dd4 with query: Test...","service":"readmint-backend","timestamp":"2026-01-16 08:34:54"}
 {"level":"info","message":"Preforming web search for: Test","service":"readmint-backend","timestamp":"2026-01-16 08:34:54"}
 {"level":"info","message":"Article 396d5b30-b7ff-4ba5-959a-1fa1c1b13dd4 status changed from draft to submitted by tjlhykOL7Vl0SnpWQxhk","service":"readmint-backend","timestamp":"2026-01-16 08:34:57"}
+{"level":"info","message":"Connected to Firebase Firestore","service":"readmint-backend","timestamp":"2026-01-16 08:41:13"}
+{"level":"info","message":"Server running on port 5000","service":"readmint-backend","timestamp":"2026-01-16 08:41:13"}

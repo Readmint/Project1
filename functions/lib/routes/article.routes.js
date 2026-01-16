@@ -8,7 +8,6 @@ const express_1 = __importDefault(require("express"));
 const express_validator_1 = require("express-validator");
 const article_controller_1 = require("../controllers/article.controller");
 const auth_1 = require("../middleware/auth");
-const multer_1 = __importDefault(require("multer"));
 const router = express_1.default.Router();
 /**
  * Validation rules
@@ -56,13 +55,6 @@ const updateStatusValidation = [
 const deleteArticleValidation = [
     (0, express_validator_1.param)('articleId').isString().notEmpty().withMessage('articleId is required'),
 ];
-// Create multer instance for file uploads
-const upload = (0, multer_1.default)({
-    storage: multer_1.default.memoryStorage(),
-    limits: {
-        fileSize: parseInt(process.env.MAX_UPLOAD_BYTES || String(50 * 1024 * 1024), 10),
-    },
-});
 /**
  * Routes
  */
@@ -75,8 +67,6 @@ router.post('/author/articles/:articleId/attachments/signed-url', auth_1.authent
 router.post('/author/articles/:articleId/attachments/:attachmentId/complete', auth_1.authenticate, completeAttachmentValidation, article_controller_1.completeAttachmentUpload);
 // NEW: Upload attachment to server (GCS-backed). Multipart using field "file".
 router.post('/author/articles/:articleId/attachments', auth_1.authenticate, 
-// Apply multer middleware here
-upload.single('file'), 
 // Then call the handler
 article_controller_1.uploadAttachment);
 // NEW: Download attachment (streams / redirects to signed URL)

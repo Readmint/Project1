@@ -73,7 +73,7 @@ export default function ImageInsertDialog({ open, onOpenChange, onInsert, articl
                     toast.error("Upload successful but URL missing.");
                 }
             } else {
-                throw new Error(data.message || "Upload failed");
+                throw new Error(data.error || data.message || "Upload failed");
             }
         } catch (err: any) {
             console.error(err);

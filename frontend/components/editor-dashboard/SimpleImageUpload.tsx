@@ -55,7 +55,7 @@ export default function SimpleImageUpload({ articleId, onUploadComplete, label =
                     toast.error("Upload successful but URL missing.");
                 }
             } else {
-                throw new Error(data.message || "Upload failed");
+                throw new Error(data.error || data.message || "Upload failed");
             }
         } catch (err: any) {
             console.error(err);

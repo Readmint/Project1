@@ -15,9 +15,9 @@ exports.logger = winston_1.default.createLogger({
         new winston_1.default.transports.File({ filename: 'logs/combined.log' })
     ]
 });
-if (process.env.NODE_ENV !== 'production') {
-    exports.logger.add(new winston_1.default.transports.Console({
-        format: winston_1.default.format.combine(winston_1.default.format.colorize(), winston_1.default.format.simple())
-    }));
-}
+// Always log to console in Cloud Functions environment
+exports.logger.add(new winston_1.default.transports.Console({
+    format: winston_1.default.format.combine(winston_1.default.format.timestamp(), winston_1.default.format.simple() // or json() for structured logs
+    )
+}));
 //# sourceMappingURL=logger.js.map

@@ -21,7 +21,7 @@ import {
 } from '../controllers/article.controller';
 
 import { authenticate } from '../middleware/auth';
-import multer from 'multer';
+
 
 const router = express.Router();
 
@@ -80,13 +80,7 @@ const deleteArticleValidation = [
   param('articleId').isString().notEmpty().withMessage('articleId is required'),
 ];
 
-// Create multer instance for file uploads
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: parseInt(process.env.MAX_UPLOAD_BYTES || String(50 * 1024 * 1024), 10),
-  },
-});
+
 
 /**
  * Routes
@@ -126,8 +120,7 @@ router.post(
 router.post(
   '/author/articles/:articleId/attachments',
   authenticate,
-  // Apply multer middleware here
-  upload.single('file'),
+
   // Then call the handler
   uploadAttachment
 );

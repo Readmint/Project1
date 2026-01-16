@@ -2,9 +2,9 @@ import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import admin from 'firebase-admin';
 import { validationResult } from 'express-validator';
-import { getDatabase, getStorageBucket } from '../config/database';
+import { getDatabase } from '../config/database';
 import { logger } from '../utils/logger';
-import { getSignedUrl } from '../utils/storage';
+import { getSignedUrl, getStorageBucket } from '../utils/storage';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -15,6 +15,7 @@ import fetch from 'node-fetch';
 import mammoth from 'mammoth';
 import { getCollection, executeQuery, createDoc, updateDoc, getDoc, deleteDoc } from '../utils/firestore-helpers';
 import { sanitizeHtml } from '../utils/sanitizer';
+import { parseMultipart } from '../utils/multipart';
 
 //
 // Robust pdf-parse loader to handle ESM / CommonJS interop
@@ -357,39 +358,75 @@ export const uploadAttachment = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    const file = (req as any).file;
+    // Parse multipart request explicitly to handle Firebase rawBody vs stream issues
+    logger.info('Parsing multipart request...');
+    let file;
+    try {
+      const { files } = await parseMultipart(req);
+      file = files[0];
+    } catch (parseErr: any) {
+      logger.error('Failed to parse multipart request', parseErr);
+      res.status(400).json({ status: 'error', message: 'Upload failed: ' + parseErr.message });
+      return;
+    }
+
     if (!file) {
       res.status(400).json({ status: 'error', message: 'No file provided' });
       return;
     }
 
     const attachmentId = uuidv4();
-    const originalName = file.originalname || `attachment - ${attachmentId} `;
+    const originalName = file.originalname || `attachment-${attachmentId}`;
     const contentType = file.mimetype || 'application/octet-stream';
 
+    logger.info(`Starting uploadAttachment for article ${articleId}, file: ${originalName} (${contentType}, ${file.size} bytes)`);
+
     const safeName = originalName.replace(/[^\w.\-]/g, '_').slice(0, 200);
-    const destPath = `attachments / ${articleId}/${attachmentId}-${safeName}`;
+    const destPath = `attachments/${articleId}/${attachmentId}-${safeName}`;
 
     try {
       const bucket = getStorageBucket();
+      logger.info(`Using storage bucket: ${bucket.name}`);
+
       const gcsFile = bucket.file(destPath);
 
       // Save buffer to GCS
+      logger.info('Saving file to GCS...');
       await gcsFile.save(file.buffer, {
         metadata: {
           contentType,
         },
         resumable: false,
       });
+      logger.info('File saved to GCS.');
 
-      // Make file public immediately so it can be viewed in <img> tags without auth
-      await gcsFile.makePublic();
-      const bucketName = bucket.name; // or process.env.FIREBASE_STORAGE_BUCKET
-      const publicUrl = `https://storage.googleapis.com/${bucketName}/${encodeURI(destPath)}`;
+      let publicUrl: string = '';
+
+      try {
+        // Attempt to make file public (works on buckets without Uniform Bucket Level Access)
+        logger.info('Attempting to make public...');
+        await gcsFile.makePublic();
+        const bucketName = bucket.name; // or process.env.FIREBASE_STORAGE_BUCKET
+        publicUrl = `https://storage.googleapis.com/${bucketName}/${encodeURI(destPath)}`;
+        logger.info('File made public.');
+      } catch (aclErr) {
+        // If makePublic fails (common with UBLA), fall back to a long-lived signed URL
+        logger.warn(`makePublic failed for ${destPath}, falling back to signed URL. Error: ${aclErr}`);
+        try {
+          const rawSigned = await getSignedUrl(destPath, 'read', READ_SIGNED_URL_EXPIRES_MS);
+          const signed = normalizeSignedUrl(rawSigned);
+          if (signed) publicUrl = signed;
+          logger.info('Fallback signed URL generated.');
+        } catch (signErr) {
+          logger.error('Failed to generate fallback signed URL', signErr);
+          // Proceed without publicUrl; frontend checks for it or uses proxy logic
+        }
+      }
 
       const sizeBytes = file.size || (file.buffer ? file.buffer.length : 0);
 
       // Save metadata in Firestore
+      logger.info('Saving metadata to Firestore...');
       await createDoc('attachments', {
         article_id: articleId,
         storage_path: destPath,
@@ -400,6 +437,7 @@ export const uploadAttachment = async (req: Request, res: Response): Promise<voi
         uploaded_by: userId,
         uploaded_at: new Date()
       }, attachmentId);
+      logger.info('Metadata saved.');
 
       res.status(201).json({
         status: 'success',

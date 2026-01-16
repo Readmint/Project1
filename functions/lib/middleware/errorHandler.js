@@ -7,6 +7,8 @@ const errorHandler = (err, req, res, next) => {
     err.status = err.status || 'error';
     // Log error
     logger_1.logger.error('Error:', err);
+    // Force console log for Cloud Functions visibility
+    console.error('CRITICAL ERROR:', err);
     if (process.env.NODE_ENV === 'development') {
         res.status(err.statusCode).json({
             status: err.status,
@@ -20,7 +22,8 @@ const errorHandler = (err, req, res, next) => {
         if (err.statusCode === 500) {
             res.status(500).json({
                 status: 'error',
-                message: 'Something went wrong!'
+                message: err.message, // Temporarily exposing message for debugging
+                error: err.stack // Temporarily exposing stack for debugging
             });
         }
         else {

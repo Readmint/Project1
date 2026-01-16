@@ -55,8 +55,29 @@ app.use(helmet());
 app.use(compression());
 
 /* -------------------------------- Body Parsers --------------------------------- */
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+/* -------------------------------- Body Parsers --------------------------------- */
+const shouldParseBody = (req: express.Request) => {
+  // Skip body parsing for multipart uploads (attachments) usually handled by multer
+  if (req.originalUrl && req.originalUrl.includes('/attachments')) return false;
+  return true;
+};
+
+app.use((req, res, next) => {
+  if (shouldParseBody(req)) {
+    express.json({ limit: '10mb' })(req, res, next);
+  } else {
+    next();
+  }
+});
+
+app.use((req, res, next) => {
+  if (shouldParseBody(req)) {
+    express.urlencoded({ extended: true })(req, res, next);
+  } else {
+    next();
+  }
+});
+
 app.use('/uploads', express.static('uploads')); // Serve local uploads
 
 /* ---------------------------------- Swagger ------------------------------------ */

@@ -40,7 +40,6 @@ exports.runPlagiarismCheck = exports.runSimilarityCheck = exports.deleteArticle 
 exports.computeTfidfSimilarities = computeTfidfSimilarities;
 const uuid_1 = require("uuid");
 const express_validator_1 = require("express-validator");
-const database_1 = require("../config/database");
 const logger_1 = require("../utils/logger");
 const storage_1 = require("../utils/storage");
 const promises_1 = __importDefault(require("fs/promises"));
@@ -53,6 +52,7 @@ const node_fetch_1 = __importDefault(require("node-fetch"));
 const mammoth_1 = __importDefault(require("mammoth"));
 const firestore_helpers_1 = require("../utils/firestore-helpers");
 const sanitizer_1 = require("../utils/sanitizer");
+const multipart_1 = require("../utils/multipart");
 //
 // Robust pdf-parse loader to handle ESM / CommonJS interop
 //
@@ -367,32 +367,68 @@ const uploadAttachment = async (req, res) => {
             res.status(403).json({ status: 'error', message: 'Forbidden to upload for this article' });
             return;
         }
-        const file = req.file;
+        // Parse multipart request explicitly to handle Firebase rawBody vs stream issues
+        logger_1.logger.info('Parsing multipart request...');
+        let file;
+        try {
+            const { files } = await (0, multipart_1.parseMultipart)(req);
+            file = files[0];
+        }
+        catch (parseErr) {
+            logger_1.logger.error('Failed to parse multipart request', parseErr);
+            res.status(400).json({ status: 'error', message: 'Upload failed: ' + parseErr.message });
+            return;
+        }
         if (!file) {
             res.status(400).json({ status: 'error', message: 'No file provided' });
             return;
         }
         const attachmentId = (0, uuid_1.v4)();
-        const originalName = file.originalname || `attachment - ${attachmentId} `;
+        const originalName = file.originalname || `attachment-${attachmentId}`;
         const contentType = file.mimetype || 'application/octet-stream';
+        logger_1.logger.info(`Starting uploadAttachment for article ${articleId}, file: ${originalName} (${contentType}, ${file.size} bytes)`);
         const safeName = originalName.replace(/[^\w.\-]/g, '_').slice(0, 200);
-        const destPath = `attachments / ${articleId}/${attachmentId}-${safeName}`;
+        const destPath = `attachments/${articleId}/${attachmentId}-${safeName}`;
         try {
-            const bucket = (0, database_1.getStorageBucket)();
+            const bucket = (0, storage_1.getStorageBucket)();
+            logger_1.logger.info(`Using storage bucket: ${bucket.name}`);
             const gcsFile = bucket.file(destPath);
             // Save buffer to GCS
+            logger_1.logger.info('Saving file to GCS...');
             await gcsFile.save(file.buffer, {
                 metadata: {
                     contentType,
                 },
                 resumable: false,
             });
-            // Make file public immediately so it can be viewed in <img> tags without auth
-            await gcsFile.makePublic();
-            const bucketName = bucket.name; // or process.env.FIREBASE_STORAGE_BUCKET
-            const publicUrl = `https://storage.googleapis.com/${bucketName}/${encodeURI(destPath)}`;
+            logger_1.logger.info('File saved to GCS.');
+            let publicUrl = '';
+            try {
+                // Attempt to make file public (works on buckets without Uniform Bucket Level Access)
+                logger_1.logger.info('Attempting to make public...');
+                await gcsFile.makePublic();
+                const bucketName = bucket.name; // or process.env.FIREBASE_STORAGE_BUCKET
+                publicUrl = `https://storage.googleapis.com/${bucketName}/${encodeURI(destPath)}`;
+                logger_1.logger.info('File made public.');
+            }
+            catch (aclErr) {
+                // If makePublic fails (common with UBLA), fall back to a long-lived signed URL
+                logger_1.logger.warn(`makePublic failed for ${destPath}, falling back to signed URL. Error: ${aclErr}`);
+                try {
+                    const rawSigned = await (0, storage_1.getSignedUrl)(destPath, 'read', READ_SIGNED_URL_EXPIRES_MS);
+                    const signed = normalizeSignedUrl(rawSigned);
+                    if (signed)
+                        publicUrl = signed;
+                    logger_1.logger.info('Fallback signed URL generated.');
+                }
+                catch (signErr) {
+                    logger_1.logger.error('Failed to generate fallback signed URL', signErr);
+                    // Proceed without publicUrl; frontend checks for it or uses proxy logic
+                }
+            }
             const sizeBytes = file.size || (file.buffer ? file.buffer.length : 0);
             // Save metadata in Firestore
+            logger_1.logger.info('Saving metadata to Firestore...');
             await (0, firestore_helpers_1.createDoc)('attachments', {
                 article_id: articleId,
                 storage_path: destPath,
@@ -403,6 +439,7 @@ const uploadAttachment = async (req, res) => {
                 uploaded_by: userId,
                 uploaded_at: new Date()
             }, attachmentId);
+            logger_1.logger.info('Metadata saved.');
             res.status(201).json({
                 status: 'success',
                 message: 'File uploaded to Firebase Storage',
@@ -467,7 +504,7 @@ const downloadAttachment = async (req, res) => {
             }
             // Fallback: try to make file public (best-effort)
             try {
-                const bucketGCS = (0, database_1.getStorageBucket)();
+                const bucketGCS = (0, storage_1.getStorageBucket)();
                 const file = bucketGCS.file(gcsPath);
                 await file.makePublic();
                 const bucketName = bucketGCS.name || process.env.FIREBASE_STORAGE_BUCKET;
@@ -577,7 +614,7 @@ const deleteAttachment = async (req, res) => {
         }
         const storagePath = att.storage_path || '';
         try {
-            const bucketGCS = (0, database_1.getStorageBucket)();
+            const bucketGCS = (0, storage_1.getStorageBucket)();
             const gcsPath = storagePath.startsWith('gcs/') ? storagePath.slice(4) : storagePath;
             if (gcsPath) {
                 const file = bucketGCS.file(gcsPath);
@@ -838,7 +875,7 @@ const deleteArticle = async (req, res) => {
         }
         // Delete attachments from storage and DB
         const attachments = await (0, firestore_helpers_1.executeQuery)('attachments', [{ field: 'article_id', op: '==', value: articleId }]);
-        const bucketGCS = (0, database_1.getStorageBucket)();
+        const bucketGCS = (0, storage_1.getStorageBucket)();
         for (const att of attachments) {
             try {
                 const storagePath = att.storage_path || '';
@@ -1067,7 +1104,7 @@ const runSimilarityCheck = async (req, res) => {
         // Fetch attachments
         const attachmentsRows = await (0, firestore_helpers_1.executeQuery)('attachments', [{ field: 'article_id', op: '==', value: articleId }]);
         // Download attachments
-        const bucket = (0, database_1.getStorageBucket)();
+        const bucket = (0, storage_1.getStorageBucket)();
         const attachmentsWithBuffer = [];
         if (attachmentsRows && attachmentsRows.length > 0) {
             for (const att of attachmentsRows) {
@@ -1407,7 +1444,7 @@ const runPlagiarismCheck = async (req, res) => {
         const submissionsDir = path_1.default.join(workRoot, 'submissions');
         await promises_1.default.mkdir(submissionsDir);
         // Download attachments
-        const bucket = (0, database_1.getStorageBucket)();
+        const bucket = (0, storage_1.getStorageBucket)();
         let combinedTextForAI = ""; // Collect text for AI detection
         // 1. ADD ARTICLE CONTENT TO ANALYSIS
         if (hasContent) {

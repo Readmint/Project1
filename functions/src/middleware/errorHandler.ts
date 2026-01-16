@@ -17,6 +17,8 @@ export const errorHandler = (
 
   // Log error
   logger.error('Error:', err);
+  // Force console log for Cloud Functions visibility
+  console.error('CRITICAL ERROR:', err);
 
   if (process.env.NODE_ENV === 'development') {
     res.status(err.statusCode).json({
@@ -30,7 +32,8 @@ export const errorHandler = (
     if (err.statusCode === 500) {
       res.status(500).json({
         status: 'error',
-        message: 'Something went wrong!'
+        message: err.message, // Temporarily exposing message for debugging
+        error: err.stack // Temporarily exposing stack for debugging
       });
     } else {
       res.status(err.statusCode).json({
