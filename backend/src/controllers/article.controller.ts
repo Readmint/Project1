@@ -1027,11 +1027,20 @@ const cheerio = require('cheerio');
 const performWebSearch = async (query: string): Promise<string[]> => {
   try {
     logger && logger.info && logger.info(`Preforming web search for: ${query}`);
-    // Search for organic results
-    const searchResults = await googleSr.search({
-      query: query,
-      limit: 5,
-    });
+
+    // Create a promise that rejects after timeout
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Web search timed out')), 6000)
+    );
+
+    // Search for organic results with timeout
+    const searchResults: any = await Promise.race([
+      googleSr.search({
+        query: query,
+        limit: 5,
+      }),
+      timeout
+    ]);
 
     // Extract URLs
     const urls = searchResults
@@ -1039,15 +1048,20 @@ const performWebSearch = async (query: string): Promise<string[]> => {
       .map((result: any) => result.link);
 
     return urls;
-  } catch (err) {
-    logger && logger.warn && logger.warn('performWebSearch error', err);
+  } catch (err: any) {
+    logger && logger.warn && logger.warn('performWebSearch error', err?.message || err);
     return [];
   }
 };
 
 const scrapeWebPage = async (url: string): Promise<string> => {
   try {
-    const res = await fetch(url, { timeout: 5000 }); // 5s timeout
+    const res = await fetch(url, {
+      timeout: 5000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    }); // 5s timeout
     if (!res.ok) return '';
     const html = await res.text();
     const $ = cheerio.load(html);
@@ -1140,23 +1154,28 @@ export const runSimilarityCheck = async (req: Request, res: Response): Promise<v
 
       if (queryText) {
         logger.info(`Running web search for article ${articleId} with query: ${queryText.slice(0, 50)}...`);
-        const urls = await performWebSearch(queryText);
+        try {
+          const urls = await performWebSearch(queryText);
 
-        // Concurrent scraping
-        const scrapePromises = urls.map(async (url: string) => {
-          const text = await scrapeWebPage(url);
-          if (text.length > 100) {
-            return {
-              id: `web-${Buffer.from(url).toString('base64').slice(0, 10)}`,
-              filename: url,
-              buffer: Buffer.from(text, 'utf-8')
-            };
-          }
-          return null;
-        });
+          // Concurrent scraping
+          const scrapePromises = urls.map(async (url: string) => {
+            const text = await scrapeWebPage(url);
+            if (text.length > 100) {
+              return {
+                id: `web-${Buffer.from(url).toString('base64').slice(0, 10)}`,
+                filename: url,
+                buffer: Buffer.from(text, 'utf-8')
+              };
+            }
+            return null;
+          });
 
-        const scraped = await Promise.all(scrapePromises);
-        webDocs = scraped.filter((d: any) => d !== null) as any;
+          const scraped = await Promise.all(scrapePromises);
+          webDocs = scraped.filter((d: any) => d !== null) as any;
+        } catch (searchErr) {
+          // Fail-safe: log error but do not crash the request
+          logger.error(`Web search/scrape failed for article ${articleId}, proceeding with attachments only`, searchErr);
+        }
       }
     }
 

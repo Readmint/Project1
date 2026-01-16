@@ -23,6 +23,9 @@ export class ApiError extends Error {
     if (this.data?.errors) {
       return this.data.errors.map((err: any) => err.msg || err).join(', ');
     }
+    if (this.data?.error) {
+      return this.data.error;
+    }
     if (this.data?.message) {
       return this.data.message;
     }

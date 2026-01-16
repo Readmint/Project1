@@ -987,11 +987,16 @@ const cheerio = require('cheerio');
 const performWebSearch = async (query) => {
     try {
         logger_1.logger && logger_1.logger.info && logger_1.logger.info(`Preforming web search for: ${query}`);
-        // Search for organic results
-        const searchResults = await googleSr.search({
-            query: query,
-            limit: 5,
-        });
+        // Create a promise that rejects after timeout
+        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Web search timed out')), 6000));
+        // Search for organic results with timeout
+        const searchResults = await Promise.race([
+            googleSr.search({
+                query: query,
+                limit: 5,
+            }),
+            timeout
+        ]);
         // Extract URLs
         const urls = searchResults
             .filter((result) => result.link && !result.link.includes('youtube.com')) // Filter out non-relevent links
@@ -999,13 +1004,18 @@ const performWebSearch = async (query) => {
         return urls;
     }
     catch (err) {
-        logger_1.logger && logger_1.logger.warn && logger_1.logger.warn('performWebSearch error', err);
+        logger_1.logger && logger_1.logger.warn && logger_1.logger.warn('performWebSearch error', (err === null || err === void 0 ? void 0 : err.message) || err);
         return [];
     }
 };
 const scrapeWebPage = async (url) => {
     try {
-        const res = await (0, node_fetch_1.default)(url, { timeout: 5000 }); // 5s timeout
+        const res = await (0, node_fetch_1.default)(url, {
+            timeout: 5000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+        }); // 5s timeout
         if (!res.ok)
             return '';
         const html = await res.text();
@@ -1094,21 +1104,27 @@ const runSimilarityCheck = async (req, res) => {
             }
             if (queryText) {
                 logger_1.logger.info(`Running web search for article ${articleId} with query: ${queryText.slice(0, 50)}...`);
-                const urls = await performWebSearch(queryText);
-                // Concurrent scraping
-                const scrapePromises = urls.map(async (url) => {
-                    const text = await scrapeWebPage(url);
-                    if (text.length > 100) {
-                        return {
-                            id: `web-${Buffer.from(url).toString('base64').slice(0, 10)}`,
-                            filename: url,
-                            buffer: Buffer.from(text, 'utf-8')
-                        };
-                    }
-                    return null;
-                });
-                const scraped = await Promise.all(scrapePromises);
-                webDocs = scraped.filter((d) => d !== null);
+                try {
+                    const urls = await performWebSearch(queryText);
+                    // Concurrent scraping
+                    const scrapePromises = urls.map(async (url) => {
+                        const text = await scrapeWebPage(url);
+                        if (text.length > 100) {
+                            return {
+                                id: `web-${Buffer.from(url).toString('base64').slice(0, 10)}`,
+                                filename: url,
+                                buffer: Buffer.from(text, 'utf-8')
+                            };
+                        }
+                        return null;
+                    });
+                    const scraped = await Promise.all(scrapePromises);
+                    webDocs = scraped.filter((d) => d !== null);
+                }
+                catch (searchErr) {
+                    // Fail-safe: log error but do not crash the request
+                    logger_1.logger.error(`Web search/scrape failed for article ${articleId}, proceeding with attachments only`, searchErr);
+                }
             }
         }
         // Combine all docs
